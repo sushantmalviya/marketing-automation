@@ -22,10 +22,12 @@ SECRET_KEY = os.getenv("SECRET_KEY")
  
 DEBUG = os.getenv("DEBUG", "False") == "True"
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev"]
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
+HF_TEXT_MODEL = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "gemini")
  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
  
@@ -220,6 +222,11 @@ EMAIL_HOST = os.getenv("EMAIL_HOST")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
  
+OAUTH_REDIRECT_BASE_URL = os.getenv("OAUTH_REDIRECT_BASE_URL")
+OAUTH_SUCCESS_REDIRECT_URL = os.getenv("OAUTH_SUCCESS_REDIRECT_URL")
+
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "auto-market-whatsapp-secure-token")
+
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
  

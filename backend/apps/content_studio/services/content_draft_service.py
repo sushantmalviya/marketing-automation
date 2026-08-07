@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class ContentDraftService:
     @staticmethod
     @transaction.atomic
-    def create_content_draft(user, original_prompt="", platforms=None):
+    def create_content_draft(user, original_prompt="", platforms=None, preset_image_id=None):
         """
         Creates a new ContentDraft and its related platforms.
         `platforms` is a list of PlatformChoices strings.
@@ -18,11 +18,27 @@ class ContentDraftService:
             workflow_state=ContentDraft.WorkflowState.DRAFT
         )
         
-        for platform in (platforms or []):
-            ContentPlatform.objects.create(
+        # If preset_image_id is provided, try to fetch the asset
+        preset_asset = None
+        if preset_image_id:
+            from apps.asset_library.models import Asset
+            try:
+                preset_asset = Asset.objects.get(id=preset_image_id)
+            except Asset.DoesNotExist:
+                logger.warning(f"Preset image {preset_image_id} not found.")
+
+        for platform_name in (platforms or []):
+            platform = ContentPlatform.objects.create(
                 draft=draft,
-                platform=platform
+                platform=platform_name
             )
+            
+            if preset_asset:
+                from ..models import ImageReference
+                ImageReference.objects.create(
+                    platform=platform,
+                    asset=preset_asset
+                )
             
         logger.info(f"Created ContentDraft {draft.id} with platforms {platforms}")
         return draft

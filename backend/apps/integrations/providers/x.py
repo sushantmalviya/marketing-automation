@@ -89,6 +89,42 @@ class XProvider(BaseSocialProvider):
         except Exception:
             return False
 
+    def refresh_access_token(self, connection) -> bool:
+        refresh_token = connection.get_refresh_token()
+        if not refresh_token:
+            return False
+
+        auth_string = f"{self.client_id}:{self.client_secret}"
+        b64_auth = base64.b64encode(auth_string.encode('ascii')).decode('ascii')
+        
+        headers = {
+            "Authorization": f"Basic {b64_auth}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        data = {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        }
+        
+        try:
+            response = requests.post(self.ACCESS_TOKEN_URL, headers=headers, data=data)
+            response.raise_for_status()
+            resp_data = response.json()
+            
+            connection.set_tokens(
+                access_token=resp_data.get("access_token"),
+                refresh_token=resp_data.get("refresh_token") or refresh_token
+            )
+            if resp_data.get("expires_in"):
+                from django.utils import timezone
+                from datetime import timedelta
+                connection.token_expires_at = timezone.now() + timedelta(seconds=resp_data.get("expires_in"))
+            connection.save()
+            return True
+        except Exception as e:
+            return False
+
     def publish_post(self, connection, content: str, image_url: str = None) -> dict:
         """Publishes a Tweet via Twitter API v2."""
         access_token = connection.get_access_token()

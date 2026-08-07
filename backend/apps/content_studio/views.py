@@ -309,7 +309,14 @@ class ContentDraftViewSet(viewsets.ModelViewSet):
             
         platforms = serializer.validated_data['platforms']
         original_prompt = serializer.validated_data['original_prompt']
-        draft = ContentDraftService.create_content_draft(request.user, original_prompt, platforms)
+        preset_image_id = serializer.validated_data.get('preset_image_id')
+        
+        draft = ContentDraftService.create_content_draft(
+            request.user, 
+            original_prompt, 
+            platforms,
+            preset_image_id=preset_image_id
+        )
         
         return Response(ContentDraftSerializer(draft).data, status=status.HTTP_201_CREATED)
 

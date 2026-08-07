@@ -5,6 +5,7 @@ from apps.communications.views import (
     EmailProviderListCreateView,
     SMSProviderListCreateView,
     WhatsAppProviderListCreateView,
+    WhatsAppWebhookView,
 )
 
 
@@ -24,6 +25,10 @@ urlpatterns = [
     path(
         "events/",
         CommunicationEventListView.as_view(),
+    ),
+    path(
+        "webhooks/whatsapp/",
+        WhatsAppWebhookView.as_view(),
     ),
 ]
 

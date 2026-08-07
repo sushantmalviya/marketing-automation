@@ -19,6 +19,37 @@ class HuggingFaceProvider:
         if not self.api_key:
             logger.warning("HF_TOKEN not set. Hugging Face API calls will fail.")
 
+    def generate_text(self, prompt, model=None, max_tokens=1000, temperature=0.7, json_response=False):
+        """
+        Calls the Hugging Face API to generate text.
+        """
+        if not self.api_key:
+            raise AIProviderError("Hugging Face API token (HF_TOKEN) is not configured.")
+
+        try:
+            from huggingface_hub import InferenceClient
+            client = InferenceClient(provider="auto", api_key=self.api_key)
+            
+            model = getattr(settings, "HF_TEXT_MODEL", model) or "Qwen/Qwen2.5-7B-Instruct"
+
+            messages = [{"role": "user", "content": prompt}]
+            
+            response = client.chat_completion(
+                messages,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            
+            text = response.choices[0].message.content.strip()
+            if not text:
+                raise AIProviderError("Hugging Face returned no generated text.")
+            return text
+            
+        except Exception as exc:
+            logger.exception("Hugging Face text generation failed")
+            raise AIProviderError(f"Hugging Face text generation failed: {exc}") from exc
+
     def generate_image(self, prompt, size="1024x1024"):
         """
         Generate an image through Hugging Face Inference Providers and persist it.

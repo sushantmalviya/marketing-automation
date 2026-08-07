@@ -96,6 +96,7 @@ class ContentDraftCreateSerializer(serializers.Serializer):
         child=serializers.ChoiceField(choices=ContentPlatform.PlatformChoices.choices),
         min_length=1
     )
+    preset_image_id = serializers.UUIDField(required=False, allow_null=True)
 
 class ContentDraftUpdateSerializer(serializers.Serializer):
     original_prompt = serializers.CharField(required=False, allow_blank=True)

@@ -107,3 +107,29 @@ class TemplateUpdateAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class TemplateSubmitAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, template_id):
+        template = TemplateService.get_template_for_user(template_id, request.user)
+        
+        if template.channel.name.upper() != "WHATSAPP":
+            return Response(
+                {"detail": "Only WhatsApp templates can be submitted for verification."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        from apps.communications.services.whatsapp import submit_whatsapp_template
+        try:
+            template = submit_whatsapp_template(template)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except RuntimeError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(
+            {"message": "Template submitted successfully", "provider_data": template.provider_data},
+            status=status.HTTP_200_OK
+        )

@@ -393,6 +393,11 @@ class Template(models.Model):
         default=Status.DRAFT,
     )
 
+    provider_data = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

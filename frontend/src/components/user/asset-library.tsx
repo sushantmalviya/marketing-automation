@@ -11,6 +11,7 @@ import {
 import NextImage from "next/image";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -235,13 +236,38 @@ function AssetListRow({ asset, onPreview }: { asset: Asset; onPreview: (a: Asset
 
 // ─── Asset Preview Modal ───────────────────────────────────────────────────────
 
-function AssetPreviewModal({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose: () => void; onDelete: (id: string) => void }) {
+  const router = useRouter();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [choosingChannels, setChoosingChannels] = useState(false);
+  const contentPlatforms = [
+    { value: "INSTAGRAM", label: "Instagram" },
+    { value: "FACEBOOK", label: "Facebook" },
+    { value: "LINKEDIN", label: "LinkedIn" },
+    { value: "X", label: "X" }
+  ];
+  const [selectedChannels, setSelectedChannels] = useState<string[]>(contentPlatforms.map(p => p.value));
   const url = resolveApiUrl(asset.file_url);
   const handleDownload = () => {
     if (!url) return;
     const a = document.createElement("a"); a.href = url; a.download = asset.name; a.target = "_blank"; a.click();
     toast.success("Download started");
   };
+  
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this asset?")) return;
+    setIsDeleting(true);
+    try {
+      await apiClient.delete(`/api/assets/${asset.id}/`);
+      toast.success("Asset deleted");
+      onDelete(asset.id);
+      onClose();
+    } catch (e) {
+      toast.error(parseApiError(e));
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -286,10 +312,42 @@ function AssetPreviewModal({ asset, onClose }: { asset: Asset; onClose: () => vo
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
-          <button className="secondary-button px-5" onClick={onClose}>Close</button>
-          {url && <button className="primary-button px-5 text-sm" onClick={handleDownload}><Download size={15} />Download</button>}
-        </div>
+        {choosingChannels ? (
+          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <p className="font-semibold text-sm text-slate-800">Select channels for this asset:</p>
+            <div className="flex flex-wrap gap-2">
+              {contentPlatforms.map(p => (
+                <label key={p.value} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 bg-white px-3 py-1.5 hover:border-blue-300">
+                  <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={selectedChannels.includes(p.value)} onChange={(e) => {
+                    if (e.target.checked) setSelectedChannels([...selectedChannels, p.value]);
+                    else setSelectedChannels(selectedChannels.filter(c => c !== p.value));
+                  }}/>
+                  <span className="text-sm font-semibold text-slate-700">{p.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-2 flex justify-end gap-2">
+              <button className="secondary-button px-4 text-sm" onClick={() => setChoosingChannels(false)}>Cancel</button>
+              <button className="primary-button px-4 text-sm" disabled={selectedChannels.length === 0} onClick={() => router.push(`/user/content?assetId=${asset.id}&channels=${selectedChannels.join(',')}`)}>Proceed</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-6 py-4">
+            <button className="secondary-button flex items-center gap-2 px-4 text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700" onClick={handleDelete} disabled={isDeleting}>
+              <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+            
+            <div className="flex items-center gap-3">
+              <button className="secondary-button px-5" onClick={onClose} disabled={isDeleting}>Close</button>
+              {url && <button className="secondary-button flex items-center gap-2 px-5 text-sm" onClick={handleDownload} disabled={isDeleting}><Download size={15} />Download</button>}
+              {asset.asset_type === "IMAGE" && (
+                <button className="primary-button px-5 text-sm" onClick={() => setChoosingChannels(true)} disabled={isDeleting}>
+                  Use in Content Studio
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -686,7 +744,7 @@ export function UserAssetLibrary() {
 
       {/* ── Modals ── */}
       <AnimatePresence>
-        {preview && <AssetPreviewModal key="preview" asset={preview} onClose={() => setPreview(null)} />}
+        {preview && <AssetPreviewModal key="preview" asset={preview} onClose={() => setPreview(null)} onDelete={() => refetch()} />}
         {showUpload && <UploadModal key="upload" onClose={() => setShowUpload(false)} onUploaded={() => void refetch()} />}
       </AnimatePresence>
     </div>

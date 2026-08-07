@@ -21,8 +21,11 @@ class AIOrchestrator:
     """
     
     def __init__(self):
-        # In the future, provider selection could be dynamic based on user preference or availability.
-        self.text_provider = GeminiProvider()
+        default_text_provider = getattr(settings, "DEFAULT_TEXT_PROVIDER", "gemini")
+        if default_text_provider == "huggingface" and getattr(settings, "HF_TOKEN", None):
+            self.text_provider = HuggingFaceProvider()
+        else:
+            self.text_provider = GeminiProvider()
         # Use Hugging Face when explicitly configured; otherwise reuse the
         # configured Gemini key so prompt-based image generation still works.
         self.image_provider = (

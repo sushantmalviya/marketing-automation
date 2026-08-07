@@ -41,6 +41,12 @@ class BaseSocialProvider(ABC):
         """
         pass
 
+    def refresh_access_token(self, connection) -> bool:
+        """
+        Refreshes the access token if supported. Returns True if refreshed, False otherwise.
+        """
+        return False
+
     @abstractmethod
     def publish_post(self, connection, content: str, image_url: str = None) -> dict:
         """

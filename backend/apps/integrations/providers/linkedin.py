@@ -90,51 +90,109 @@ class LinkedInProvider(BaseSocialProvider):
         headers = {
             "Authorization": f"Bearer {access_token}",
             "X-Restli-Protocol-Version": "2.0.0",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "LinkedIn-Version": "202601"
         }
         
-        post_url = "https://api.linkedin.com/v2/ugcPosts"
+        post_url = "https://api.linkedin.com/rest/posts"
         
         payload = {
             "author": author,
-            "lifecycleState": "PUBLISHED",
-            "specificContent": {
-                "com.linkedin.ugc.ShareContent": {
-                    "shareCommentary": {
-                        "text": content
-                    },
-                    "shareMediaCategory": "NONE"
-                }
+            "commentary": content,
+            "visibility": "PUBLIC",
+            "distribution": {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": []
             },
-            "visibility": {
-                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-            }
+            "lifecycleState": "PUBLISHED",
+            "isReshareDisabledByAuthor": False
         }
         
         if image_url:
-            # Note: A real implementation for LinkedIn image posts usually requires a 3-step 
-            # upload process (registerUpload, upload image binary, post). 
-            # Here, we will pass the image URL as a standard share article/image to keep it simple,
-            # or rely on OpenGraph scraping if it's an ARTICLE category.
-            # We'll use the ARTICLE approach which accepts external URLs.
-            payload["specificContent"]["com.linkedin.ugc.ShareContent"]["shareMediaCategory"] = "ARTICLE"
-            payload["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [
-                {
-                    "status": "READY",
-                    "originalUrl": image_url
+            asset_urn = self._upload_image_to_linkedin(access_token, author, image_url)
+            if asset_urn:
+                payload["content"] = {
+                    "media": {
+                        "id": asset_urn,
+                        "title": "Attached Image"
+                    }
                 }
-            ]
-            
+            else:
+                return {"success": False, "error": "Failed to upload image to LinkedIn."}
+                
         try:
             resp = requests.post(post_url, headers=headers, json=payload)
             resp.raise_for_status()
             
+            # For rest/posts, the URN is usually returned in the 'x-linkedin-id' header or in the body
+            post_urn = resp.headers.get("x-linkedin-id", "")
+            if not post_urn and resp.text:
+                try:
+                    post_urn = resp.json().get("id", "")
+                except:
+                    pass
+                    
             return {
                 "success": True,
-                "platform_post_id": resp.json().get("id")
+                "platform_post_id": post_urn
             }
         except requests.exceptions.RequestException as e:
             error_msg = str(e)
             if e.response is not None:
                 error_msg = e.response.text
             return {"success": False, "error": error_msg}
+
+    def _upload_image_to_linkedin(self, access_token: str, author_urn: str, image_url: str) -> str:
+        """
+        Executes LinkedIn's image upload process using /rest/images.
+        Returns the asset URN on success, or None on failure.
+        """
+        try:
+            img_resp = requests.get(image_url, timeout=10)
+            img_resp.raise_for_status()
+            img_bytes = img_resp.content
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to download image from {image_url}: {e}")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0",
+            "LinkedIn-Version": "202601"
+        }
+        
+        register_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
+        register_payload = {
+            "initializeUploadRequest": {
+                "owner": author_urn
+            }
+        }
+        
+        try:
+            reg_resp = requests.post(register_url, headers=headers, json=register_payload)
+            reg_resp.raise_for_status()
+            reg_data = reg_resp.json()
+            
+            upload_url = reg_data["value"]["uploadUrl"]
+            asset_urn = reg_data["value"]["image"]
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to register LinkedIn image upload: {e}")
+            return None
+
+        try:
+            put_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/octet-stream"
+            }
+            put_resp = requests.put(upload_url, headers=put_headers, data=img_bytes)
+            put_resp.raise_for_status()
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to upload binary image to LinkedIn: {e}")
+            return None
+
+        return asset_urn

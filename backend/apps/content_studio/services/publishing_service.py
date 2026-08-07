@@ -31,9 +31,6 @@ class PublishingService:
         platforms = draft.platforms.all()
         if not platforms:
             raise ValueError("No platforms selected for this content.")
-
-        # Save images to asset library first (if any exist for the platforms)
-        PublishingService._save_images_to_asset_library(draft, user)
         
         from apps.integrations.tasks import publish_social_post_task
         
@@ -70,42 +67,4 @@ class PublishingService:
 
         return draft
 
-    @staticmethod
-    def _save_images_to_asset_library(draft, user):
-        """
-        Extracts image URLs generated during the AI phase and saves them to the Asset Library.
-        Links them back via ImageReference.
-        """
-        # Find a suitable folder, or create one for content Auto-saves
-        folder, _ = AssetFolder.objects.get_or_create(
 
-            name="Content Studio Generations",
-            defaults={'parent': None}
-        )
-
-        for platform in draft.platforms.all():
-            # If an image reference already exists with an asset, skip.
-            if platform.images.filter(asset__isnull=False).exists():
-                continue
-
-            # In a real implementation, we would extract the image URL from the AI orchestrator's state.
-            # Here we mock retrieving a generated image URL for demonstration.
-            # You would look at the ContentVersion or AI Generation results.
-            
-            # Example mock URL creation if we had it:
-            mock_url = f"https://s3.amazonaws.com/mock-bucket/generated_{draft.id}_{platform.platform}.png"
-            
-            asset = Asset.objects.create(
-
-                folder=folder,
-                uploaded_by=user,
-                name=f"Generated for {platform.platform} - {draft.id}",
-                file_url=mock_url,
-                asset_type=Asset.AssetType.IMAGE
-            )
-            
-            ImageReference.objects.create(
-                platform=platform,
-                asset=asset
-            )
-            logger.info(f"Saved generated image for {platform.platform} to Asset Library.")
