@@ -111,6 +111,10 @@ class FormCreateSerializer(serializers.ModelSerializer):
 class FormListSerializer(serializers.ModelSerializer):
 
     total_responses = serializers.SerializerMethodField()
+    fields = FormFieldSerializer(
+        many=True,
+        read_only=True
+    )
 
     class Meta:
         model = Form
@@ -122,6 +126,7 @@ class FormListSerializer(serializers.ModelSerializer):
             "published_at",
             "created_at",
             "total_responses",
+            "fields",
         ]
 
     def get_total_responses(self, obj):

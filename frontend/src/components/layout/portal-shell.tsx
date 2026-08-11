@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3, Bot, ChevronLeft, ContactRound, CreditCard,
   FolderOpen, Gauge, ListChecks, LogOut, Megaphone,
-  Menu, Settings, Share2, SquarePen, Tags, TrendingUp, Users, X,
+  Menu, Settings, Share2, SquarePen, Tags, TrendingUp, Users, Workflow, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,15 +29,17 @@ const superNavigation = [
   {group:"System",     items:[{key:"account",     label:"Account",        icon:Settings}]},
 ];
 const adminNavigation = [
-  {key:"dashboard", label:"Dashboard",        icon:Gauge},
-  {key:"users",     label:"Team Management",  icon:Users},
-  {key:"contacts",  label:"Contacts",         icon:ContactRound},
-  {key:"audiences", label:"Segmentation",     icon:Tags},
-  {key:"tasks",     label:"Task Management",  icon:ListChecks},
-  {key:"campaigns", label:"Campaigns",        icon:Megaphone},
-  {key:"channels",  label:"Social Publisher", icon:Share2},
-  {key:"analytics", label:"Analytics",        icon:BarChart3},
-  {key:"account",   label:"Account",          icon:Settings},
+  {key:"dashboard",   label:"Dashboard",           icon:Gauge},
+  {key:"users",       label:"Team Management",     icon:Users},
+  {key:"contacts",    label:"Contacts",            icon:ContactRound},
+  {key:"audiences",   label:"Segmentation",        icon:Tags},
+  {key:"tasks",       label:"Task Management",     icon:ListChecks},
+  {key:"forms",       label:"Forms",               icon:ListChecks},
+  {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
+  {key:"automations", label:"Workflow Automation", icon:Workflow},
+  {key:"channels",    label:"Social Publisher",    icon:Share2},
+  {key:"analytics",   label:"Analytics",           icon:BarChart3},
+  {key:"account",     label:"Account",             icon:Settings},
 ];
 const userNavigation = [
   {key:"dashboard",   label:"Dashboard",      icon:Gauge},

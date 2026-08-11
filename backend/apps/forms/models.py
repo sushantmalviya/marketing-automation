@@ -20,6 +20,10 @@ class FieldType(models.TextChoices):
     RADIO = "radio", "Radio"
     CHECKBOX = "checkbox", "Checkbox"
     DROPDOWN = "dropdown", "Dropdown"
+    FILE = "file", "File Upload"
+    IMAGE = "image", "Image"
+    URL = "url", "URL"
+    SWITCH = "switch", "Switch / Toggle"
 
 
 class Form(models.Model):

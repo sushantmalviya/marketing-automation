@@ -42,7 +42,7 @@ class AutomationListCreateView(APIView):
         automations = _filter_resource_for_admin(
             Automation.objects.filter(is_active=True), 
             request.user, 
-            "created_by"
+            "owner"
         ).order_by("-updated_at")
 
         serializer = (
