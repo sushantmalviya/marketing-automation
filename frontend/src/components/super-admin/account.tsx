@@ -617,7 +617,7 @@ function ConnectSocialsTab() {
     queryKey: ["social-connections"],
     queryFn: async () => {
       const res = await apiClient.get<any[]>("/api/integrations/social/connections/");
-      return Array.isArray(res.data) ? res.data : (res.data.results ?? []);
+      return Array.isArray(res.data) ? res.data : ((res.data as any).results ?? []);
     }
   });
 

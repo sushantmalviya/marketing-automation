@@ -254,6 +254,57 @@ class FormService:
         SubmissionAnswer.objects.bulk_create(
             submission_answers
         )
+        
+        # Create a CustomerRecord for this submission
+        fields_map = {str(f.id): f for f in form.fields.all()}
+        customer_data = {"_source": "form"}
+        contact_name = ""
+        contact_email = ""
+        contact_phone = ""
+        
+        for field_id, answer in answers_dict.items():
+            field = fields_map.get(field_id)
+            if not field: continue
+            
+            label_lower = field.label.lower()
+            if field.field_type == "email" or "email" in label_lower:
+                contact_email = answer
+                customer_data["Email"] = answer
+            elif field.field_type == "phone" or "phone" in label_lower:
+                contact_phone = answer
+                customer_data["Phone"] = answer
+            elif field.field_type == "text" and "name" in label_lower:
+                contact_name = answer
+                customer_data["Name"] = answer
+            else:
+                customer_data[field.label] = answer
+                
+        if not customer_data.get("Name"):
+            customer_data["Name"] = contact_name or "Form User"
+        if not customer_data.get("Email"):
+            customer_data["Email"] = contact_email
+            
+        if contact_email or contact_phone:
+            try:
+                from apps.campaigns.models import CustomerUpload, CustomerRecord, Audience
+                
+                upload, _ = CustomerUpload.objects.get_or_create(
+                    uploaded_by=form.created_by,
+                    file_name="Form Submissions",
+                    defaults={"file_type": "forms", "status": "COMPLETED"},
+                )
+                
+                customer = CustomerRecord.objects.create(
+                    upload=upload,
+                    data=customer_data
+                )
+                
+                upload.total_records = upload.records.count()
+                upload.imported_records = upload.total_records
+                upload.save(update_fields=["total_records", "imported_records"])
+                
+            except Exception:
+                pass # Fail silently if customer record creation fails
 
         try:
             from apps.automation.models import AutomationNode

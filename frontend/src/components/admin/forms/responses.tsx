@@ -23,7 +23,7 @@ export function FormResponses({ formId }: { formId: string }) {
   });
 
   const responses = data || [];
-  const fields = formData?.fields || [];
+  const fields = (formData as any)?.fields || [];
 
   const handleExportCSV = () => {
     if (!responses.length) return;

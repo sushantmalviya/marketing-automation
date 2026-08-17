@@ -50,18 +50,69 @@ class CustomerRecordListAPIView(APIView):
 
     def get(self, request):
         limit = min(int(request.query_params.get("size", 2000)), 5000)
-        customers = filter_customer_records_for_admin(CustomerRecord.objects.all(), request.user).order_by("-created_at")[:limit]
+        audience_ids_str = request.query_params.get("audience_ids") or request.query_params.get("audience_id")
+        columns_only = str(request.query_params.get("columns_only", "false")).lower() == "true"
+        
+        if audience_ids_str:
+            audience_ids = [int(x.strip()) for x in audience_ids_str.split(",") if x.strip().isdigit()]
+            from apps.campaigns.models import Audience
+            from apps.common.ownership import filter_audiences_for_admin
+            from apps.campaigns.services import AudienceService
+            
+            audiences = filter_audiences_for_admin(Audience.objects.filter(is_active=True, id__in=audience_ids), request.user)
+            customers = CustomerRecord.objects.none()
+            for aud in audiences:
+                customers = customers | AudienceService.get_customers(
+                    user=request.user,
+                    audience_definition=aud.definition,
+                )
+            customers = customers.order_by("-created_at")
+        else:
+            customers = filter_customer_records_for_admin(CustomerRecord.objects.all(), request.user).order_by("-created_at")
+            
+        if columns_only:
+            sample_customers = customers[:50]
+            all_cols = set()
+            for c in sample_customers:
+                data = c.data or {}
+                if "__col_order__" in data and isinstance(data["__col_order__"], list):
+                    for col in data["__col_order__"]:
+                        if not str(col).startswith("__"):
+                            all_cols.add(str(col).capitalize())
+                for key in data.keys():
+                    if not str(key).startswith("__"):
+                        all_cols.add(str(key).capitalize())
+            
+            if not all_cols:
+                all_cols = {"Name", "Email", "Phone", "City", "Country", "Age"}
+                
+            all_cols.add("Source")
+            return Response({"columns": sorted(list(all_cols))})
+
+        customers = customers[:limit]
         serializer = CustomerRecordSerializer(customers, many=True)
         return Response(serializer.data)
 
     def post(self, request):
         contact = _validated_contact(request.data)
+        audience_id = request.data.get("audience_id")
+        
         upload, _ = CustomerUpload.objects.get_or_create(
             uploaded_by=request.user,
             file_name="Manual contacts",
             defaults={"file_type": "manual", "status": CustomerUpload.Status.COMPLETED},
         )
         customer = CustomerRecord.objects.create(upload=upload, data={**contact, "__source__": "created"})
+        
+        if audience_id:
+            from apps.campaigns.models import Audience
+            audience = Audience.objects.filter(id=audience_id, is_active=True).first()
+            if audience and str(audience.definition.get("type", "")).upper() == "STATIC":
+                static_ids = audience.definition.get("static_ids", [])
+                if customer.id not in static_ids:
+                    audience.definition["static_ids"] = static_ids + [customer.id]
+                    audience.save(update_fields=["definition"])
+        
         upload.total_records = upload.records.count()
         upload.imported_records = upload.total_records
         upload.save(update_fields=["total_records", "imported_records"])
