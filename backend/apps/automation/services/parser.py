@@ -10,13 +10,14 @@ class WorkflowParser:
     def __init__(self, automation):
 
         self.automation = automation
+        self.workflow_graph = automation.workflow_graph or {"nodes": [], "edges": []}
 
         self.nodes = {
-            node.id: node
-            for node in automation.nodes.all()
+            node.get("id"): node
+            for node in self.workflow_graph.get("nodes", [])
         }
 
-        self.edges = automation.edges.all()
+        self.edges = self.workflow_graph.get("edges", [])
 
     # =====================================================
     # BUILD GRAPH
@@ -24,17 +25,15 @@ class WorkflowParser:
 
     def build_graph(self):
 
-        graph = {}
-
-        for node_id in self.nodes:
-            graph[node_id] = []
+        graph = {node_id: [] for node_id in self.nodes}
 
         for edge in self.edges:
-
-            graph[edge.source_node_id].append({
-                "target": edge.target_node_id,
-                "type": edge.edge_type,
-            })
+            source = edge.get("source")
+            if source in graph:
+                graph[source].append({
+                    "target": edge.get("target"),
+                    "type": edge.get("edge_type", "DEFAULT"),
+                })
 
         return graph
 
@@ -45,8 +44,7 @@ class WorkflowParser:
     def get_trigger_node(self):
 
         for node in self.nodes.values():
-
-            if node.node_type == "TRIGGER":
+            if node.get("type") == "TRIGGER":
                 return node
 
         return None

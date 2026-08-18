@@ -2,35 +2,8 @@ from rest_framework import serializers
 
 from .models import (
     Form,
-    FormField,
     FormSubmission,
-    SubmissionAnswer,
 )
-
-
-# -----------------------------------
-# FORM FIELD
-# -----------------------------------
-
-class FormFieldSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = FormField
-        fields = [
-            "id",
-            "step_number",
-            "field_type",
-            "label",
-            "placeholder",
-            "help_text",
-            "required",
-            "unique_field",
-            "options",
-            "validation_rules",
-            "conditional_logic",
-            "settings",
-            "field_order",
-        ]
 
 
 # -----------------------------------
@@ -38,11 +11,6 @@ class FormFieldSerializer(serializers.ModelSerializer):
 # -----------------------------------
 
 class FormCreateSerializer(serializers.ModelSerializer):
-
-    fields = FormFieldSerializer(
-        many=True
-    )
-
     class Meta:
         model = Form
         fields = [
@@ -60,48 +28,8 @@ class FormCreateSerializer(serializers.ModelSerializer):
             "end_date",
             "thank_you_message",
             "redirect_url",
-            "fields",
+            "fields_schema",
         ]
-
-    def create(self, validated_data):
-
-        fields_data = validated_data.pop("fields")
-
-        form = Form.objects.create(
-            **validated_data
-        )
-
-        for field in fields_data:
-            FormField.objects.create(
-                form=form,
-                **field
-            )
-
-        return form
-
-    def update(self, instance, validated_data):
-
-        fields_data = validated_data.pop(
-            "fields",
-            None
-        )
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        instance.save()
-
-        if fields_data is not None:
-
-            instance.fields.all().delete()
-
-            for field in fields_data:
-                FormField.objects.create(
-                    form=instance,
-                    **field
-                )
-
-        return instance
 
 
 # -----------------------------------
@@ -111,10 +39,6 @@ class FormCreateSerializer(serializers.ModelSerializer):
 class FormListSerializer(serializers.ModelSerializer):
 
     total_responses = serializers.SerializerMethodField()
-    fields = FormFieldSerializer(
-        many=True,
-        read_only=True
-    )
 
     class Meta:
         model = Form
@@ -126,10 +50,12 @@ class FormListSerializer(serializers.ModelSerializer):
             "published_at",
             "created_at",
             "total_responses",
-            "fields",
+            "fields_schema",
         ]
 
     def get_total_responses(self, obj):
+        if hasattr(obj, 'annotated_responses'):
+            return obj.annotated_responses
         return obj.submissions.count()
 
 
@@ -139,11 +65,6 @@ class FormListSerializer(serializers.ModelSerializer):
 
 class FormDetailSerializer(serializers.ModelSerializer):
 
-    fields = FormFieldSerializer(
-        many=True,
-        read_only=True
-    )
-
     total_responses = serializers.SerializerMethodField()
 
     class Meta:
@@ -151,57 +72,26 @@ class FormDetailSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def get_total_responses(self, obj):
+        if hasattr(obj, 'annotated_responses'):
+            return obj.annotated_responses
         return obj.submissions.count()
-
-
-# -----------------------------------
-# ANSWERS
-# -----------------------------------
-
-class SubmissionAnswerSerializer(
-    serializers.ModelSerializer
-):
-
-    class Meta:
-        model = SubmissionAnswer
-        fields = [
-            "field",
-            "answer",
-        ]
 
 
 # -----------------------------------
 # SUBMISSION
 # -----------------------------------
 
-class FormSubmissionSerializer(
-    serializers.Serializer
-):
-
-    class AnswerSerializer(serializers.Serializer):
-        field_id = serializers.IntegerField(min_value=1)
-        answer = serializers.CharField(allow_blank=True)
-
-    answers = AnswerSerializer(many=True, allow_empty=False)
+class FormSubmissionSerializer(serializers.Serializer):
+    
+    answers = serializers.JSONField(default=dict)
 
     def create(self, validated_data):
-
         form = self.context["form"]
-
+        answers = validated_data.get("answers", {})
         submission = FormSubmission.objects.create(
-            form=form
+            form=form,
+            answers=answers
         )
-
-        answers = validated_data["answers"]
-
-        for item in answers:
-
-            SubmissionAnswer.objects.create(
-                submission=submission,
-                field_id=item["field_id"],
-                answer=item["answer"],
-            )
-
         return submission
 
 
@@ -209,14 +99,7 @@ class FormSubmissionSerializer(
 # RESPONSE LIST
 # -----------------------------------
 
-class SubmissionListSerializer(
-    serializers.ModelSerializer
-):
-
-    answers = SubmissionAnswerSerializer(
-        many=True,
-        read_only=True
-    )
+class SubmissionListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FormSubmission

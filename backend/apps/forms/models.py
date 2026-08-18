@@ -122,86 +122,17 @@ class Form(models.Model):
         auto_now=True
     )
 
+    fields_schema = models.JSONField(
+        default=list,
+        blank=True
+    )
+
     class Meta:
         db_table = "forms"
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.title
-
-
-class FormField(models.Model):
-    form = models.ForeignKey(
-        Form,
-        on_delete=models.CASCADE,
-        related_name="fields"
-    )
-
-    step_number = models.PositiveIntegerField(
-        default=1
-    )
-
-    field_type = models.CharField(
-        max_length=50,
-        choices=FieldType.choices
-    )
-
-    label = models.CharField(
-        max_length=255
-    )
-
-    placeholder = models.CharField(
-        max_length=255,
-        blank=True
-    )
-
-    help_text = models.TextField(
-        blank=True
-    )
-
-    required = models.BooleanField(
-        default=False
-    )
-
-    unique_field = models.BooleanField(
-        default=False
-    )
-
-    options = models.JSONField(
-        default=list,
-        blank=True
-    )
-
-    validation_rules = models.JSONField(
-        default=dict,
-        blank=True
-    )
-
-    conditional_logic = models.JSONField(
-        default=dict,
-        blank=True
-    )
-
-    settings = models.JSONField(
-        default=dict,
-        blank=True
-    )
-
-    field_order = models.PositiveIntegerField(
-        default=1
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    class Meta:
-        db_table = "form_fields"
-        ordering = ["step_number", "field_order"]
-
-    def __str__(self):
-        return f"{self.form.title} - {self.label}"
-
 
 class FormSubmission(models.Model):
     form = models.ForeignKey(
@@ -223,6 +154,11 @@ class FormSubmission(models.Model):
         auto_now_add=True
     )
 
+    answers = models.JSONField(
+        default=dict,
+        blank=True
+    )
+
     class Meta:
         db_table = "form_submissions"
         ordering = ["-submitted_at"]
@@ -231,25 +167,4 @@ class FormSubmission(models.Model):
         return f"{self.form.title} - {self.id}"
 
 
-class SubmissionAnswer(models.Model):
-    submission = models.ForeignKey(
-        FormSubmission,
-        on_delete=models.CASCADE,
-        related_name="answers"
-    )
-
-    field = models.ForeignKey(
-        FormField,
-        on_delete=models.CASCADE,
-        related_name="responses"
-    )
-
-    answer = models.TextField(
-        blank=True
-    )
-
-    class Meta:
-        db_table = "submission_answers"
-
-    def __str__(self):
-        return f"{self.field.label}"
+

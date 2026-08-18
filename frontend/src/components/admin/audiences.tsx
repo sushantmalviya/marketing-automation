@@ -16,9 +16,9 @@ import { apiClient, parseApiError } from "@/services/api-client";
 
 type Condition  = { id: string; field: string; operator: string; value: string; value_to?: string };
 type Group      = { id: string; operator: "AND" | "OR"; conditions: Condition[] };
-type Definition = { type?: string; description?: string; operator?: string; conditions?: Condition[]; groups_operator?: string; groups?: Group[]; static_ids?: number[] };
+type Definition = { type?: string; description?: string; operator?: string; conditions?: Condition[]; groups_operator?: string; groups?: Group[]; static_ids?: number[]; is_group?: boolean; base_group_ids?: number[] };
 type Audience   = { id: number; name: string; customer_upload: number | null; customer_upload_name: string; definition: Definition; type: string; contacts_count: number; created_at: string; updated_at: string };
-type SegmentForm = { name: string; description: string; type: "DYNAMIC" | "STATIC"; groups_operator: "AND" | "OR"; groups: Group[] };
+type SegmentForm = { name: string; description: string; type: "DYNAMIC" | "STATIC"; groups_operator: "AND" | "OR"; groups: Group[]; base_group_ids: number[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ const operators: [string, string][] = [
 const uid = () => Math.random().toString(36).slice(2, 10);
 const newCondition = (): Condition => ({ id: uid(), field: "Name", operator: "contains", value: "" });
 const newGroup     = (): Group => ({ id: uid(), operator: "AND", conditions: [newCondition()] });
-const blankForm    = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()] });
+const blankForm    = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()], base_group_ids: [] });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,29 +63,30 @@ export function AdminAudiences() {
     queryFn: async () => (await apiClient.get<Audience[]>("/api/audiences/")).data,
   });
 
-  // Fetch contacts to get dynamic column names
-  const contacts = useQuery({
-    queryKey: ["admin-contacts-cols"],
-    queryFn: async () => (await apiClient.get<{ id: number; data: Record<string, unknown> }[]>("/api/customers/", { params: { size: 1 } })).data,
+  const allGroups = useMemo(() => {
+    const arr = Array.isArray(audiences.data) ? audiences.data : (audiences.data as any)?.results || [];
+    return arr.filter((a: any) => a.definition?.is_group);
+  }, [audiences.data]);
+
+  // Fetch dynamic column names
+  const columnsQuery = useQuery({
+    queryKey: ["admin-contacts-cols", form.base_group_ids],
+    queryFn: async () => (await apiClient.get<{ columns: string[] }>("/api/customers/", { params: { columns_only: true, audience_ids: form.base_group_ids.length > 0 ? form.base_group_ids.join(",") : undefined } })).data,
     enabled: building,
   });
 
-  // Derive available field names from contact data columns
+  // Derive available field names from API response
   const availableFields = useMemo(() => {
-    const first = contacts.data?.[0];
-    if (!first) return FIXED_FIELDS;
-    const csvCols = (first.data.__col_order__ as string[] | undefined) ??
-      Object.keys(first.data).filter(k => !k.startsWith("__"));
-    const cleaned = csvCols.filter(k => !k.startsWith("__")).map(k =>
-      k.charAt(0).toUpperCase() + k.slice(1)
-    );
-    // Always include Source
-    return Array.from(new Set([...cleaned, "Source"]));
-  }, [contacts.data]);
+    if (columnsQuery.data?.columns && columnsQuery.data.columns.length > 0) {
+      return columnsQuery.data.columns;
+    }
+    return FIXED_FIELDS;
+  }, [columnsQuery.data]);
 
   const definition = useMemo(() => ({
     type: form.type,
     description: form.description,
+    base_group_ids: form.base_group_ids,
     groups_operator: form.groups_operator,
     groups: (form.type === "DYNAMIC" || form.type === "STATIC")
       ? form.groups.map(g => ({
@@ -97,7 +98,9 @@ export function AdminAudiences() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (audiences.data ?? []).filter(a => !q || [a.name, a.type, a.customer_upload_name].join(" ").toLowerCase().includes(q));
+    return (audiences.data ?? [])
+      .filter(a => !a.definition?.is_group)
+      .filter(a => !q || [a.name, a.type, a.customer_upload_name].join(" ").toLowerCase().includes(q));
   }, [audiences.data, search]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -150,11 +153,16 @@ export function AdminAudiences() {
       ? [{ id: uid2(), operator: (item.definition.operator || "AND") as "AND" | "OR", conditions: item.definition.conditions.map(c => ({ ...c, id: uid2() })) }]
       : [];
     setViewing(null); setEditing(item.id); setPreviewCount(item.contacts_count);
+    let base_group_ids: number[] = [];
+    if (item.definition?.base_group_ids) {
+        base_group_ids = item.definition.base_group_ids;
+    }
     setForm({
       name: item.name,
       description: item.definition?.description || "",
       type: item.type === "STATIC" ? "STATIC" : "DYNAMIC",
       groups_operator: item.definition?.groups_operator === "AND" ? "AND" : "OR",
+      base_group_ids: base_group_ids,
       groups: item.definition?.groups?.length
         ? item.definition.groups.map(g => ({ ...g, id: uid2(), conditions: g.conditions.map(c => ({ ...c, id: uid2() })) }))
         : legacy.length ? legacy : [newGroup()],
@@ -169,6 +177,7 @@ export function AdminAudiences() {
         editing={editing !== null}
         form={form}
         setForm={next => { setForm(next); setPreviewCount(null); setPreviewContacts([]); }}
+        allGroups={allGroups}
         availableFields={availableFields}
         previewCount={previewCount}
         previewContacts={previewContacts}
@@ -226,8 +235,12 @@ export function AdminAudiences() {
                     <td>
                       <div className="flex justify-center gap-2">
                         <Action title="View" color="blue" onClick={() => setViewing(item)}><Eye size={17} /></Action>
-                        <Action title="Edit" color="orange" onClick={() => editSegment(item)}><Pencil size={17} /></Action>
-                        <Action title="Delete" color="red" onClick={() => { if (confirm(`Delete "${item.name}"?`)) remove.mutate(item.id); }}><Trash2 size={17} /></Action>
+                        {!["Imported contacts", "Form leads", "Meta leads"].includes(item.name) && (
+                          <>
+                            <Action title="Edit" color="orange" onClick={() => editSegment(item)}><Pencil size={17} /></Action>
+                            <Action title="Delete" color="red" onClick={() => { if (confirm(`Delete "${item.name}"?`)) remove.mutate(item.id); }}><Trash2 size={17} /></Action>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -253,8 +266,9 @@ export function AdminAudiences() {
 
 // ─── Segment Builder ──────────────────────────────────────────────────────────
 
-function SegmentBuilder({ editing, form, setForm, availableFields, previewCount, previewContacts, previewing, fetchingFull, saving, onCancel, onPreview, onFetchFull, onSave }: {
+function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, previewCount, previewContacts, previewing, fetchingFull, saving, onCancel, onPreview, onFetchFull, onSave }: {
   editing: boolean; form: SegmentForm; setForm: (f: SegmentForm) => void;
+  allGroups: any[];
   availableFields: string[];
   previewCount: number | null;
   previewContacts: { id: number; data: Record<string, unknown> }[];
@@ -325,6 +339,61 @@ function SegmentBuilder({ editing, form, setForm, availableFields, previewCount,
                   : "Static segments capture a fixed snapshot of contacts at the time of creation. New contacts are not included."}
               </p>
             </div>
+          </section>
+
+          {/* Base Groups Selection */}
+          <section className="sa-card p-6 relative">
+            <label className="block text-sm font-semibold text-slate-800 mb-3">Target Base Groups (Optional)</label>
+            <div className="relative group">
+              <div className="flex min-h-12 w-full flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+                {form.base_group_ids.length === 0 ? (
+                  <span className="text-sm text-slate-500 pl-2">All Contacts</span>
+                ) : (
+                  form.base_group_ids.map(id => {
+                    const group = allGroups.find(g => g.id === id);
+                    if (!group) return null;
+                    return (
+                      <span key={id} className="flex items-center gap-1 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-800">
+                        {group.name}
+                        <button className="ml-1 text-blue-500 hover:text-blue-700" onClick={() => setForm({ ...form, base_group_ids: form.base_group_ids.filter(gid => gid !== id) })}>
+                          <X size={14} />
+                        </button>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+              <div className="absolute left-0 top-full z-10 mt-2 hidden w-full rounded-xl border border-slate-100 bg-white shadow-xl group-hover:block max-h-60 overflow-y-auto">
+                <div className="p-2 space-y-1">
+                  <button 
+                    onClick={() => setForm({ ...form, base_group_ids: [] })}
+                    className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${form.base_group_ids.length === 0 ? "bg-slate-100 font-semibold" : "hover:bg-slate-50"}`}
+                  >
+                    All Contacts
+                    {form.base_group_ids.length === 0 && <span className="text-slate-600 font-bold">✓</span>}
+                  </button>
+                  {allGroups.map(group => {
+                    const isSelected = form.base_group_ids.includes(group.id);
+                    return (
+                      <button
+                        key={group.id}
+                        onClick={() => {
+                          const newIds = isSelected 
+                            ? form.base_group_ids.filter(id => id !== group.id)
+                            : [...form.base_group_ids, group.id];
+                          setForm({ ...form, base_group_ids: newIds });
+                        }}
+                        className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${isSelected ? "bg-blue-50 text-blue-700 font-semibold" : "hover:bg-slate-50"}`}
+                      >
+                        {group.name}
+                        {isSelected && <span className="text-blue-600 font-bold">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Select which groups to build this segment from. You can select multiple groups (OR logic). If none selected, it applies to all contacts.</p>
           </section>
 
           {/* Conditions — shown for both DYNAMIC and STATIC */}

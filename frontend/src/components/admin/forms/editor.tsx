@@ -48,9 +48,9 @@ export function FormEditor({ formId }: { formId: string }) {
         setFormUuid(data.uuid);
         
         // Map backend fields to frontend format
-        if (data.fields) {
-          setFields(data.fields.map((f: any) => ({
-            id: String(f.id),
+        if (data.fields_schema) {
+          setFields(data.fields_schema.map((f: any) => ({
+            id: String(f.id || f.field_order || Math.random()),
             type: f.field_type,
             label: f.label,
             required: f.required,
@@ -69,7 +69,8 @@ export function FormEditor({ formId }: { formId: string }) {
         title: formTitle,
         description: formDescription,
         status: isLive ? "published" : "draft",
-        fields: fields.map((f, i) => ({
+        fields_schema: fields.map((f, i) => ({
+          id: f.id,
           field_type: f.type,
           label: f.label,
           required: f.required,

@@ -6,8 +6,6 @@ from rest_framework.views import APIView
 
 from apps.automation.models import (
     Automation,
-    AutomationNode,
-    AutomationEdge,
 )
 
 from .serializers import (
@@ -218,61 +216,14 @@ class CloneAutomationView(APIView):
 
         clone = (
             Automation.objects.create(
-                name=
-                    source.name
-                    + " Copy",
-
-                description=
-                    source.description,
-
-                owner=
-                    request.user,
+                name=source.name + " Copy",
+                description=source.description,
+                owner=request.user,
+                workflow_graph=source.workflow_graph,
             )
         )
 
-        node_map = {}
-
-        for node in source.nodes.all():
-
-            new_node = (
-                AutomationNode
-                .objects
-                .create(
-                    automation=clone,
-                    node_type=node.node_type,
-                    action_name=node.action_name,
-                    label=node.label,
-                    business_config=node.business_config,
-                    ui_config=node.ui_config,
-                )
-            )
-
-            node_map[node.id] = new_node
-
-        for edge in source.edges.all():
-
-            AutomationEdge.objects.create(
-                automation=clone,
-
-                source_node=
-                    node_map[
-                        edge.source_node_id
-                    ],
-
-                target_node=
-                    node_map[
-                        edge.target_node_id
-                    ],
-
-                edge_type=
-                    edge.edge_type,
-            )
-
         return Response({
-
             "success": True,
-
-            "id":
-                clone.id,
-
+            "id": clone.id,
         })

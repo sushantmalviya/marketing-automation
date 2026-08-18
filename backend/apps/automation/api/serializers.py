@@ -30,6 +30,7 @@ class AutomationSerializer(
             "is_public",
             "version",
             "published_at",
+            "workflow_graph",
             "created_at",
             "updated_at",
         ]

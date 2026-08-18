@@ -43,7 +43,7 @@ class WorkflowExecutor:
 
         self.current = (
             start_node
-            or execution.current_node
+            or (self.nodes.get(execution.current_node_id) if execution.current_node_id else None)
             or parsed["trigger"]
         )
 
@@ -56,27 +56,30 @@ class WorkflowExecutor:
         node,
     ):
 
-        if node.node_type == "TRIGGER":
+        node_type = node.get("type")
+        action_name = node.get("action_name")
+
+        if node_type == "TRIGGER":
 
             handler = (
                 TRIGGER_REGISTRY[
-                node.action_name
+                action_name
                 ]
             )
 
-        elif node.node_type == "CONDITION":
+        elif node_type == "CONDITION":
 
             handler = (
                 CONDITION_REGISTRY[
-                    node.action_name
+                    action_name
                 ]
             )
 
-        elif node.node_type == "ACTION":
+        elif node_type == "ACTION":
 
             handler = (
                 ACTION_REGISTRY[
-                    node.action_name
+                    action_name
                 ]
             )
 
@@ -84,14 +87,14 @@ class WorkflowExecutor:
 
             handler = (
                 UTILITY_REGISTRY[
-                    node.action_name
+                    action_name
                 ]
             )
 
         return handler.execute(
             self.execution,
             node,
-            node.business_config,
+            node.get("business_config", {}),
         )
 
     # =====================================================
@@ -105,7 +108,7 @@ class WorkflowExecutor:
     ):
 
         edges = self.graph.get(
-            node.id,
+            node.get("id"),
             []
         )
 
@@ -148,11 +151,11 @@ class WorkflowExecutor:
 
         while current:
 
-            self.execution.current_node = current
+            self.execution.current_node_id = current.get("id")
 
             self.execution.save(
                 update_fields=[
-                    "current_node"
+                    "current_node_id"
                 ]
             )
 
@@ -191,7 +194,7 @@ class WorkflowExecutor:
 
                 return False
 
-            if current.action_name == "END":
+            if current.get("action_name") == "END":
 
                 break
 

@@ -86,47 +86,28 @@ class ExecutionLogsView(APIView):
             raise PermissionDenied("You do not have permission to view these logs.")
 
         logs = (
-
             AutomationExecutionLog
-
             .objects
-
-            .filter(
-                execution_id=pk
-            )
-
-            .order_by(
-                "started_at"
-            )
-
+            .filter(execution_id=pk)
+            .order_by("started_at")
         )
+
+        nodes = execution.automation.workflow_graph.get("nodes", []) if execution.automation.workflow_graph else []
+        node_map = {node.get("id"): node for node in nodes}
 
         data = []
 
         for log in logs:
 
+            node_data = node_map.get(log.node_id, {})
+
             data.append({
-
-                "node_id":
-                    log.node.id,
-
-                "node_name":
-                    log.node.label,
-
-                "status":
-                    log.status,
-
-                "message":
-                    log.message,
-
-                "started_at":
-                    log.started_at,
-
-                "finished_at":
-                    log.finished_at,
-
+                "node_id": log.node_id,
+                "node_name": node_data.get("label", "Unknown Node"),
+                "status": log.status,
+                "message": log.message,
+                "started_at": log.started_at,
+                "finished_at": log.finished_at,
             })
 
-        return Response(
-            data
-        )
+        return Response(data)

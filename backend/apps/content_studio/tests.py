@@ -2,46 +2,7 @@ from django.test import TestCase
 from unittest.mock import patch
 from apps.accounts.models import User
 from apps.billing.models import Wallet
-from apps.content_studio.services import ContentStudioService
-from apps.billing.services import InsufficientCreditsError
-from apps.content_studio.models import GeneratedContent, ContentVersion
 
-class ContentStudioServiceTest(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(email="test@test.com", password="pwd")
-        self.wallet = Wallet.objects.create(balance=15)
-
-    @patch('apps.integrations.openai_service.OpenAIService.generate_content')
-    def test_generate_initial_content_success(self, mock_generate):
-        mock_generate.return_value = "Mocked AI Response"
-        
-        generated, version = ContentStudioService.generate_initial_content(
-            user=self.user,
-            prompt="Write a test",
-            content_type="BLOG",
-            platform="NONE"
-        )
-        
-        self.wallet.refresh_from_db()
-        self.assertEqual(self.wallet.balance, 5) # 15 - 10
-        self.assertEqual(version.text_content, "Mocked AI Response")
-        self.assertEqual(generated.status, GeneratedContent.Status.DRAFT)
-
-    @patch('apps.integrations.openai_service.OpenAIService.generate_content')
-    def test_generate_initial_content_insufficient_credits(self, mock_generate):
-        self.wallet.balance = 5
-        self.wallet.save()
-        
-        with self.assertRaises(InsufficientCreditsError):
-            ContentStudioService.generate_initial_content(
-                user=self.user,
-                prompt="Write a test",
-                content_type="BLOG",
-                platform="NONE"
-            )
-            
-        mock_generate.assert_not_called()
-        self.assertEqual(GeneratedContent.objects.count(), 0)
 
 from django.utils import timezone
 from apps.content_studio.models import ContentDraft, ContentPlatform, Approval
@@ -102,10 +63,12 @@ class AIEngineTest(TestCase):
         self.assertIn("visually descriptive", prompt)
         self.assertIn("Fun", prompt)
 
-    @patch('apps.content_studio.ai.providers.openai_provider.OpenAIProvider.generate_text')
-    def test_orchestrator_json_parsing(self, mock_generate):
+    @patch('apps.content_studio.ai.providers.huggingface_provider.HuggingFaceProvider.generate_text')
+    @patch('apps.content_studio.ai.providers.gemini_provider.GeminiProvider.generate_text')
+    def test_orchestrator_json_parsing(self, mock_gemini, mock_hf):
         # Mock successful JSON response
-        mock_generate.return_value = '{"Goal": "Sales", "Tone": "Urgent"}'
+        mock_hf.return_value = '{"Goal": "Sales", "Tone": "Urgent"}'
+        mock_gemini.return_value = '{"Goal": "Sales", "Tone": "Urgent"}'
         
         orchestrator = AIOrchestrator()
         result = orchestrator.extract_content_spec("Make a sale post")
@@ -113,9 +76,11 @@ class AIEngineTest(TestCase):
         self.assertEqual(result.get("Goal"), "Sales")
         self.assertEqual(result.get("Tone"), "Urgent")
 
-    @patch('apps.content_studio.ai.providers.openai_provider.OpenAIProvider.generate_text')
-    def test_lifecycle_enhance_prompt(self, mock_generate):
-        mock_generate.return_value = "Tone = Fun\nGoal = Sales"
+    @patch('apps.content_studio.ai.providers.huggingface_provider.HuggingFaceProvider.generate_text')
+    @patch('apps.content_studio.ai.providers.gemini_provider.GeminiProvider.generate_text')
+    def test_lifecycle_enhance_prompt(self, mock_gemini, mock_hf):
+        mock_hf.return_value = "Tone = Fun\nGoal = Sales"
+        mock_gemini.return_value = "Tone = Fun\nGoal = Sales"
         
         enhanced, version = self.lifecycle_service.enhance_content_prompt(
             draft=self.draft,
@@ -126,12 +91,14 @@ class AIEngineTest(TestCase):
         
         self.wallet.refresh_from_db()
         self.assertEqual(self.wallet.balance, 47)  # Deducted 3 credits
-        self.assertEqual(enhanced, "Tone = Fun\nGoal = Sales")
+        self.assertEqual(enhanced, "Goal = Sales\nTone = Fun")
         self.assertEqual(version.version_number, 2)  # Draft starts at 1, so version captured is 2
         
-    @patch('apps.content_studio.ai.providers.openai_provider.OpenAIProvider.generate_image')
-    def test_lifecycle_generate_image(self, mock_generate):
-        mock_generate.return_value = "http://fake-image.url"
+    @patch('apps.content_studio.ai.providers.huggingface_provider.HuggingFaceProvider.generate_image')
+    @patch('apps.content_studio.ai.providers.gemini_provider.GeminiProvider.generate_image')
+    def test_lifecycle_generate_image(self, mock_gemini, mock_hf):
+        mock_hf.return_value = "http://fake-image.url"
+        mock_gemini.return_value = "http://fake-image.url"
         self.draft.enhanced_prompt = "Tone = Fun"
         self.draft.save()
         

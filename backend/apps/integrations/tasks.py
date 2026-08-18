@@ -13,7 +13,7 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
     Background task to publish a social media post to a specific platform.
     """
     try:
-        platform_record = ContentPlatform.objects.select_related('draft', 'caption').get(id=platform_record_id)
+        platform_record = ContentPlatform.objects.select_related('draft').get(id=platform_record_id)
         draft = platform_record.draft
     except ContentPlatform.DoesNotExist:
         logger.error(f"ContentPlatform {platform_record_id} not found.")

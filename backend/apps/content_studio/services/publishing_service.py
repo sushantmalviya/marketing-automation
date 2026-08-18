@@ -3,7 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 from ..models import ContentDraft, ContentPlatform, ImageReference
 from apps.integrations.social_service import SocialService
-from apps.asset_library.models import Asset, AssetFolder
+from apps.asset_library.models import Asset
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.events.models import WebsiteEvent
+from apps.events.models import SystemEvent
 from apps.events.serializers import WebsiteEventTrackSerializer
 from apps.events.services.dispatcher import dispatch_website_event
 
@@ -17,9 +17,10 @@ class TrackEventView(APIView):
         )
 
         data = serializer.validated_data
-        event = WebsiteEvent.objects.create(
-            event_name=data["event"],
-            user_identifier=data["user"],
+        event = SystemEvent.objects.create(
+            event_type=SystemEvent.EventType.WEBSITE,
+            event_name=data["event_name"],
+            user_identifier=data["user_identifier"],
             session_id=data.get("session_id", ""),
             url=data.get("url", ""),
             metadata=data.get("metadata", {}),

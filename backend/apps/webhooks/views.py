@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from apps.campaigns.models import CustomerRecord
 
-from apps.webhooks.models import WebhookEvent
+from apps.events.models import SystemEvent
 from apps.webhooks.services.dispatcher import (
     dispatch_webhook_event,
     matching_webhook_automations,
@@ -48,9 +48,10 @@ class IncomingWebhookView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        event = WebhookEvent.objects.create(
-            secret=secret,
-            payload=request.data,
+        event = SystemEvent.objects.create(
+            event_type=SystemEvent.EventType.WEBHOOK,
+            user_identifier=secret,
+            metadata=request.data,
             headers=dict(request.headers),
         )
         executions = dispatch_webhook_event(event)

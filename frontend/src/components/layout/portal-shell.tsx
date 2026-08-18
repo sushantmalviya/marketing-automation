@@ -94,7 +94,6 @@ function SidebarBg() {
         bottom: "-30%", left: "-30%",
         width: "120%", height: "80%",
         background: "radial-gradient(ellipse at 25% 75%, #1e40af 0%, #1d4ed8 25%, #1e3a8a 50%, transparent 72%)",
-        filter: "blur(55px)",
       }}
         animate={{ scale:[1,1.1,1], opacity:[0.55,0.78,0.55] }}
         transition={{ duration:7, repeat:Infinity, ease:"easeInOut" }}
@@ -105,7 +104,6 @@ function SidebarBg() {
         bottom: "-8%", left: "-12%",
         width: "70%", height: "48%",
         background: "radial-gradient(ellipse at 35% 65%, #3b82f6 0%, #2563eb 30%, transparent 65%)",
-        filter: "blur(36px)",
       }}
         animate={{ scale:[1,1.22,1], opacity:[0.5,0.75,0.5] }}
         transition={{ duration:9, repeat:Infinity, ease:"easeInOut", delay:1.8 }}
@@ -116,7 +114,6 @@ function SidebarBg() {
         bottom: "30%", left: "-20%",
         width: "60%", height: "35%",
         background: "radial-gradient(ellipse, #0ea5e9 0%, #0284c7 38%, transparent 70%)",
-        filter: "blur(50px)",
       }}
         animate={{ scale:[1,1.15,1], opacity:[0.12,0.22,0.12] }}
         transition={{ duration:11, repeat:Infinity, ease:"easeInOut", delay:3.5 }}
@@ -127,7 +124,6 @@ function SidebarBg() {
         top: "-15%", right: "-25%",
         width: "55%", height: "45%",
         background: "radial-gradient(ellipse, #4f46e5 0%, #3730a3 40%, transparent 70%)",
-        filter: "blur(60px)",
       }}
         animate={{ scale:[1,1.08,1], opacity:[0.08,0.16,0.08] }}
         transition={{ duration:13, repeat:Infinity, ease:"easeInOut", delay:2 }}
@@ -154,11 +150,6 @@ function SidebarBg() {
             <stop offset="0%"   stopColor="#bfdbfe" stopOpacity="0.18"/>
             <stop offset="100%" stopColor="#93c5fd" stopOpacity="0.0"/>
           </linearGradient>
-          {/* Glow filter for wave crests */}
-          <filter id="wglow" x="-20%" y="-100%" width="140%" height="300%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
         </defs>
 
         {/* Wave 1 — deep back */}
@@ -169,14 +160,14 @@ function SidebarBg() {
         ]}} transition={{duration:8, repeat:Infinity, ease:"easeInOut"}}/>
 
         {/* Wave 2 — mid */}
-        <motion.path fill="url(#wg2)" filter="url(#wglow)" animate={{d:[
+        <motion.path fill="url(#wg2)" animate={{d:[
           "M-5 130 C40 100, 95 88, 150 108 C205 128, 260 115, 305 100 L305 200 L-5 200 Z",
           "M-5 142 C40 114, 95 102, 150 120 C205 140, 260 126, 305 113 L305 200 L-5 200 Z",
           "M-5 130 C40 100, 95 88, 150 108 C205 128, 260 115, 305 100 L305 200 L-5 200 Z",
         ]}} transition={{duration:10, repeat:Infinity, ease:"easeInOut", delay:1.5}}/>
 
         {/* Wave 3 — front bright */}
-        <motion.path fill="url(#wg3)" filter="url(#wglow)" animate={{d:[
+        <motion.path fill="url(#wg3)" animate={{d:[
           "M-5 152 C50 132, 110 122, 165 138 C220 154, 270 142, 305 130 L305 200 L-5 200 Z",
           "M-5 162 C50 144, 110 134, 165 148 C220 164, 270 152, 305 142 L305 200 L-5 200 Z",
           "M-5 152 C50 132, 110 122, 165 138 C220 154, 270 142, 305 130 L305 200 L-5 200 Z",
@@ -196,7 +187,6 @@ function SidebarBg() {
           left: `${l}%`, bottom: `${b}%`,
           width: `${w}px`, height: "1.5px",
           background: "linear-gradient(90deg, transparent, rgba(96,165,250,0.7), transparent)",
-          filter: "blur(1px)",
         }}
           animate={{ opacity:[0, 0.8, 0], scaleX:[0.3, 1, 0.3], x:[0, 20, 40] }}
           transition={{ duration:2.8+i*0.4, repeat:Infinity, ease:"easeInOut", delay }}
@@ -211,11 +201,7 @@ function SidebarBg() {
           background: i % 5 === 0 ? "#bfdbfe"
                     : i % 3 === 0 ? "#93c5fd"
                     : "#60a5fa",
-          boxShadow: i % 5 === 0
-            ? `0 0 ${sz*3}px ${sz}px #bfdbfe, 0 0 ${sz*6}px #93c5fd`
-            : i % 3 === 0
-            ? `0 0 ${sz*3}px ${sz}px #93c5fd, 0 0 ${sz*6}px #3b82f6`
-            : `0 0 ${sz*2}px ${sz}px #60a5fa, 0 0 ${sz*5}px #2563eb`,
+          boxShadow: `0 0 ${sz*2}px rgba(96, 165, 250, 0.6)`,
         }}
           animate={{
             y: [0, -(14 + i % 8), 0],
@@ -268,7 +254,6 @@ function MainBg() {
         top: "-20%", right: "-10%",
         width: "60vw", height: "60vw",
         background: "radial-gradient(ellipse, rgba(37,99,235,0.08) 0%, rgba(29,78,216,0.03) 40%, transparent 70%)",
-        filter: "blur(60px)",
       }}
         animate={{ scale:[1, 1.1, 1], opacity:[0.6, 0.9, 0.6] }}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
@@ -279,7 +264,6 @@ function MainBg() {
         bottom: "-10%", left: "-15%",
         width: "50vw", height: "50vw",
         background: "radial-gradient(ellipse, rgba(79,70,229,0.06) 0%, rgba(67,56,202,0.02) 50%, transparent 70%)",
-        filter: "blur(60px)",
       }}
         animate={{ scale:[1, 1.15, 1], opacity:[0.5, 0.8, 0.5] }}
         transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 2 }}
@@ -290,7 +274,6 @@ function MainBg() {
         top: "40%", left: "30%",
         width: "40vw", height: "30vw",
         background: "radial-gradient(ellipse, rgba(14,165,233,0.03) 0%, transparent 60%)",
-        filter: "blur(50px)",
       }}
         animate={{ scale:[1, 1.2, 1], opacity:[0.4, 0.7, 0.4] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 4 }}
@@ -302,9 +285,7 @@ function MainBg() {
           left: `${l}%`, top: `${t}%`,
           width: `${sz}px`, height: `${sz}px`,
           background: i % 2 === 0 ? "#bfdbfe" : "#60a5fa",
-          boxShadow: i % 2 === 0 
-            ? `0 0 ${sz*3}px ${sz}px #bfdbfe, 0 0 ${sz*6}px #93c5fd` 
-            : `0 0 ${sz*2}px ${sz}px #60a5fa, 0 0 ${sz*5}px #2563eb`,
+          boxShadow: `0 0 ${sz*2}px rgba(96, 165, 250, 0.6)`,
         }}
           animate={{
             y: [0, -30, 0],

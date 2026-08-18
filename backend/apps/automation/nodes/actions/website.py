@@ -1,9 +1,9 @@
 class TrackEventAction:
     def execute(self, execution, node, config):
-        from apps.events.models import WebsiteEvent
+        from apps.events.models import SystemEvent
 
-        event = WebsiteEvent.objects.create(
-            organization=execution.automation.owner,
+        event = SystemEvent.objects.create(
+            event_type=SystemEvent.EventType.WEBSITE,
             event_name=config.get("event_name", "PAGE_VISITED"),
             user_identifier=config.get("user_identifier", ""),
             session_id=config.get("session_id", ""),

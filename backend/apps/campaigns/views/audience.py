@@ -36,6 +36,36 @@ class AudienceListAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def get(self, request):
+        default_groups = {
+            "Imported contacts": "imported",
+            "Form leads": "form",
+            "Meta leads": "meta",
+        }
+        for group_name, source_value in default_groups.items():
+            # Get or create the dynamic group
+            group, created = Audience.objects.get_or_create(
+                name=group_name,
+                created_by=request.user,
+                defaults={
+                    "definition": {
+                        "type": "DYNAMIC", 
+                        "is_group": True, 
+                        "conditions": [{"field": "_source", "operator": "=", "value": source_value}]
+                    },
+                    "is_active": True,
+                }
+            )
+            # Ensure existing static groups are upgraded to dynamic
+            if not created:
+                current_type = str((group.definition or {}).get("type", "DYNAMIC")).upper()
+                if current_type == "STATIC":
+                    group.definition = {
+                        "type": "DYNAMIC", 
+                        "is_group": True, 
+                        "conditions": [{"field": "__source__", "operator": "=", "value": source_value}]
+                    }
+                    group.save(update_fields=["definition"])
+            
         audiences = filter_audiences_for_admin(
             Audience.objects.filter(is_active=True), request.user
         ).order_by("name")
@@ -61,6 +91,8 @@ class AudienceDetailAPIView(APIView):
 
     def patch(self, request, audience_id):
         audience = self._get_object(request, audience_id)
+        if audience.name in ["Imported contacts", "Form leads", "Meta leads"]:
+            return Response({"error": "Cannot edit default groups."}, status=status.HTTP_400_BAD_REQUEST)
         serializer = AudienceCreateSerializer(
             audience, data=request.data, partial=True, context={"request": request}
         )
@@ -70,6 +102,8 @@ class AudienceDetailAPIView(APIView):
 
     def delete(self, request, audience_id):
         audience = self._get_object(request, audience_id)
+        if audience.name in ["Imported contacts", "Form leads", "Meta leads"]:
+            return Response({"error": "Cannot delete default groups."}, status=status.HTTP_400_BAD_REQUEST)
         audience.is_active = False
         audience.save(update_fields=["is_active", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)

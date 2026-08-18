@@ -46,9 +46,9 @@ class AudienceService:
             operator = str(condition.get("operator", "=")).lower()
             value = condition.get("value")
 
-            # Special field: source → maps to __source__ in data
-            if field in ("source", "__source__"):
-                field = "__source__"
+            # Special field: source → maps to _source in data
+            if field in ("source", "_source", "__source__"):
+                field = "_source"
 
             if operator == "between":
                 return (
@@ -73,6 +73,20 @@ class AudienceService:
             return combined
 
         groups = audience_definition.get("groups") or []
+        base_group_ids = audience_definition.get("base_group_ids") or []
+        
+        if base_group_ids:
+            from apps.campaigns.models import Audience
+            base_groups = Audience.objects.filter(id__in=base_group_ids)
+            combined_base_qs = queryset.model.objects.none()
+            for bg in base_groups:
+                bg_def = bg.definition or {}
+                if str(bg_def.get("type", "DYNAMIC")).upper() == "STATIC":
+                    combined_base_qs = combined_base_qs | queryset.model.objects.filter(id__in=bg_def.get("static_ids", []))
+                else:
+                    combined_base_qs = combined_base_qs | AudienceService._apply_definition(queryset.model.objects.all(), bg_def)
+            queryset = queryset.filter(id__in=combined_base_qs.values("id"))
+
         if groups:
             query = Q()
             groups_operator = str(
@@ -96,7 +110,6 @@ class AudienceService:
                     str(audience_definition.get("operator", "AND")),
                 )
             else:
-                # No conditions → match everything
                 return queryset
 
         return queryset.filter(query)
@@ -108,12 +121,16 @@ class AudienceService:
 
         # For STATIC segments: snapshot matching record IDs now
         if seg_type == "STATIC":
-            base_qs = AudienceService._base_queryset(user)
-            matched_ids = list(
-                AudienceService._apply_definition(base_qs, definition)
-                .values_list("id", flat=True)[:10000]
-            )
-            definition = {**definition, "static_ids": matched_ids}
+            if definition.get("is_group"):
+                # Groups start explicitly empty
+                definition = {**definition, "static_ids": []}
+            else:
+                base_qs = AudienceService._base_queryset(user)
+                matched_ids = list(
+                    AudienceService._apply_definition(base_qs, definition)
+                    .values_list("id", flat=True)[:10000]
+                )
+                definition = {**definition, "static_ids": matched_ids}
 
         return Audience.objects.create(
             name=validated_data["name"],

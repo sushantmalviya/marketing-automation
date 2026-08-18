@@ -17,7 +17,7 @@ def log_execution(
 
     return AutomationExecutionLog.objects.create(
         execution=execution,
-        node=node,
+        node_id=node.get("id"),
         status=status,
         message=message,
     )

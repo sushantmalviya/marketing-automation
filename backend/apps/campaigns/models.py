@@ -364,8 +364,8 @@ class Template(models.Model):
         related_name="templates",
     )
 
-    generated_content = models.ForeignKey(
-        "content_studio.GeneratedContent",
+    content_draft = models.ForeignKey(
+        "content_studio.ContentDraft",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

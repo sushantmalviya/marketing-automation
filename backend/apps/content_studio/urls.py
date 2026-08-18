@@ -1,22 +1,12 @@
 from django.urls import path
 from .views import (
-    GenerateContentAPIView,
-    UpdateContentVersionAPIView,
-    ContentActionAPIView,
     BrandVoiceAPIView,
     ContentTemplateListCreateAPIView,
     ContentTemplateDetailAPIView,
-    GeneratedContentListAPIView,
-    RegenerateContentAPIView,
     AssetLibraryView,
 )
 
 urlpatterns = [
-    path('generate/', GenerateContentAPIView.as_view(), name='content-generate'),
-    path('<uuid:pk>/regenerate/', RegenerateContentAPIView.as_view(), name='content-regenerate'),
-    path('<uuid:pk>/update/', UpdateContentVersionAPIView.as_view(), name='content-update'),
-    path('<uuid:pk>/action/', ContentActionAPIView.as_view(), name='content-action'),
-    path('history/', GeneratedContentListAPIView.as_view(), name='content-history'),
     path('assets/', AssetLibraryView.as_view(), name='asset-library'),
 
     path('brand-voice/', BrandVoiceAPIView.as_view(), name='brand-voice'),

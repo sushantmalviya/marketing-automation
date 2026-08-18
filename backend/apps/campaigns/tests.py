@@ -60,8 +60,10 @@ class AdminCampaignWorkspaceTests(APITestCase):
     def test_admin_can_view_edit_and_soft_delete_owned_segment(self):
         listing = self.client.get(reverse("audience-list"))
         self.assertEqual(listing.status_code, status.HTTP_200_OK)
-        self.assertEqual(listing.data[0]["contacts_count"], 2)
-        self.assertEqual(listing.data[0]["type"], "DYNAMIC")
+        audience_data = next((a for a in listing.data if a["id"] == self.audience.id), None)
+        self.assertIsNotNone(audience_data)
+        self.assertEqual(audience_data["contacts_count"], 2)
+        self.assertEqual(audience_data["type"], "DYNAMIC")
 
         updated = self.client.patch(
             reverse("audience-detail", kwargs={"audience_id": self.audience.id}),
@@ -78,7 +80,8 @@ class AdminCampaignWorkspaceTests(APITestCase):
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
         self.audience.refresh_from_db()
         self.assertFalse(self.audience.is_active)
-        self.assertEqual(self.client.get(reverse("audience-list")).data, [])
+        remaining = self.client.get(reverse("audience-list")).data
+        self.assertFalse(any(a["id"] == self.audience.id for a in remaining))
 
     def test_grouped_segment_preview_supports_or_and_numeric_rules(self):
         CustomerRecord.objects.create(

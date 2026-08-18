@@ -56,7 +56,7 @@ class CustomerImportService:
         records = [
             CustomerRecord(
                 upload=upload,
-                data={"__col_order__": col_order, "__source__": "imported", **row.to_dict()},
+                data={"__col_order__": col_order, "_source": "imported", **row.to_dict()},
             )
             for _, row in dataframe.iterrows()
         ]

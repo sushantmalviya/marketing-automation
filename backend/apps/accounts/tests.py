@@ -112,7 +112,7 @@ class AuthenticationAPITests(APITestCase):
                 "password": self.password,
                 "first_name": "Created",
                 "last_name": "Admin",
-                "mobile_no": "+91 98765 43210",
+                "mobile_no": "9876543210",
             },
             format="json",
         )

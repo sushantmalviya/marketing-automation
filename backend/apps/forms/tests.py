@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import MAUser, User
-from apps.forms.models import Form, FormField, FormStatus
+from apps.forms.models import Form, FormStatus
 
 
 class FormAPITests(APITestCase):
@@ -18,12 +18,12 @@ class FormAPITests(APITestCase):
             title="Test form",
             created_by=self.user,
             status=FormStatus.PUBLISHED,
-        )
-        self.field = FormField.objects.create(
-            form=self.form,
-            field_type="text",
-            label="Name",
-            required=True,
+            fields_schema=[{
+                "id": 1,
+                "field_type": "text",
+                "label": "Name",
+                "required": True,
+            }]
         )
 
     def test_public_published_form_is_retrievable(self):
@@ -48,7 +48,7 @@ class FormAPITests(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.post(
             reverse("submit-form", kwargs={"uuid": self.form.uuid}),
-            {"answers": [{"field_id": self.field.id, "answer": "Ada"}]},
+            {"answers": [{"field_id": 1, "answer": "Ada"}]},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)

@@ -23,7 +23,7 @@ export function FormResponses({ formId }: { formId: string }) {
   });
 
   const responses = data || [];
-  const fields = formData?.fields || [];
+  const fields = (formData as any)?.fields_schema || [];
 
   const handleExportCSV = () => {
     if (!responses.length) return;
@@ -35,8 +35,7 @@ export function FormResponses({ formId }: { formId: string }) {
       const row = [
         index + 1,
         ...fields.map((f: any) => {
-          const answerObj = res.answers?.find((a: any) => a.field === f.id);
-          let text = answerObj ? answerObj.answer || "" : "";
+          let text = res.answers?.[f.id] || "";
           if (text.includes(",") || text.includes('"') || text.includes('\n')) {
             text = `"${text.replace(/"/g, '""')}"`;
           }
@@ -130,10 +129,10 @@ export function FormResponses({ formId }: { formId: string }) {
                     <td className="px-6 py-4 font-medium text-slate-800">{index + 1}</td>
                     
                     {fields.map((f: any) => {
-                      const answerObj = res.answers?.find((a: any) => a.field === f.id);
+                      const answerText = res.answers?.[f.id];
                       return (
                         <td key={f.id} className="px-6 py-4 text-slate-700 max-w-xs truncate">
-                          {answerObj ? answerObj.answer : <span className="text-slate-300">-</span>}
+                          {answerText ? answerText : <span className="text-slate-300">-</span>}
                         </td>
                       );
                     })}
@@ -181,12 +180,12 @@ export function FormResponses({ formId }: { formId: string }) {
               
               <div className="space-y-6">
                 {fields.map((f: any) => {
-                  const answerObj = selectedResponse.answers?.find((a: any) => a.field === f.id);
+                  const answerText = selectedResponse.answers?.[f.id];
                   return (
                     <div key={f.id} className="border-b border-slate-100 pb-6 last:border-0 last:pb-0">
                       <h4 className="text-sm font-semibold text-slate-800 mb-2">{f.label}</h4>
                       <div className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap">
-                        {answerObj && answerObj.answer ? answerObj.answer : <span className="text-slate-400 italic">No answer provided</span>}
+                        {answerText ? answerText : <span className="text-slate-400 italic">No answer provided</span>}
                       </div>
                     </div>
                   );

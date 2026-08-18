@@ -3,8 +3,6 @@ from django.contrib import admin
 from .models import (
     Automation,
     AutomationMember,
-    AutomationNode,
-    AutomationEdge,
     AutomationExecution,
     AutomationExecutionLog,
 )
@@ -83,67 +81,6 @@ class AutomationMemberAdmin(admin.ModelAdmin):
     )
 
 
-# ==================================================
-# Automation Node
-# ==================================================
-
-@admin.register(AutomationNode)
-class AutomationNodeAdmin(admin.ModelAdmin):
-
-    list_display = (
-        "automation",
-        "node_type",
-        "action_name",
-        "label",
-        "execution_order",
-        "created_at",
-    )
-
-    list_filter = (
-        "node_type",
-        "action_name",
-    )
-
-    search_fields = (
-        "label",
-        "automation__name",
-    )
-
-    readonly_fields = (
-        "id",
-        "created_at",
-        "updated_at",
-    )
-
-    ordering = (
-        "execution_order",
-    )
-
-
-# ==================================================
-# Automation Edge
-# ==================================================
-
-@admin.register(AutomationEdge)
-class AutomationEdgeAdmin(admin.ModelAdmin):
-
-    list_display = (
-        "automation",
-        "source_node",
-        "target_node",
-        "edge_type",
-        "created_at",
-    )
-
-    list_filter = (
-        "edge_type",
-    )
-
-    readonly_fields = (
-        "id",
-        "created_at",
-    )
-
 
 # ==================================================
 # Automation Execution
@@ -190,7 +127,7 @@ class AutomationExecutionLogAdmin(admin.ModelAdmin):
 
     list_display = (
         "execution",
-        "node",
+        "node_id",
         "status",
         "started_at",
         "finished_at",

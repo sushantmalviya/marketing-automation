@@ -68,7 +68,7 @@ def get_user_tasks(user):
     from apps.campaigns.models import Campaign
     return (
         TaskAssignment.objects
-        .filter(user=user)
+        .filter(user=user, task__is_active=True, task__is_deleted=False)
         .select_related(
             "task",
             "approved_by",
@@ -90,7 +90,7 @@ def get_admin_tasks(admin):
     from apps.campaigns.models import Campaign
     from apps.common.ownership import filter_tasks_for_admin
     
-    queryset = filter_tasks_for_admin(Task.objects.all(), admin)
+    queryset = filter_tasks_for_admin(Task.objects.filter(is_active=True, is_deleted=False), admin)
     
     return (
         queryset

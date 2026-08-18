@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import GeneratedContent, ContentVersion, BrandVoice, ContentTemplate
+from .models import BrandVoice, ContentTemplate
 
 class BrandVoiceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,27 +15,9 @@ class ContentTemplateSerializer(serializers.ModelSerializer):
         model = ContentTemplate
         fields = ['id', 'name', 'description', 'prompt_template', 'content_type', 'is_active', 'created_at', 'updated_at']
 
-class ContentVersionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ContentVersion
-        fields = ['id', 'version_number', 'prompt', 'text_content', 'image_url', 'created_at']
-
-class GeneratedContentSerializer(serializers.ModelSerializer):
-    versions = ContentVersionSerializer(many=True, read_only=True)
-    
-    class Meta:
-        model = GeneratedContent
-        fields = ['id', 'content_type', 'platform', 'status', 'versions', 'created_at']
-
-
 # --- New Campaign Workflow Serializers ---
 
-from .models import ContentDraft, ContentDraftVersion, ContentPlatform, Caption, Approval, ImageReference
-
-class CaptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Caption
-        fields = ['id', 'caption_text', 'hashtags', 'cta', 'is_manually_edited']
+from .models import ContentDraft, ContentDraftVersion, ContentPlatform, Approval, ImageReference
 
 
 class ImageReferenceSerializer(serializers.ModelSerializer):
@@ -48,7 +30,6 @@ class ImageReferenceSerializer(serializers.ModelSerializer):
 
 
 class ContentPlatformSerializer(serializers.ModelSerializer):
-    caption = CaptionSerializer(read_only=True)
     images = ImageReferenceSerializer(many=True, read_only=True)
 
     class Meta:
@@ -56,7 +37,7 @@ class ContentPlatformSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'platform', 'image_size', 'status', 'approval_status',
             'scheduled_datetime', 'published_datetime', 'error_message',
-            'caption', 'images'
+            'caption_text', 'hashtags', 'cta', 'is_manually_edited', 'images'
         ]
 
 
@@ -69,7 +50,7 @@ class ApprovalSerializer(serializers.ModelSerializer):
 class ContentDraftVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentDraftVersion
-        fields = ['id', 'version_number', 'enhanced_prompt_snapshot', 'regeneration_reason', 'created_at']
+        fields = ['id', 'version_number', 'enhanced_prompt_snapshot', 'regeneration_reason', 'text_content', 'image_url', 'created_at']
 
 
 class ContentDraftSerializer(serializers.ModelSerializer):
@@ -81,7 +62,7 @@ class ContentDraftSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentDraft
         fields = [
-            'id', 'owner', 'owner_name', 'original_prompt', 'enhanced_prompt',
+            'id', 'owner', 'owner_name', 'content_type', 'original_prompt', 'enhanced_prompt',
             'workflow_state', 'current_version', 'platforms', 'approvals', 'versions',
             'created_at', 'updated_at'
         ]

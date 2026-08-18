@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
@@ -20,6 +20,7 @@ import { ArrowLeft, Save, Play } from "lucide-react";
 import { AutomationSidebar } from "./sidebar";
 import { TriggerNode, ActionNode, ConditionNode, UtilityNode } from "./custom-nodes";
 import { NodeConfigPanel } from "./node-config";
+import { apiClient } from "@/services/api-client";
 
 const nodeTypes = {
   triggerNode: TriggerNode,
@@ -129,6 +130,35 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
     [reactFlowInstance, setNodes],
   );
 
+  useEffect(() => {
+    if (automationId && automationId !== "new") {
+      apiClient.get(`/api/automations/${automationId}/`)
+        .then((res) => {
+          const graph = res.data.workflow_graph;
+          if (graph) {
+            setNodes(graph.nodes || []);
+            setEdges(graph.edges || []);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load workflow graph", err);
+        });
+    }
+  }, [automationId, setNodes, setEdges]);
+
+  const handleSave = async () => {
+    if (automationId === "new") return;
+    try {
+      await apiClient.patch(`/api/automations/${automationId}/`, {
+        workflow_graph: { nodes, edges }
+      });
+      alert("Workflow saved successfully!");
+    } catch (err) {
+      console.error("Failed to save workflow graph", err);
+      alert("Failed to save workflow.");
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-80px)] -m-6 bg-slate-50 flex flex-col">
       {/* Header */}
@@ -150,7 +180,7 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
           <button className="secondary-button gap-2">
             <Play size={16} /> Test Workflow
           </button>
-          <button className="primary-button gap-2">
+          <button className="primary-button gap-2" onClick={handleSave}>
             <Save size={16} /> Save & Publish
           </button>
         </div>

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
 
 type RecordRow = { id: number; data: Record<string, unknown>; created_at: string };
+type AudienceGroup = { id: number; name: string; definition?: { is_group?: boolean } };
 type Contact = {
   name: string; email: string; phone_no: string; tags: string[];
   list: string; score: number; status: string; activity: string;
@@ -46,9 +47,13 @@ export function AdminContacts() {
   const [editing, setEditing] = useState<number | null>(null);
   const [viewing, setViewing] = useState<{ row: RecordRow; contact: Contact } | null>(null);
   const [form, setForm] = useState<Contact>(blank);
+  const [selectedAudience, setSelectedAudience] = useState<number | null>(null);
+  const [isCreateGroupOpen, setCreateGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
   // selection
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // tag options (global, persisted in localStorage)
+
   const [tagOptions, setTagOptionsState] = useState<string[]>(loadTagOptions);
 
   function setTagOptions(opts: string[]) {
@@ -58,12 +63,20 @@ export function AdminContacts() {
   // confirmation modals
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);      // single
   const [confirmBulk, setConfirmBulk] = useState(false);                        // selected
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<number | null>(null); // group
+
+  const { data: audiencesData } = useQuery<AudienceGroup[] | { results?: AudienceGroup[] }>({
+    queryKey: ["admin-audiences"],
+    queryFn: async () => (await apiClient.get("/api/audiences/")).data,
+  });
+  const allAudiences = Array.isArray(audiencesData) ? audiencesData : audiencesData?.results || [];
+  const audiences = allAudiences.filter(a => a.definition?.is_group);
 
   const query = useQuery({
-    queryKey: ["admin-contacts"],
-    queryFn: async () => (await apiClient.get<RecordRow[]>("/api/customers/", { params: { size: 2000 } })).data,
+    queryKey: ["admin-contacts", selectedAudience],
+    queryFn: async () => (await apiClient.get("/api/customers/", { params: { size: 2000, audience_id: selectedAudience || undefined } })).data,
   });
-  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const rows = useMemo(() => (query.data || []) as RecordRow[], [query.data]);
   const normalized = useMemo(() => rows.map(row => ({ row, contact: normalize(row) })), [rows]);
   const allTags = useMemo(() => Array.from(new Set(normalized.flatMap(({ contact }) => contact.tags))).sort(), [normalized]);
 
@@ -105,14 +118,19 @@ export function AdminContacts() {
     else setSelected(prev => { const n = new Set(prev); visibleIds.forEach(id => n.add(id)); return n; });
   }
   function toggleOne(id: number) {
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   }
 
   // ── mutations ─────────────────────────────────────────────────────────────────
   const save = useMutation({
     mutationFn: () => editing
       ? apiClient.patch(`/api/customers/${editing}/`, form)
-      : apiClient.post("/api/customers/", form),
+      : apiClient.post("/api/customers/", { ...form, audience_id: selectedAudience || undefined }),
     onSuccess: () => {
       toast.success(editing ? "Contact updated" : "Contact added");
       setEditorOpen(false); setEditing(null); setForm(blank);
@@ -142,6 +160,27 @@ export function AdminContacts() {
     onError: err => toast.error(parseApiError(err)),
   });
 
+  const createGroup = useMutation({
+    mutationFn: (name: string) => apiClient.post("/api/audiences/create/", { name, definition: { type: "STATIC", is_group: true, static_ids: [] } }),
+    onSuccess: () => {
+      toast.success("Group created");
+      setCreateGroupOpen(false);
+      setNewGroupName("");
+      void client.invalidateQueries({ queryKey: ["admin-audiences"] });
+    },
+    onError: err => toast.error(parseApiError(err)),
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: (id: number) => apiClient.delete(`/api/audiences/${id}/`),
+    onSuccess: () => {
+      toast.success("Group deleted");
+      setSelectedAudience(null);
+      void client.invalidateQueries({ queryKey: ["admin-audiences"] });
+    },
+    onError: err => toast.error(parseApiError(err)),
+  });
+
   // ── helpers ───────────────────────────────────────────────────────────────────
   async function importFile(file?: File) {
     if (!file) return;
@@ -167,6 +206,10 @@ export function AdminContacts() {
 
   function beginAdd() { setEditing(null); setForm(blank); setEditorOpen(true); }
   function beginEdit(row: RecordRow) { setViewing(null); setEditing(row.id); setForm(normalize(row)); setEditorOpen(true); }
+  function selectAudience(audienceId: number | null) {
+    setSelectedAudience(audienceId);
+    setSelected(new Set());
+  }
 
   return (
     <div>
@@ -193,6 +236,54 @@ export function AdminContacts() {
           )}
           <button className="primary-button min-h-12 px-5" onClick={beginAdd}><Plus size={19} />Add Contact</button>
         </div>
+      </div>
+      {/* ── Groups (Tabs) ── */}
+      <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <button
+          onClick={() => selectAudience(null)}
+          className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+            selectedAudience === null
+              ? "bg-slate-800 text-white shadow-md"
+              : "bg-white text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          <div className="opacity-70"><Tags size={16} /></div>
+          All contacts
+        </button>
+        {audiences.map(aud => {
+          const isDefault = ["Imported contacts", "Form leads", "Meta leads"].includes(aud.name);
+          const isSelected = selectedAudience === aud.id;
+          return (
+            <button
+              key={aud.id}
+              onClick={() => selectAudience(aud.id)}
+              className={`group/tab flex items-center gap-2 whitespace-nowrap rounded-xl pl-4 pr-3 py-2 text-sm font-semibold transition-all ${
+                isSelected
+                  ? "bg-slate-800 text-white shadow-md"
+                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-sm"
+              }`}
+            >
+              <div className="opacity-70"><Tags size={16} /></div>
+              <span className={!isDefault && isSelected ? "mr-1" : "pr-1"}>{aud.name}</span>
+              {isSelected && !isDefault && (
+                <div 
+                  className="grid place-items-center h-6 w-6 rounded-md hover:bg-red-500/20 text-white/70 hover:text-red-300 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDeleteGroup(aud.id); }}
+                  title="Delete group"
+                >
+                  <Trash2 size={14} />
+                </div>
+              )}
+            </button>
+          );
+        })}
+        <button
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 border border-slate-200 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-800"
+          title="Create new group"
+          onClick={() => setCreateGroupOpen(true)}
+        >
+          <Plus size={18} />
+        </button>
       </div>
 
       <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="sa-card overflow-hidden">
@@ -303,6 +394,25 @@ export function AdminContacts() {
       <AnimatePresence>
         {viewing && <ContactDetails contact={viewing.contact} onClose={() => setViewing(null)} onEdit={() => beginEdit(viewing.row)} />}
         {editorOpen && <ContactEditor editing={editing !== null} form={form} pending={save.isPending} setForm={setForm} tagOptions={tagOptions} setTagOptions={setTagOptions} onClose={() => setEditorOpen(false)} onSubmit={() => save.mutate()} />}
+        {isCreateGroupOpen && (
+          <CreateGroupModal
+            name={newGroupName}
+            pending={createGroup.isPending}
+            onNameChange={setNewGroupName}
+            onClose={() => {
+              setCreateGroupOpen(false);
+              setNewGroupName("");
+            }}
+            onSubmit={() => {
+              const name = newGroupName.trim();
+              if (!name) {
+                toast.error("Group name is required");
+                return;
+              }
+              createGroup.mutate(name);
+            }}
+          />
+        )}
 
         {/* Single delete confirmation */}
         {confirmDelete !== null && (
@@ -331,6 +441,21 @@ export function AdminContacts() {
             pending={bulkDelete.isPending}
             onCancel={() => setConfirmBulk(false)}
             onConfirm={() => { bulkDelete.mutate({ ids: Array.from(selected) }); setConfirmBulk(false); }}
+          />
+        )}
+
+        {/* Group delete confirmation */}
+        {confirmDeleteGroup !== null && (
+          <ConfirmModal
+            key="confirm-group"
+            icon={<Trash2 size={28} className="text-red-500" />}
+            title="Delete group?"
+            description="This will delete the group. The contacts inside will NOT be deleted from the system."
+            confirmLabel="Delete Group"
+            danger
+            pending={deleteGroup.isPending}
+            onCancel={() => setConfirmDeleteGroup(null)}
+            onConfirm={() => { deleteGroup.mutate(confirmDeleteGroup); setConfirmDeleteGroup(null); }}
           />
         )}
 
@@ -375,6 +500,56 @@ function ConfirmModal({ icon, title, description, confirmLabel, danger, pending,
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
+
+function CreateGroupModal({ name, pending, onNameChange, onClose, onSubmit }: {
+  name: string;
+  pending?: boolean;
+  onNameChange: (name: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4 backdrop-blur-sm">
+      <motion.form
+        initial={{ opacity: 0, scale: .96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: .97 }}
+        className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+        onSubmit={e => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-blue-600">Audience workspace</p>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Create group</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} disabled={pending}><X /></button>
+        </div>
+        <div className="p-6">
+          <label className="field">
+            <span>Group name *</span>
+            <input
+              autoFocus
+              required
+              minLength={2}
+              value={name}
+              onChange={e => onNameChange(e.target.value)}
+              placeholder="Enter group name"
+            />
+          </label>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" className="secondary-button px-6" onClick={onClose} disabled={pending}>Cancel</button>
+          <button className="primary-button min-h-10 px-6" disabled={pending || !name.trim()}>
+            {pending ? "Creating..." : "Create group"}
+          </button>
+        </div>
+      </motion.form>
+    </div>
+  );
+}
 
 function ContactDetails({ contact, onClose, onEdit }: { contact: Contact; onClose: () => void; onEdit: () => void }) {
   return (

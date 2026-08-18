@@ -1,14 +1,14 @@
 from rest_framework import serializers
 
-from apps.events.models import WebsiteEvent
+from apps.events.models import SystemEvent
 
 
 class WebsiteEventTrackSerializer(serializers.Serializer):
-    event = serializers.ChoiceField(
-        choices=WebsiteEvent.SUPPORTED_EVENTS
+    event_name = serializers.ChoiceField(
+        choices=SystemEvent.SUPPORTED_EVENTS
     )
-    user = serializers.CharField(
-        max_length=255
+    user_identifier = serializers.CharField(
+        max_length=255,
     )
     session_id = serializers.CharField(
         max_length=255,
@@ -21,17 +21,16 @@ class WebsiteEventTrackSerializer(serializers.Serializer):
         allow_blank=True,
     )
     metadata = serializers.JSONField(
-        required=False
+        required=False,
     )
 
 
-class WebsiteEventSerializer(serializers.ModelSerializer):
+class SystemEventSerializer(serializers.ModelSerializer):
     class Meta:
-        model = WebsiteEvent
+        model = SystemEvent
         fields = "__all__"
         read_only_fields = [
             "id",
             "organization",
             "created_at",
         ]
-
