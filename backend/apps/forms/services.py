@@ -1,13 +1,11 @@
-from django.core.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from .models import (
     Form,
-    FormField,
     FormStatus,
     FormSubmission,
-    SubmissionAnswer,
 )
 
 
@@ -87,21 +85,12 @@ class FormService:
     @transaction.atomic
     def create_form(*, user, data):
 
-        fields = data.pop("fields", [])
+        fields = data.pop("fields_schema", [])
 
         form = Form.objects.create(
             created_by=user,
+            fields_schema=fields,
             **data,
-        )
-
-        FormField.objects.bulk_create(
-            [
-                FormField(
-                    form=form,
-                    **field,
-                )
-                for field in fields
-            ]
         )
 
         return form
@@ -111,35 +100,23 @@ class FormService:
     def update_form(*, form, data):
 
         fields = data.pop(
-            "fields",
+            "fields_schema",
             None,
         )
 
         for key, value in data.items():
             setattr(form, key, value)
+            
+        if fields is not None:
+            form.fields_schema = fields
 
         form.save()
-
-        if fields is not None:
-
-            form.fields.all().delete()
-
-            FormField.objects.bulk_create(
-                [
-                    FormField(
-                        form=form,
-                        **field,
-                    )
-                    for field in fields
-                ]
-            )
-
         return form
 
     @staticmethod
     def publish_form(form):
 
-        if not form.fields.exists():
+        if not form.fields_schema:
             raise ValidationError(
                 "Cannot publish an empty form."
             )
@@ -217,46 +194,33 @@ class FormService:
             )
 
         # validate field ownership
-        valid_field_ids = set(
-            form.fields.values_list(
-                "id",
-                flat=True,
-            )
-        )
+        valid_field_ids = {str(f.get("id", "")) for f in form.fields_schema}
 
         submission = FormSubmission.objects.create(
             form=form,
             ip_address=ip_address,
             user_agent=user_agent,
+            answers={}
         )
 
-        submission_answers = []
         answers_dict = {}
 
         for item in answers:
-
-            field_id = item["field_id"]
-            answers_dict[str(field_id)] = item.get("answer", "")
+            if "field_id" not in item:
+                raise ValidationError({"answers": [{"field_id": "This field is required."}]})
+            field_id = str(item["field_id"])
+            answers_dict[field_id] = item.get("answer", "")
 
             if field_id not in valid_field_ids:
                 raise ValidationError(
                     f"Invalid field id: {field_id}"
                 )
 
-            submission_answers.append(
-                SubmissionAnswer(
-                    submission=submission,
-                    field_id=field_id,
-                    answer=item["answer"],
-                )
-            )
-
-        SubmissionAnswer.objects.bulk_create(
-            submission_answers
-        )
+        submission.answers = answers_dict
+        submission.save(update_fields=['answers'])
         
         # Create a CustomerRecord for this submission
-        fields_map = {str(f.id): f for f in form.fields.all()}
+        fields_map = {str(f.get('id', '')): f for f in form.fields_schema}
         customer_data = {"_source": "form"}
         contact_name = ""
         contact_email = ""
@@ -266,18 +230,20 @@ class FormService:
             field = fields_map.get(field_id)
             if not field: continue
             
-            label_lower = field.label.lower()
-            if field.field_type == "email" or "email" in label_lower:
+            label_lower = field.get('label', '').lower()
+            field_type = field.get('field_type', '')
+            
+            if field_type == "email" or "email" in label_lower:
                 contact_email = answer
                 customer_data["Email"] = answer
-            elif field.field_type == "phone" or "phone" in label_lower:
+            elif field_type == "phone" or "phone" in label_lower:
                 contact_phone = answer
                 customer_data["Phone"] = answer
-            elif field.field_type == "text" and "name" in label_lower:
+            elif field_type == "text" and "name" in label_lower:
                 contact_name = answer
                 customer_data["Name"] = answer
             else:
-                customer_data[field.label] = answer
+                customer_data[field.get('label', field_id)] = answer
                 
         if not customer_data.get("Name"):
             customer_data["Name"] = contact_name or "Form User"
@@ -336,19 +302,22 @@ class FormService:
                     allow_dispatch = True
                     
                     if reentry_rule != "every_time":
-                        identifier_field = form.fields.filter(field_type=reentry_identifier_type).first()
+                        identifier_field = next((f for f in form.fields_schema if f.get('field_type') == reentry_identifier_type), None)
                         
                         if identifier_field:
-                            identifier_value = answers_dict.get(str(identifier_field.id), "")
+                            identifier_value = answers_dict.get(str(identifier_field.get('id')), "")
                             
                             if identifier_value:
                                 from apps.automation.models import AutomationExecution
                                 from datetime import timedelta
                                 
+                                # Use JSONField exact lookup 
+                                filter_kwargs = {
+                                    f"answers__{identifier_field.get('id')}__iexact": identifier_value
+                                }
                                 previous_submissions = FormSubmission.objects.filter(
                                     form=form,
-                                    answers__field=identifier_field,
-                                    answers__answer__iexact=identifier_value
+                                    **filter_kwargs
                                 ).exclude(id=submission.id)
                                 
                                 past_executions_query = AutomationExecution.objects.filter(

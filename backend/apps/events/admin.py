@@ -1,11 +1,12 @@
 from django.contrib import admin
 
-from apps.events.models import WebsiteEvent
+from apps.events.models import SystemEvent
 
 
-@admin.register(WebsiteEvent)
-class WebsiteEventAdmin(admin.ModelAdmin):
+@admin.register(SystemEvent)
+class SystemEventAdmin(admin.ModelAdmin):
     list_display = (
+        "event_type",
         "event_name",
         "user_identifier",
         "session_id",
@@ -13,6 +14,7 @@ class WebsiteEventAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = (
+        "event_type",
         "event_name",
         "created_at",
     )

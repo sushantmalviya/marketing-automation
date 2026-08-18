@@ -1,15 +1,8 @@
 from rest_framework import serializers
-from .models import Asset, AssetFolder, AssetTag
-
-
-class AssetTagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AssetTag
-        fields = ["id", "name"]
+from .models import Asset
 
 
 class AssetSerializer(serializers.ModelSerializer):
-    tags = AssetTagSerializer(many=True, read_only=True)
     uploaded_by_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -20,6 +13,7 @@ class AssetSerializer(serializers.ModelSerializer):
             "file_url",
             "asset_type",
             "is_personal",
+            "path",
             "tags",
             "uploaded_by_name",
             "created_at",
@@ -42,6 +36,12 @@ class AssetCreateSerializer(serializers.Serializer):
         required=False,
     )
     is_personal = serializers.BooleanField(default=False, required=False)
+    path = serializers.CharField(max_length=1024, default="/", required=False)
+    tags = serializers.ListField(
+        child=serializers.CharField(),
+        default=list,
+        required=False
+    )
 
     def validate(self, data):
         if not data.get("file") and not data.get("file_url"):

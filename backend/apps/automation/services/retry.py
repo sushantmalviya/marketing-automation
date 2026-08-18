@@ -9,7 +9,13 @@ DEFAULT_RETRY_STRATEGY = "FIXED"
 
 
 def get_retry_config(execution):
-    node = execution.current_node
+    node = None
+    if execution.current_node_id and execution.automation and execution.automation.workflow_graph:
+        nodes = execution.automation.workflow_graph.get("nodes", [])
+        for n in nodes:
+            if n.get("id") == execution.current_node_id:
+                node = n
+                break
 
     if not node:
         return {
@@ -18,7 +24,7 @@ def get_retry_config(execution):
             "retry_strategy": DEFAULT_RETRY_STRATEGY,
         }
 
-    config = node.business_config or {}
+    config = node.get("business_config") or {}
 
     return {
         "retry_count": int(

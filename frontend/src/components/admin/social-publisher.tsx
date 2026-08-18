@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
 
 type PlatformName = "INSTAGRAM" | "X" | "FACEBOOK" | "LINKEDIN";
-type Platform = { id: string; platform: PlatformName; status: string; approval_status: string; scheduled_datetime: string | null; published_datetime: string | null; caption?: { caption_text: string; hashtags: string; cta: string } | null; images: Array<{ asset_url?: string; asset_name?: string }> };
+type Platform = { id: string; platform: PlatformName; status: string; approval_status: string; scheduled_datetime: string | null; published_datetime: string | null; caption_text?: string; hashtags?: string; cta?: string; is_manually_edited?: boolean; images: Array<{ asset_url?: string; asset_name?: string }> };
 type Draft = { id: string; owner: number; owner_name: string; original_prompt: string; enhanced_prompt: string; workflow_state: string; platforms: Platform[]; approvals: Array<{ status: string; created_at: string }>; created_at: string; updated_at: string };
 type CreateForm = { prompt: string; platforms: PlatformName[]; schedule: string };
 

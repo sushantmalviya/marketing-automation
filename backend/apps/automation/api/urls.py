@@ -10,15 +10,7 @@ from .automation_views import (
     CloneAutomationView,
 )
 
-from .node_views import (
-    AutomationNodeCreateView,
-    AutomationNodeDetailView,
-)
 
-from .edge_views import (
-    AutomationEdgeCreateView,
-    AutomationEdgeDeleteView,
-)
 
 from .execution_views import (
     ExecutionHistoryView,
@@ -71,33 +63,7 @@ urlpatterns = [
         CloneAutomationView.as_view(),
     ),
 
-    # =====================================
-    # Nodes
-    # =====================================
 
-    path(
-        "<uuid:automation_id>/nodes/",
-        AutomationNodeCreateView.as_view(),
-    ),
-
-    path(
-        "nodes/<uuid:pk>/",
-        AutomationNodeDetailView.as_view(),
-    ),
-
-    # =====================================
-    # Edges
-    # =====================================
-
-    path(
-        "<uuid:automation_id>/edges/",
-        AutomationEdgeCreateView.as_view(),
-    ),
-
-    path(
-        "edges/<uuid:pk>/",
-        AutomationEdgeDeleteView.as_view(),
-    ),
 
     # =====================================
     # Execution

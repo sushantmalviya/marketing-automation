@@ -22,7 +22,8 @@ type Asset = {
   file_url: string;
   asset_type: "IMAGE" | "DOCUMENT" | "VIDEO" | "OTHER";
   is_personal: boolean;
-  tags: { id: string; name: string }[];
+  tags: string[];
+  path?: string;
   uploaded_by_name?: string;
   created_at: string;
   file_size?: number;
@@ -166,7 +167,7 @@ function AssetGridCard({ asset, onPreview }: { asset: Asset; onPreview: (a: Asse
         </p>
         <div className="mt-auto flex flex-wrap gap-1 pt-1">
           {asset.tags.slice(0, 2).map(t => (
-            <Badge key={t.id} className="bg-slate-100 text-slate-500">{t.name}</Badge>
+            <Badge key={t} className="bg-slate-100 text-slate-500">{t}</Badge>
           ))}
         </div>
       </div>
@@ -307,7 +308,7 @@ function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose
           )}
           {asset.tags.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
-              {asset.tags.map(t => <Badge key={t.id} className="bg-blue-50 text-blue-600">{t.name}</Badge>)}
+              {asset.tags.map(t => <Badge key={t} className="bg-blue-50 text-blue-600">{t}</Badge>)}
             </div>
           )}
         </div>

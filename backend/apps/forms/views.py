@@ -4,6 +4,7 @@ from rest_framework.permissions import (
     IsAuthenticated,
 )
 from rest_framework.response import Response
+from django.db.models import Count
 
 from .models import Form, FormStatus
 from .permissions import (
@@ -33,11 +34,13 @@ class FormListCreateView(
     serializer_class = FormListSerializer
 
     def get_queryset(self):
-
-        return _filter_resource_for_admin(
+        qs = _filter_resource_for_admin(
             Form.objects.all(),
             self.request.user,
             "created_by"
+        )
+        return qs.annotate(
+            annotated_responses=Count('submissions', distinct=True)
         )
 
     def post(
@@ -79,10 +82,13 @@ class FormDetailView(
     ]
 
     def get_queryset(self):
-        return _filter_resource_for_admin(
+        qs = _filter_resource_for_admin(
             Form.objects.all(),
             self.request.user,
             "created_by"
+        )
+        return qs.annotate(
+            annotated_responses=Count('submissions', distinct=True)
         )
 
     def get_serializer_class(self):

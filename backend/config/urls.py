@@ -45,11 +45,13 @@ class _AssetPager(_Pager):
 class _AssetListCreate(_APIView):
     permission_classes = [_IsAuth]
     def get(self, request):
-        qs = _Asset.objects.filter(uploaded_by=request.user).select_related("uploaded_by").prefetch_related("tags")
+        qs = _Asset.objects.filter(uploaded_by=request.user).select_related("uploaded_by")
         t = request.query_params.get("type")
         if t: qs = qs.filter(asset_type=t.upper())
         s = request.query_params.get("search","").strip()
         if s: qs = qs.filter(name__icontains=s)
+        path = request.query_params.get("path")
+        if path: qs = qs.filter(path__startswith=path)
         p = _AssetPager(); page = p.paginate_queryset(qs, request)
         return p.get_paginated_response(_AssetSer(page, many=True).data)
     def post(self, request):
@@ -61,7 +63,8 @@ class _AssetListCreate(_APIView):
             file_url = request.build_absolute_uri(_settings.MEDIA_URL + saved)
         asset = _Asset.objects.create(name=d["name"], file_url=file_url,
             asset_type=d.get("asset_type") or _auto_type(d["name"]),
-            is_personal=d.get("is_personal", False), uploaded_by=request.user)
+            is_personal=d.get("is_personal", False), uploaded_by=request.user,
+            path=d.get("path", "/"), tags=d.get("tags", []))
         return _Resp(_AssetSer(asset).data, status=_status.HTTP_201_CREATED)
 
 class _AssetDetail(_APIView):

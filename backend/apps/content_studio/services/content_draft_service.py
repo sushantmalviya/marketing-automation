@@ -7,13 +7,14 @@ logger = logging.getLogger(__name__)
 class ContentDraftService:
     @staticmethod
     @transaction.atomic
-    def create_content_draft(user, original_prompt="", platforms=None, preset_image_id=None):
+    def create_content_draft(user, original_prompt="", platforms=None, preset_image_id=None, content_type="SOCIAL"):
         """
         Creates a new ContentDraft and its related platforms.
         `platforms` is a list of PlatformChoices strings.
         """
         draft = ContentDraft.objects.create(
             owner=user,
+            content_type=content_type,
             original_prompt=original_prompt,
             workflow_state=ContentDraft.WorkflowState.DRAFT
         )

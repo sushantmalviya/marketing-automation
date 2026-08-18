@@ -30,13 +30,13 @@ class WaitNode:
         execution.status = "WAITING"
         execution.paused_at = now
         execution.resume_at = now + delay
-        execution.current_node = node
+        execution.current_node_id = node.get("id")
         execution.save(
             update_fields=[
                 "status",
                 "paused_at",
                 "resume_at",
-                "current_node",
+                "current_node_id",
             ]
         )
 

@@ -89,6 +89,9 @@ Thumbs.db
 .agents/
 figma_reference
 
+# Project documentation
+/docs/
+
 # API Documentation & Landing Page
 api_catalog.md
 landing-page.zip

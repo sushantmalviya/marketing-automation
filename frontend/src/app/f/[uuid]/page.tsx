@@ -75,7 +75,7 @@ export default function PublicFormPage() {
     
     // Format answers for backend: [{ field_id: X, answer: Y }]
     const formattedAnswers = Object.entries(answers).map(([field_id, answer]) => ({
-      field_id: parseInt(field_id, 10),
+      field_id: field_id,
       answer
     }));
 
@@ -102,7 +102,7 @@ export default function PublicFormPage() {
           
           <div className="p-8 sm:p-10">
             <form onSubmit={handleSubmit} className="space-y-8">
-              {form.fields?.sort((a: any, b: any) => a.field_order - b.field_order).map((field: any) => (
+              {form.fields_schema?.sort((a: any, b: any) => a.field_order - b.field_order).map((field: any) => (
                 <div key={field.id} className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-800">
                     {field.label} {field.required && <span className="text-red-500">*</span>}

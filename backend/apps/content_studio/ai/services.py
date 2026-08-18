@@ -2,7 +2,7 @@ import logging
 from django.db import transaction
 from .orchestrator import AIOrchestrator
 from apps.billing.services import BillingService
-from ..models import ContentDraft, BrandVoice, Caption, ImageReference
+from ..models import ContentDraft, BrandVoice, ImageReference
 from ..services.content_draft_service import ContentDraftService
 
 logger = logging.getLogger(__name__)

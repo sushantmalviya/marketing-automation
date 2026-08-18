@@ -61,6 +61,11 @@ class Automation(models.Model):
         default=1
     )
 
+    workflow_graph = models.JSONField(
+        default=dict,
+        blank=True
+    )
+
     published_at = models.DateTimeField(
         null=True,
         blank=True
@@ -154,131 +159,6 @@ class AutomationMember(models.Model):
         return f"{self.user.email} - {self.permission}"
 
 
-# ============================================================
-# AUTOMATION NODES
-# ============================================================
-
-class AutomationNode(models.Model):
-
-    class NodeType(models.TextChoices):
-        TRIGGER = "TRIGGER", "Trigger"
-        CONDITION = "CONDITION", "Condition"
-        ACTION = "ACTION", "Action"
-        UTILITY = "UTILITY", "Utility"
-
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
-    )
-
-    automation = models.ForeignKey(
-        Automation,
-        on_delete=models.CASCADE,
-        related_name="nodes"
-    )
-
-    node_type = models.CharField(
-        max_length=30,
-        choices=NodeType.choices,
-        db_index=True
-    )
-
-    action_name = models.CharField(
-        max_length=100,
-        db_index=True
-    )
-
-    label = models.CharField(
-        max_length=255
-    )
-
-    business_config = models.JSONField(
-        default=dict,
-        blank=True
-    )
-
-    ui_config = models.JSONField(
-        default=dict,
-        blank=True
-    )
-
-    execution_order = models.IntegerField(
-        default=0
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    updated_at = models.DateTimeField(
-        auto_now=True
-    )
-
-    class Meta:
-        db_table = "automation_node"
-
-        indexes = [
-            models.Index(fields=["automation"]),
-            models.Index(fields=["node_type"]),
-            models.Index(fields=["action_name"]),
-        ]
-
-    def __str__(self):
-        return self.label
-
-
-# ============================================================
-# AUTOMATION EDGES
-# ============================================================
-
-class AutomationEdge(models.Model):
-
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
-    )
-
-    automation = models.ForeignKey(
-        Automation,
-        on_delete=models.CASCADE,
-        related_name="edges"
-    )
-
-    source_node = models.ForeignKey(
-        AutomationNode,
-        on_delete=models.CASCADE,
-        related_name="outgoing_edges"
-    )
-
-    target_node = models.ForeignKey(
-        AutomationNode,
-        on_delete=models.CASCADE,
-        related_name="incoming_edges"
-    )
-
-    edge_type = models.CharField(
-        max_length=50,
-        default="DEFAULT"
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    class Meta:
-        db_table = "automation_edge"
-
-        indexes = [
-            models.Index(fields=["automation"]),
-            models.Index(fields=["source_node"]),
-            models.Index(fields=["target_node"]),
-        ]
-
-    def __str__(self):
-        return f"{self.source_node} -> {self.target_node}"
-
 
 # ============================================================
 # AUTOMATION EXECUTION
@@ -314,9 +194,8 @@ class AutomationExecution(models.Model):
         blank=True
     )
 
-    current_node = models.ForeignKey(
-        AutomationNode,
-        on_delete=models.SET_NULL,
+    current_node_id = models.CharField(
+        max_length=255,
         null=True,
         blank=True
     )
@@ -405,9 +284,10 @@ class AutomationExecutionLog(models.Model):
         related_name="logs"
     )
 
-    node = models.ForeignKey(
-        AutomationNode,
-        on_delete=models.CASCADE
+    node_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
     )
 
     status = models.CharField(
@@ -433,7 +313,7 @@ class AutomationExecutionLog(models.Model):
 
         indexes = [
             models.Index(fields=["execution"]),
-            models.Index(fields=["node"]),
+            models.Index(fields=["node_id"]),
             models.Index(fields=["status"]),
         ]
 

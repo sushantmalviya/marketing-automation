@@ -2,68 +2,14 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
-from rest_framework.views import APIView
 from django.db.models import Q
 
 from apps.communications.models import (
     CommunicationEvent,
-    OrganizationEmailProvider,
-    OrganizationSMSProvider,
-    OrganizationWhatsAppProvider,
 )
 from apps.communications.serializers import (
     CommunicationEventSerializer,
-    OrganizationEmailProviderSerializer,
-    OrganizationSMSProviderSerializer,
-    OrganizationWhatsAppProviderSerializer,
 )
-
-
-class EmailProviderListCreateView(APIView):
-    def get(self, request):
-        providers = OrganizationEmailProvider.objects.all()
-        serializer = OrganizationEmailProviderSerializer(
-            providers,
-            many=True,
-        )
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = OrganizationEmailProviderSerializer(
-            data=request.data
-        )
-        serializer.is_valid(
-            raise_exception=True
-        )
-        serializer.save()
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED,
-        )
-
-class SMSProviderListCreateView(APIView):
-    def get(self, request):
-        providers = OrganizationSMSProvider.objects.all()
-        serializer = OrganizationSMSProviderSerializer(providers, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = OrganizationSMSProviderSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-class WhatsAppProviderListCreateView(APIView):
-    def get(self, request):
-        providers = OrganizationWhatsAppProvider.objects.all()
-        serializer = OrganizationWhatsAppProviderSerializer(providers, many=True)
-        return Response(serializer.data)
-
-    def post(self, request):
-        serializer = OrganizationWhatsAppProviderSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CommunicationEventListView(APIView):

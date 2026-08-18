@@ -10,6 +10,12 @@ class IntegrationProvider(TimeStampedUUIDModel):
         INSTAGRAM = "INSTAGRAM", "Instagram"
         LINKEDIN = "LINKEDIN", "LinkedIn"
         X = "X", "X (Twitter)"
+        SMTP = "SMTP", "SMTP"
+        AWS_SES = "AWS_SES", "Amazon SES"
+        MSG91 = "MSG91", "MSG91"
+        META_WHATSAPP = "META_WHATSAPP", "Meta WhatsApp Business Platform"
+        FCM = "FCM", "Firebase Cloud Messaging"
+        VAPID = "VAPID", "Web Push (VAPID)"
 
 
 

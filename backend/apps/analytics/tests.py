@@ -37,4 +37,4 @@ class AnalyticsSummaryRetryTests(TestCase):
         response = AnalyticsSummaryView.as_view()(self.request)
 
         self.assertEqual(response.status_code, 200)
-        metrics.assert_called_once_with(self.user)
+        metrics.assert_called_once_with(self.user, date_from=None, date_to=None)

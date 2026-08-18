@@ -3,38 +3,6 @@ from django.conf import settings
 from apps.common.models import TimeStampedUUIDModel
 
 
-class AssetFolder(TimeStampedUUIDModel):
-
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="subfolders"
-    )
-    name = models.CharField(max_length=255, db_index=True)
-
-    class Meta:
-        db_table = "asset_folders"
-        unique_together = [("parent", "name")]
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-
-class AssetTag(TimeStampedUUIDModel):
-
-    name = models.CharField(max_length=50, db_index=True)
-
-    class Meta:
-        db_table = "asset_tags"
-        # unique_together removed
-
-    def __str__(self):
-        return self.name
-
-
 class Asset(TimeStampedUUIDModel):
     class AssetType(models.TextChoices):
         IMAGE = "IMAGE", "Image"
@@ -43,13 +11,6 @@ class Asset(TimeStampedUUIDModel):
         OTHER = "OTHER", "Other"
 
 
-    folder = models.ForeignKey(
-        AssetFolder,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="assets"
-    )
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -65,7 +26,18 @@ class Asset(TimeStampedUUIDModel):
         help_text="If True, only the uploaded_by user can view this."
     )
 
-    tags = models.ManyToManyField(AssetTag, blank=True, related_name="assets")
+    path = models.CharField(
+        max_length=1024,
+        default="/",
+        db_index=True,
+        help_text="Virtual folder path, e.g. /images/campaign2024/"
+    )
+    
+    tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of string tags"
+    )
 
     class Meta:
         db_table = "assets"
