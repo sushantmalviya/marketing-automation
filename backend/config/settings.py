@@ -1,5 +1,5 @@
-from pathlib import Path
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
  
@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.campaigns',
     'apps.dashboard',
+    'apps.ads',
     'rest_framework',
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",

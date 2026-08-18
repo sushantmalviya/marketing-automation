@@ -10,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 from apps.integrations.models import SocialConnection
 from apps.integrations.serializers import SocialConnectionSerializer, OAuthCallbackSerializer
 from apps.integrations.services.oauth_service import OAuthService
-from apps.integrations.services.meta_ads_service import MetaAdsService
 from apps.accounts.permissions import IsAdminOrSuperAdmin
 
 
@@ -126,30 +125,3 @@ class SocialConnectionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception("Failed to disconnect account.")
             return Response({"error": "Failed to disconnect account.", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class MetaAuthURLView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        data = MetaAdsService.get_auth_url()
-        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
-
-
-class MetaAdAccountsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        data = MetaAdsService.get_ad_accounts(request.user)
-        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
-
-
-class MetaAdInsightsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        account_id = request.query_params.get("account_id")
-        date_preset = request.query_params.get("date_preset", "last_30d")
-        data = MetaAdsService.get_ad_insights(account_id, date_preset)
-        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
-
