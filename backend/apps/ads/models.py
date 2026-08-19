@@ -48,6 +48,9 @@ class MetaUserCredential(TimeStampedUUIDModel):
         related_name="meta_credential"
     )
     access_token = models.TextField()
+    meta_user_id = models.CharField(max_length=255, null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='ACTIVE')
 
     class Meta:
         db_table = "ads_meta_credentials"

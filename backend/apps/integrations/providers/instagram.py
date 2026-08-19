@@ -80,10 +80,35 @@ class InstagramProvider(BaseSocialProvider):
         except Exception:
             return False
 
+    def refresh_access_token(self, current_token: str) -> str:
+        try:
+            url = f"{self.GRAPH_URL}/refresh_access_token"
+            resp = requests.get(url, params={
+                'grant_type': 'ig_refresh_token',
+                'access_token': current_token
+            })
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("access_token")
+        except requests.exceptions.RequestException:
+            return None
+
     def revoke_token(self, access_token: str) -> bool:
         # Instagram API currently doesn't provide a direct revoke endpoint
         # Users must revoke via their Instagram App settings
         return True
+
+    def check_media_status(self, ig_container_id: str, access_token: str) -> str:
+        try:
+            url = f"{self.GRAPH_URL}/{ig_container_id}"
+            resp = requests.get(url, params={
+                "fields": "status_code",
+                "access_token": access_token
+            })
+            resp.raise_for_status()
+            return resp.json().get("status_code", "ERROR")
+        except requests.exceptions.RequestException:
+            return "ERROR"
 
     def publish_post(self, connection, content: str, image_url: str = None) -> dict:
         access_token = connection.get_access_token()
@@ -94,17 +119,37 @@ class InstagramProvider(BaseSocialProvider):
         
         try:
             if not image_url:
-                return {"success": False, "error": "Instagram requires an image URL to post."}
+                return {"success": False, "error": "Instagram requires a media URL to post."}
+
+            is_video = image_url.lower().endswith(('.mp4', '.mov'))
+            media_type = 'REELS' if is_video else 'IMAGE'
 
             # 1. Create Media Container
             container_url = f"{self.GRAPH_URL}/{ig_user_id}/media"
-            container_resp = requests.post(container_url, data={
-                "image_url": image_url,
+            payload = {
                 "caption": content,
                 "access_token": access_token
-            })
+            }
+            if media_type == 'REELS':
+                payload["media_type"] = "REELS"
+                payload["video_url"] = image_url
+            else:
+                payload["image_url"] = image_url
+
+            container_resp = requests.post(container_url, data=payload)
             container_resp.raise_for_status()
             creation_id = container_resp.json().get("id")
+            
+            if media_type == 'REELS':
+                import time
+                max_retries = 20
+                for _ in range(max_retries):
+                    status = self.check_media_status(creation_id, access_token)
+                    if status == "FINISHED":
+                        break
+                    elif status == "ERROR":
+                        return {"success": False, "error": "Instagram video processing failed."}
+                    time.sleep(3)
             
             # 2. Publish Container
             publish_url = f"{self.GRAPH_URL}/{ig_user_id}/media_publish"

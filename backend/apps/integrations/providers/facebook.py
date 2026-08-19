@@ -30,7 +30,19 @@ class FacebookProvider(BaseSocialProvider):
         response.raise_for_status()
         data = response.json()
         
-        access_token = data.get("access_token")
+        short_lived_token = data.get("access_token")
+        
+        from django.conf import settings
+        ll_resp = requests.get(self.ACCESS_TOKEN_URL, params={
+            'grant_type': 'fb_exchange_token', 
+            'client_id': settings.META_APP_ID if hasattr(settings, 'META_APP_ID') else self.client_id, 
+            'client_secret': settings.META_APP_SECRET if hasattr(settings, 'META_APP_SECRET') else self.client_secret, 
+            'fb_exchange_token': short_lived_token
+        })
+        ll_resp.raise_for_status()
+        ll_data = ll_resp.json()
+        access_token = ll_data.get("access_token")
+        expires_in = ll_data.get("expires_in")
         
         # Fetch user profile
         me_resp = requests.get(self.ME_URL, params={
@@ -42,14 +54,26 @@ class FacebookProvider(BaseSocialProvider):
         
         return {
             "access_token": access_token,
-            "refresh_token": None, # Facebook uses long-lived tokens via a different exchange, can add later
-            "expires_in": data.get("expires_in"),
+            "refresh_token": None,
+            "expires_in": expires_in,
             "account_id": me_data.get("id"),
             "account_name": me_data.get("name"),
             "metadata": {
                 "pages": me_data.get("accounts", {}).get("data", [])
             }
         }
+
+    def refresh_access_token(self, current_token: str):
+        from django.conf import settings
+        resp = requests.get(self.ACCESS_TOKEN_URL, params={
+            'grant_type': 'fb_exchange_token',
+            'client_id': settings.META_APP_ID if hasattr(settings, 'META_APP_ID') else self.client_id,
+            'client_secret': settings.META_APP_SECRET if hasattr(settings, 'META_APP_SECRET') else self.client_secret,
+            'fb_exchange_token': current_token
+        })
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("access_token"), data.get("expires_in")
 
     def validate_token(self, access_token: str) -> bool:
         try:
