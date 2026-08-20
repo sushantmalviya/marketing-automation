@@ -18,7 +18,7 @@ const labels: Record<ModuleKey, string> = {
   analytics:"Analytics", audiences:"Segmentation", automations:"Automations",
   campaigns:"Campaigns", channels:"Channels", communications:"Communications",
   content:"Content Studio", customers:"Customers", forms:"Forms",
-  tasks:"Tasks", templates:"Templates",
+  tasks:"Tasks", templates:"Templates", assets:"Asset Library",
 };
 const superNavigation = [
   {group:"Overview",   items:[{key:"dashboard",  label:"Dashboard",      icon:Gauge}]},
@@ -38,6 +38,7 @@ const adminNavigation = [
   {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
   {key:"automations", label:"Workflow Automation", icon:Workflow},
   {key:"channels",    label:"Social Publisher",    icon:Share2},
+  {key:"assets",      label:"Asset Library",       icon:FolderOpen},
   {key:"analytics",   label:"Analytics",           icon:BarChart3},
   {key:"account",     label:"Account",             icon:Settings},
 ];
