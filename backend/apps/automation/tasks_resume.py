@@ -17,7 +17,6 @@ def resume_workflows():
         AutomationExecution
         .objects
         .select_related(
-            "current_node",
             "automation",
         )
         .filter(
@@ -34,7 +33,7 @@ def resume_workflows():
         )
 
         next_node = executor.get_next(
-            execution.current_node
+            executor.current
         )
 
         if not next_node:
@@ -49,13 +48,13 @@ def resume_workflows():
             continue
 
         execution.status = "RUNNING"
-        execution.current_node = next_node
+        execution.current_node_id = next_node.get("id") if next_node else None
         execution.paused_at = None
         execution.resume_at = None
         execution.save(
             update_fields=[
                 "status",
-                "current_node",
+                "current_node_id",
                 "paused_at",
                 "resume_at",
             ]

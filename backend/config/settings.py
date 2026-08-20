@@ -64,7 +64,6 @@ INSTALLED_APPS = [
     'rest_framework',
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-   
 ]
  
 # --------------------------------------------------
@@ -260,6 +259,11 @@ CACHES = {
 # --------------------------------------------------
 # Celery Configuration for Demo (Bypass Redis)
 # --------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = True
- 
- 
+CELERY_TASK_ALWAYS_EAGER = False
+CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC' 
+from .celerybeat import CELERY_BEAT_SCHEDULE

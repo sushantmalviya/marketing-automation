@@ -195,8 +195,17 @@ class TaskDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdminManager]
 
     def get_object(self, request, task_id):
+        from django.db.models import Prefetch
         role = MAUser.objects.filter(user=request.user).values_list("role", flat=True).first()
-        queryset = Task.objects.filter(is_active=True, is_deleted=False)
+        queryset = Task.objects.filter(is_active=True, is_deleted=False).select_related("created_by", "audience").prefetch_related(
+            "channels",
+            "assignments",
+            "assignments__user",
+            "assignments__approved_by",
+            "assignments__comments",
+            "assignments__attachments",
+            Prefetch("campaigns", to_attr="prefetched_campaigns")
+        )
         if role != "SUPER_ADMIN":
             queryset = queryset.filter(created_by=request.user)
         return get_object_or_404(queryset, id=task_id)
