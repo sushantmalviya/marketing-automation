@@ -128,9 +128,14 @@ export function AdminContacts() {
 
   // ── mutations ─────────────────────────────────────────────────────────────────
   const save = useMutation({
-    mutationFn: () => editing
-      ? apiClient.patch(`/api/customers/${editing}/`, form)
-      : apiClient.post("/api/customers/", { ...form, audience_id: selectedAudience || undefined }),
+    mutationFn: async () => {
+      if (editing) {
+        const res = await apiClient.patch(`/api/customers/${editing}/`, form);
+        return res.data;
+      }
+      const res = await apiClient.post("/api/customers/", { ...form, audience_id: selectedAudience || undefined });
+      return res.data;
+    },
     onSuccess: () => {
       toast.success(editing ? "Contact updated" : "Contact added");
       setEditorOpen(false); setEditing(null); setForm(blank);
