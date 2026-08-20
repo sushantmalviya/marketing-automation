@@ -11,7 +11,7 @@ from .customer import (
 )
 from .channel import AssignChannelsView, ChannelListAPIView
 
-from .audience import AudiencePreviewAPIView, AudienceCreateAPIView, AudienceListAPIView, AudienceDetailAPIView
+from .audience import AudiencePreviewAPIView, AudienceCreateAPIView, AudienceListAPIView, AudienceDetailAPIView, AudienceTagsAPIView
 
 from .template import (
     TemplateCreateAPIView,

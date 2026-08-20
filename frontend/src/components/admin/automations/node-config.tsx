@@ -65,6 +65,53 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
       return <SendEmailConfig formData={formData} onChange={handleChange} />;
     }
 
+    if (actionName === "SendSMS") {
+      return <SendSMSConfig formData={formData} onChange={handleChange} />;
+    }
+
+    if (actionName === "SendWhatsApp") {
+      return <SendWhatsAppConfig formData={formData} onChange={handleChange} />;
+    }
+
+    if (actionName === "Webhook") {
+      return (
+        <div className="space-y-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Webhook URL</label>
+            <input 
+              type="url" 
+              className="sa-input w-full"
+              placeholder="https://api.example.com/webhook"
+              value={formData.url || ""}
+              onChange={(e) => handleChange("url", e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">HTTP Method</label>
+            <select 
+              className="sa-input w-full"
+              value={formData.method || "POST"}
+              onChange={(e) => handleChange("method", e.target.value)}
+            >
+              <option value="POST">POST</option>
+              <option value="GET">GET</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">JSON Payload</label>
+            <textarea 
+              className="sa-input w-full h-32 font-mono text-xs"
+              placeholder={'{\n  "contact_id": "{{ contact.id }}"\n}'}
+              value={formData.payload || ""}
+              onChange={(e) => handleChange("payload", e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+
     if (actionName === "UpdateContact") {
       return (
         <div className="space-y-4 mt-4">
@@ -146,14 +193,14 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
         <div className="mb-6">
           <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Node Label</label>
           <div className="relative group">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-indigo-50/80 group-focus-within:bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 transition-colors pointer-events-none">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 pointer-events-none">
               <Tag size={16} />
             </div>
             <input 
               type="text" 
-              className="w-full bg-white border border-slate-200 rounded-xl pl-14 pr-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+              readOnly
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-14 pr-4 py-3 text-sm font-medium text-slate-500 cursor-not-allowed transition-all shadow-sm focus:outline-none"
               value={formData.label || ""}
-              onChange={(e) => handleChange("label", e.target.value)}
             />
           </div>
         </div>
@@ -248,28 +295,6 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
           </div>
         </div>
       )}
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">To Address</label>
-        <input 
-          type="text" 
-          className="sa-input w-full"
-          value={formData.toAddress || "{{ contact.email }}"}
-          onChange={(e) => onChange("toAddress", e.target.value)}
-        />
-      </div>
-
-      <div className="pt-2">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input 
-            type="checkbox" 
-            className="rounded text-indigo-600 focus:ring-indigo-500"
-            checked={formData.trackOpens !== false}
-            onChange={(e) => onChange("trackOpens", e.target.checked)}
-          />
-          <span className="text-sm font-medium text-slate-700">Track Email Opens</span>
-        </label>
-      </div>
     </div>
   );
 }
@@ -277,16 +302,24 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
 // --- Specific Component for Segments/Audiences to fetch from backend ---
 
 function ContactTriggerConfig({ formData, onChange, onBatchChange }: { formData: any, onChange: (k: string, v: any) => void, onBatchChange?: (updates: any) => void }) {
-  const { data, isLoading } = useQuery({
+  const { data: segmentsData, isLoading: isLoadingSegments } = useQuery({
     queryKey: ["audience-segments"],
     queryFn: async () => {
-      // Fetch actual segments (audiences) from the backend API
       const response = await apiClient.get("/api/audiences/");
       return response.data;
     },
   });
 
-  const segments = data?.results || data || [];
+  const { data: tagsData, isLoading: isLoadingTags } = useQuery({
+    queryKey: ["audience-tags"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/audiences/tags/");
+      return response.data;
+    },
+  });
+
+  const segments = segmentsData?.results || segmentsData || [];
+  const tags = tagsData || [];
 
   const contactFields = [
     { id: "tags", label: "Tags" },
@@ -299,7 +332,7 @@ function ContactTriggerConfig({ formData, onChange, onBatchChange }: { formData:
     <div className="space-y-6 mt-4">
       <div>
         <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Select Contact Segment</label>
-        {isLoading ? (
+        {isLoadingSegments ? (
           <div className="h-12 bg-slate-100 animate-pulse rounded-xl w-full"></div>
         ) : (
           <div className="relative group">
@@ -338,13 +371,25 @@ function ContactTriggerConfig({ formData, onChange, onBatchChange }: { formData:
             <div className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-indigo-50/80 group-focus-within:bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 transition-colors pointer-events-none z-10">
               <Tag size={16} />
             </div>
-            <input 
-              type="text"
-              placeholder="e.g. VIP, lead"
-              className="w-full bg-white border border-slate-200 rounded-xl pl-14 pr-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-              value={formData.filterTag || ""}
-              onChange={(e) => onChange("filterTag", e.target.value)}
-            />
+            {isLoadingTags ? (
+              <div className="h-12 bg-slate-100 animate-pulse rounded-xl w-full"></div>
+            ) : (
+              <select 
+                className="w-full appearance-none bg-white border border-slate-200 rounded-xl pl-14 pr-10 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm cursor-pointer relative"
+                value={formData.filterTag || ""}
+                onChange={(e) => onChange("filterTag", e.target.value)}
+              >
+                <option value="">Any Tag (No Filter)</option>
+                {tags.map((tag: string) => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+            )}
+            {!isLoadingTags && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 z-10">
+                <ChevronDown size={16} />
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-2">Only trigger if the new contact has this exact tag.</p>
         </div>
@@ -677,6 +722,138 @@ function ConditionBuilder({ conditions, onChange, fields }: { conditions: Condit
           <Plus className="w-4 h-4" /> Add Group
         </button>
       </div>
+    </div>
+  );
+}
+
+// --- Specific Component for SMS to fetch from backend ---
+
+function SendSMSConfig({ formData, onChange }: { formData: any, onChange: (k: string, v: any) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["sms-templates"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/templates/");
+      return response.data.results || response.data;
+    },
+  });
+
+  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "sms" || String(t.channel?.name).toLowerCase() === "sms");
+  const mode = formData.mode || "select";
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex p-1 bg-slate-100 rounded-lg">
+        <button
+          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition ${mode === "select" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => onChange("mode", "select")}
+        >
+          Select Template
+        </button>
+        <button
+          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition ${mode === "build" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => onChange("mode", "build")}
+        >
+          Build SMS
+        </button>
+      </div>
+
+      {mode === "select" ? (
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">SMS Template</label>
+          {isLoading ? (
+            <div className="h-10 bg-slate-100 animate-pulse rounded-md w-full"></div>
+          ) : (
+            <select 
+              className="sa-input w-full"
+              value={formData.templateId || ""}
+              onChange={(e) => onChange("templateId", e.target.value)}
+            >
+              <option value="">Select a template...</option>
+              {templates.map((tpl: any) => (
+                <option key={tpl.id} value={tpl.id}>{tpl.name || `Template #${tpl.id}`}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">SMS Body</label>
+            <textarea 
+              className="sa-input w-full text-sm h-32 resize-none"
+              placeholder="Type your SMS content here. Use variables like {{ contact.first_name }}..."
+              value={formData.customBody || ""}
+              onChange={(e) => onChange("customBody", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Specific Component for WhatsApp to fetch from backend ---
+
+function SendWhatsAppConfig({ formData, onChange }: { formData: any, onChange: (k: string, v: any) => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["whatsapp-templates"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/templates/");
+      return response.data.results || response.data;
+    },
+  });
+
+  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "whatsapp" || String(t.channel?.name).toLowerCase() === "whatsapp");
+  const mode = formData.mode || "select";
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex p-1 bg-slate-100 rounded-lg">
+        <button
+          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition ${mode === "select" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => onChange("mode", "select")}
+        >
+          Select Template
+        </button>
+        <button
+          className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition ${mode === "build" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => onChange("mode", "build")}
+        >
+          Build WhatsApp
+        </button>
+      </div>
+
+      {mode === "select" ? (
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">WhatsApp Template</label>
+          {isLoading ? (
+            <div className="h-10 bg-slate-100 animate-pulse rounded-md w-full"></div>
+          ) : (
+            <select 
+              className="sa-input w-full"
+              value={formData.templateId || ""}
+              onChange={(e) => onChange("templateId", e.target.value)}
+            >
+              <option value="">Select a template...</option>
+              {templates.map((tpl: any) => (
+                <option key={tpl.id} value={tpl.id}>{tpl.name || `Template #${tpl.id}`}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">WhatsApp Body</label>
+            <textarea 
+              className="sa-input w-full text-sm h-32 resize-none"
+              placeholder="Type your WhatsApp content here..."
+              value={formData.customBody || ""}
+              onChange={(e) => onChange("customBody", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

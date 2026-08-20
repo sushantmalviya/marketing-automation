@@ -45,6 +45,10 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(320); // 320px = w-80
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [testPhone, setTestPhone] = useState("");
+  const [workflowName, setWorkflowName] = useState(automationId === "new" ? "New Automation Workflow" : "Loading...");
 
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -134,6 +138,9 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
     if (automationId && automationId !== "new") {
       apiClient.get(`/api/automations/${automationId}/`)
         .then((res) => {
+          if (res.data.name) {
+            setWorkflowName(res.data.name);
+          }
           const graph = res.data.workflow_graph;
           if (graph) {
             setNodes(graph.nodes || []);
@@ -146,16 +153,66 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
     }
   }, [automationId, setNodes, setEdges]);
 
-  const handleSave = async () => {
-    if (automationId === "new") return;
+  const handleSaveDraft = async () => {
     try {
-      await apiClient.patch(`/api/automations/${automationId}/`, {
-        workflow_graph: { nodes, edges }
-      });
-      alert("Workflow saved successfully!");
+      if (automationId === "new") {
+        const res = await apiClient.post(`/api/automations/`, {
+          name: workflowName,
+          workflow_graph: { nodes, edges }
+        });
+        alert("Draft saved successfully!");
+        router.push(`/admin/automations/${res.data.id}`);
+      } else {
+        await apiClient.patch(`/api/automations/${automationId}/`, {
+          name: workflowName,
+          workflow_graph: { nodes, edges }
+        });
+        alert("Draft saved successfully!");
+      }
     } catch (err) {
       console.error("Failed to save workflow graph", err);
       alert("Failed to save workflow.");
+    }
+  };
+
+  const handleTest = async () => {
+    if (automationId === "new") {
+      alert("Please save the workflow first before testing.");
+      return;
+    }
+    setShowTestModal(true);
+  };
+
+  const executeTest = async () => {
+    try {
+      await apiClient.post(`/api/automations/${automationId}/execute/`, {
+        context: {
+          contact: {
+            email: testEmail,
+            phone_no: testPhone,
+          }
+        }
+      });
+      alert("Test execution started successfully!");
+      setShowTestModal(false);
+    } catch (err) {
+      console.error("Failed to execute test", err);
+      alert("Failed to execute test.");
+    }
+  };
+
+  const handlePublish = async () => {
+    if (automationId === "new") return;
+    try {
+      await apiClient.patch(`/api/automations/${automationId}/`, {
+        name: workflowName,
+        workflow_graph: { nodes, edges }
+      });
+      await apiClient.post(`/api/automations/${automationId}/publish/`);
+      alert("Workflow published successfully!");
+    } catch (err) {
+      console.error("Failed to publish workflow", err);
+      alert("Failed to publish workflow. Ensure your workflow has valid trigger and action nodes.");
     }
   };
 
@@ -171,17 +228,24 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h2 className="font-bold text-slate-900">
-              {automationId === "new" ? "New Automation Workflow" : "Edit Workflow"}
-            </h2>
+            <input 
+              type="text" 
+              className="font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none transition-colors px-1 py-0.5"
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              placeholder="Workflow Name"
+            />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="secondary-button gap-2">
-            <Play size={16} /> Test Workflow
+          <button className="secondary-button gap-2" onClick={handleTest}>
+            <Play size={16} /> Test
           </button>
-          <button className="primary-button gap-2" onClick={handleSave}>
-            <Save size={16} /> Save & Publish
+          <button className="secondary-button gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border-transparent" onClick={handleSaveDraft}>
+            <Save size={16} /> Save Draft
+          </button>
+          <button className="primary-button gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handlePublish}>
+            <Save size={16} /> Publish
           </button>
         </div>
       </div>
@@ -241,6 +305,41 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
             )}
           </div>
       </div>
+      {/* Test Modal */}
+      {showTestModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Execute Test Run</h3>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Test Email Address</label>
+                <input 
+                  type="email" 
+                  className="sa-input w-full"
+                  value={testEmail}
+                  onChange={e => setTestEmail(e.target.value)}
+                  placeholder="test@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Test Phone Number</label>
+                <input 
+                  type="text" 
+                  className="sa-input w-full"
+                  value={testPhone}
+                  onChange={e => setTestPhone(e.target.value)}
+                  placeholder="+1234567890"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button className="secondary-button" onClick={() => setShowTestModal(false)}>Cancel</button>
+              <button className="primary-button bg-indigo-600 text-white" onClick={executeTest}>Run Test</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

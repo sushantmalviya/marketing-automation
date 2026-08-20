@@ -5,6 +5,15 @@ from apps.automation.models import (
 )
 
 
+import re
+
+def pascal_to_snake_upper(name):
+    if not name:
+        return name
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).upper()
+
+
 class WorkflowParser:
 
     def __init__(self, automation):
@@ -12,10 +21,22 @@ class WorkflowParser:
         self.automation = automation
         self.workflow_graph = automation.workflow_graph or {"nodes": [], "edges": []}
 
-        self.nodes = {
-            node.get("id"): node
-            for node in self.workflow_graph.get("nodes", [])
+        type_mapping = {
+            "triggerNode": "TRIGGER",
+            "actionNode": "ACTION",
+            "conditionNode": "CONDITION",
+            "utilityNode": "UTILITY",
         }
+
+        self.nodes = {}
+        for node in self.workflow_graph.get("nodes", []):
+            data = node.get("data", {})
+            self.nodes[node.get("id")] = {
+                "id": node.get("id"),
+                "type": type_mapping.get(node.get("type"), "UTILITY"),
+                "action_name": pascal_to_snake_upper(data.get("actionName")),
+                "business_config": data,
+            }
 
         self.edges = self.workflow_graph.get("edges", [])
 

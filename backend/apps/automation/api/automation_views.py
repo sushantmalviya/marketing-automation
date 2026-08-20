@@ -191,10 +191,13 @@ class ExecuteAutomationView(APIView):
 
         automation = permitted_automation(request.user, pk, can_execute)
 
+        context_data = request.data.get("context")
+
         execution = (
             dispatch_workflow(
                 automation,
                 request.user,
+                context=context_data,
             )
         )
 

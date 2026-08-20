@@ -71,11 +71,13 @@ def get_user_tasks(user):
         .filter(user=user, task__is_active=True, task__is_deleted=False)
         .select_related(
             "task",
+            "task__audience",
             "approved_by",
         )
         .prefetch_related(
             "comments",
             "attachments",
+            "task__channels",
             Prefetch("task__campaigns", to_attr="prefetched_campaigns")
         )
         .order_by("-created_at")
@@ -94,9 +96,14 @@ def get_admin_tasks(admin):
     
     return (
         queryset
+        .select_related("created_by", "audience")
         .prefetch_related(
+            "channels",
             "assignments",
             "assignments__user",
+            "assignments__approved_by",
+            "assignments__comments",
+            "assignments__attachments",
             Prefetch("campaigns", to_attr="prefetched_campaigns")
         )
         .order_by("-created_at")

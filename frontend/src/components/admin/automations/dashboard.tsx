@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Play, Pause, FileText, Archive, CheckCircle2, AlertTriangle, LoaderCircle, Info, MoreVertical, Copy, Plus } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Play, Pause, FileText, Archive, CheckCircle2, AlertTriangle, LoaderCircle, Info, MoreVertical, Copy, Plus, Trash2, Edit } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { apiClient } from "@/services/api-client";
 
@@ -11,6 +11,7 @@ interface DashboardProps {
 }
 
 export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-automations-list"],
     queryFn: async () => {
@@ -19,7 +20,7 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
     },
   });
 
-  const workflows = data?.results || [];
+  const workflows = Array.isArray(data) ? data : (data?.results || []);
 
   // Derived statistics (mocking some metrics for the dashboard feel)
   const activeCount = workflows.filter((w: any) => w.status === "PUBLISHED" || w.status === "VALIDATED").length;
@@ -157,9 +158,43 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
                   </td>
                   <td className="px-5 py-4 text-slate-500">{new Date(wf.updated_at).toLocaleDateString()}</td>
                   <td className="px-5 py-4">
-                    <button className="p-2 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-700" onClick={(e) => { e.stopPropagation(); onEdit(wf.id); }}>
-                      <Play size={16} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button className="p-2 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-indigo-600" title="Edit" onClick={(e) => { e.stopPropagation(); onEdit(wf.id); }}>
+                        <Edit size={16} />
+                      </button>
+                      {wf.status === 'PUBLISHED' ? (
+                        <button className="p-2 hover:bg-amber-100 rounded-lg text-slate-400 hover:text-amber-600" title="Pause" onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await apiClient.post(`/api/automations/${wf.id}/pause/`);
+                            queryClient.invalidateQueries({ queryKey: ["admin-automations-list"] });
+                          } catch (err) { console.error(err); }
+                        }}>
+                          <Pause size={16} />
+                        </button>
+                      ) : (
+                        <button className="p-2 hover:bg-emerald-100 rounded-lg text-slate-400 hover:text-emerald-600" title="Publish" onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await apiClient.post(`/api/automations/${wf.id}/publish/`);
+                            queryClient.invalidateQueries({ queryKey: ["admin-automations-list"] });
+                          } catch (err) { alert("Cannot publish invalid workflow."); }
+                        }}>
+                          <Play size={16} />
+                        </button>
+                      )}
+                      <button className="p-2 hover:bg-rose-100 rounded-lg text-slate-400 hover:text-rose-600" title="Delete" onClick={async (e) => {
+                        e.stopPropagation();
+                        if (confirm("Are you sure you want to delete this workflow?")) {
+                          try {
+                            await apiClient.delete(`/api/automations/${wf.id}/`);
+                            queryClient.invalidateQueries({ queryKey: ["admin-automations-list"] });
+                          } catch (err) { console.error(err); }
+                        }
+                      }}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -5,6 +5,7 @@
 env/
 venv/
 ENV/
+staticfiles/
 
 # Python
 __pycache__/

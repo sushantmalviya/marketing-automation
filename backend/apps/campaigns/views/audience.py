@@ -14,6 +14,24 @@ from apps.campaigns.services import AudienceService
 from apps.common.ownership import filter_audiences_for_admin
 
 
+class AudienceTagsAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def get(self, request):
+        tags = set(["VIP", "Lead", "Interested", "Customer", "Churned"])
+        
+        from apps.campaigns.models import CustomerRecord
+        recent_customers = CustomerRecord.objects.all().order_by('-id')[:1000]
+        for c in recent_customers:
+            c_tags = c.data.get("tags", []) if isinstance(c.data, dict) else []
+            if isinstance(c_tags, list):
+                for t in c_tags:
+                    if t:
+                        tags.add(str(t).strip())
+        
+        return Response(sorted(list(tags)))
+
+
 class AudienceCreateAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
