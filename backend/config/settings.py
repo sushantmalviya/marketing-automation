@@ -22,7 +22,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
  
 DEBUG = os.getenv("DEBUG", "False") == "True"
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev","automarket-api.onrender.com"]
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -58,7 +58,7 @@ INSTALLED_APPS = [
     "apps.webhooks",
     "apps.communications",
     "apps.analytics",
-    'corsheaders',
+    "corsheaders",
     'apps.campaigns',
     'apps.dashboard',
     'rest_framework',
@@ -187,7 +187,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
  
 AUTH_USER_MODEL = "accounts.User"
  
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://your-project.vercel.app",
+]
 CORS_ALLOW_CREDENTIALS = True
  
 REST_FRAMEWORK = {
