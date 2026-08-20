@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apps.accounts.views import ListAdminsView, ListUsersView, AdminDetailView
 
 # ── Inline asset library view (avoids sub-module reload timing issues) ─────────
@@ -79,6 +80,10 @@ class _AssetDetail(_APIView):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    
+    # Swagger API Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 
     path("api/auth/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
@@ -138,6 +143,7 @@ urlpatterns = [
         include("apps.analytics.urls"),
     ),
     path("api/templates/", include("apps.campaigns.urls.templates")),
+    path("api/ads/", include("apps.ads.urls")),
 
     path(
         "api/dashboard/",

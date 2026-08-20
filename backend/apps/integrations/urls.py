@@ -1,6 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import SocialConnectionViewSet
+from .views import (
+    SocialConnectionViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'social/connections', SocialConnectionViewSet, basename='social-connections')
@@ -8,3 +10,4 @@ router.register(r'social/connections', SocialConnectionViewSet, basename='social
 urlpatterns = [
     path('', include(router.urls)),
 ]
+

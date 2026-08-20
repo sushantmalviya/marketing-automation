@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from apps.common.models import TimeStampedUUIDModel
 
 
@@ -138,5 +139,4 @@ class PublishLog(TimeStampedUUIDModel):
 
     def __str__(self):
         return f"{self.platform} Log for Draft {self.draft_id} - {self.status}"
-
 

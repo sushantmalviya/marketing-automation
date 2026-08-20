@@ -61,7 +61,21 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
         from django.utils import timezone
         import datetime
         if connection.token_expires_at and connection.token_expires_at < timezone.now() + datetime.timedelta(minutes=5):
-            refreshed = getattr(provider, 'refresh_access_token', lambda c: False)(connection)
+            refreshed = False
+            if hasattr(provider, 'refresh_access_token'):
+                result = provider.refresh_access_token(connection.get_access_token())
+                if result:
+                    if isinstance(result, tuple):
+                        new_token, expires_in = result
+                        connection.set_tokens(new_token, connection.get_refresh_token())
+                        if expires_in:
+                            connection.token_expires_at = timezone.now() + datetime.timedelta(seconds=expires_in)
+                    else:
+                        connection.set_tokens(result, connection.get_refresh_token())
+                        # If no expiry is returned, we leave token_expires_at as is, or extend it
+                    connection.save()
+                    refreshed = True
+                    
             if not refreshed:
                 raise ValueError(f"Access token is expired and could not be refreshed for {connection.platform}.")
 

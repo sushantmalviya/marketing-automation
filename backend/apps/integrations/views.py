@@ -3,6 +3,7 @@ import logging
 import urllib.parse
 from django.shortcuts import render, redirect
 from rest_framework import viewsets, status
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -10,6 +11,7 @@ from apps.integrations.models import SocialConnection
 from apps.integrations.serializers import SocialConnectionSerializer, OAuthCallbackSerializer
 from apps.integrations.services.oauth_service import OAuthService
 from apps.accounts.permissions import IsAdminOrSuperAdmin
+
 
 logger = logging.getLogger(__name__)
 
