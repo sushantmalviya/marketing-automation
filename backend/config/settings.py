@@ -22,7 +22,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
  
 DEBUG = os.getenv("DEBUG", "False") == "True"
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev", "testserver"]
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
