@@ -18,7 +18,7 @@ const labels: Record<ModuleKey, string> = {
   analytics:"Analytics", audiences:"Segmentation", automations:"Automations",
   campaigns:"Campaigns", channels:"Channels", communications:"Communications",
   content:"Content Studio", customers:"Customers", forms:"Forms",
-  tasks:"Tasks", templates:"Templates",
+  tasks:"Tasks", templates:"Templates", ads:"Ads",
 };
 const superNavigation = [
   {group:"Overview",   items:[{key:"dashboard",  label:"Dashboard",      icon:Gauge}]},
@@ -36,6 +36,7 @@ const adminNavigation = [
   {key:"tasks",       label:"Task Management",     icon:ListChecks},
   {key:"forms",       label:"Forms",               icon:ListChecks},
   {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
+  {key:"ads",         label:"Ads",                 icon:Megaphone},
   {key:"automations", label:"Workflow Automation", icon:Workflow},
   {key:"channels",    label:"Social Publisher",    icon:Share2},
   {key:"analytics",   label:"Analytics",           icon:BarChart3},
@@ -480,7 +481,7 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
 
   /* ── Shell layout ── */
   return (
-    <div className={`min-h-screen bg-[#f5f7fb] dark:bg-[#050d1f] md:grid
+    <div className={`${rolePath === "admin" ? "admin-motion-shell" : ""} min-h-screen bg-[#f5f7fb] dark:bg-[#050d1f] md:grid
       ${collapsed ? "md:grid-cols-[72px_1fr]" : "md:grid-cols-[260px_1fr]"}
       transition-[grid-template-columns,background-color] duration-300`}>
 
@@ -522,7 +523,15 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
             <Menu size={20}/>
           </button>
         </header>
-        <div className="p-4 sm:p-7 lg:p-9">{children}</div>
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+          className="admin-page-transition p-4 sm:p-7 lg:p-9"
+        >
+          {children}
+        </motion.div>
       </main>
     </div>
   );

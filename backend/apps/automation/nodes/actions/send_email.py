@@ -1,5 +1,5 @@
 from apps.communications.services.email import send_email
-
+from apps.automation.services.renderer import TemplateRenderer
 
 class SendEmailAction:
 
@@ -9,22 +9,27 @@ class SendEmailAction:
         node,
         config,
     ):
+        context = execution.context
+        
+        recipient = config.get("toAddress") or config.get("recipient") or context.get("contact", {}).get("email")
+        recipients = config.get("recipients") or ([recipient] if recipient else [])
 
-        recipient = config.get("recipient")
-        recipients = config.get("recipients") or [recipient]
+        subject = config.get("customSubject") or config.get("subject") or ""
+        message = config.get("customBody") or config.get("message") or ""
 
-        subject = config.get(
-            "subject"
-        )
-
-        message = config.get(
-            "message"
-        )
+        # Render placeholders
+        context = execution.context
+        
+        rendered_recipients = [
+            TemplateRenderer.render(r, context) for r in recipients
+        ]
+        rendered_subject = TemplateRenderer.render(subject, context)
+        rendered_message = TemplateRenderer.render(message, context)
 
         send_email(
-            subject=subject,
-            message=message,
-            recipients=recipients,
+            subject=rendered_subject,
+            message=rendered_message,
+            recipients=[r for r in rendered_recipients if r],
             sender=config.get("sender"),
             execution=execution,
         )

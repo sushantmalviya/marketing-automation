@@ -12,15 +12,20 @@ class WaitNode:
         config,
     ):
 
-        minutes = int(config.get("minutes", 0) or 0)
-        hours = int(config.get("hours", 0) or 0)
-        days = int(config.get("days", 0) or 0)
+        amount = int(config.get("delayAmount", 1) or 1)
+        unit = config.get("timeUnit", "Minutes").lower()
 
-        delay = timedelta(
-            days=days,
-            hours=hours,
-            minutes=minutes,
-        )
+        kwargs = {}
+        if unit == "minutes":
+            kwargs["minutes"] = amount
+        elif unit == "hours":
+            kwargs["hours"] = amount
+        elif unit == "days":
+            kwargs["days"] = amount
+        elif unit == "weeks":
+            kwargs["weeks"] = amount
+
+        delay = timedelta(**kwargs)
 
         if delay.total_seconds() <= 0:
             delay = timedelta(minutes=1)

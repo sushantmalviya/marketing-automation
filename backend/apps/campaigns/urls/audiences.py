@@ -5,6 +5,7 @@ from apps.campaigns.views import (
     AudienceListAPIView,
     AudiencePreviewAPIView,
     AudienceDetailAPIView,
+    AudienceTagsAPIView,
 )
 
 urlpatterns = [
@@ -22,6 +23,11 @@ urlpatterns = [
         "preview/",
         AudiencePreviewAPIView.as_view(),
         name="audience-preview",
+    ),
+    path(
+        "tags/",
+        AudienceTagsAPIView.as_view(),
+        name="audience-tags",
     ),
     path(
         "<int:audience_id>/",

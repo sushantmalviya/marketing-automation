@@ -69,20 +69,7 @@ class SESEmailProvider(BaseEmailProvider):
 
 
 def get_email_provider():
-    from apps.communications.models import OrganizationEmailProvider
-
-    organization_provider = (
-        OrganizationEmailProvider.objects.filter(
-            is_active=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
-
-    if organization_provider and organization_provider.provider == "AWS_SES":
-        return SESEmailProvider(organization_provider)
-
-    return SMTPEmailProvider(organization_provider)
+    return SMTPEmailProvider(None)
 
 
 def default_sender(organization_provider=None):
