@@ -191,7 +191,7 @@ AUTH_USER_MODEL = "accounts.User"
  
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://your-project.vercel.app",
+    "https://marketing-automation-smoky.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
  
