@@ -239,6 +239,43 @@ html.dark .bi-textarea { background:rgb(255 255 255 / .04); border-color:rgb(255
 html.dark .bi-textarea:focus { border-color:#a855f7; box-shadow:0 0 0 3px rgb(168 85 247 / .18); }
 .metric-icon { display:grid; height:2.75rem; width:2.75rem; place-items:center; border-radius:999px; background:#eaf2ff; color:#1670f8; }
 
+/* Admin motion system — compact, high-contrast SaaS dashboard treatment */
+.admin-motion-shell {
+  background:
+    radial-gradient(circle at 78% -10%, rgb(206 225 255 / .62), transparent 28rem),
+    linear-gradient(135deg, #f8fbff 0%, #f3f7fc 52%, #f8fafc 100%);
+  font-size: 14px;
+}
+.admin-motion-shell main { isolation:isolate; }
+.admin-motion-shell .admin-page-transition { min-height:100%; }
+.admin-motion-shell .sb-nav-link {
+  min-height: 42px;
+  border-radius: 10px;
+  font-size: .83rem;
+  letter-spacing: 0;
+}
+.admin-motion-shell .sb-nav-icon { width: 20px; }
+.admin-motion-shell .sb-nav-active {
+  background: linear-gradient(105deg, rgb(39 112 222 / .64), rgb(91 76 219 / .34)) !important;
+  box-shadow: 0 8px 22px rgb(34 91 191 / .27), inset 0 1px 0 rgb(255 255 255 / .14) !important;
+}
+.admin-motion-shell .sa-card,
+.admin-motion-shell .panel {
+  border-color: rgb(226 232 240 / .95);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / .055);
+}
+.admin-motion-shell .sa-title { font-size:clamp(1.55rem, 2.4vw, 2.15rem); letter-spacing:-.04em; }
+.admin-motion-shell .sa-subtitle { font-size:.88rem; }
+.admin-motion-shell button { transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease; }
+.admin-motion-shell button:not(:disabled):active { transform: scale(.975); }
+@media (min-width: 1024px) {
+  .admin-motion-shell .admin-page-transition { padding: 1.65rem 2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-motion-shell *, .admin-motion-shell *::before, .admin-motion-shell *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    PREMIUM HOVER CLASSES — stat cards, mini cards, pulse rows
    ═══════════════════════════════════════════════════════════ */

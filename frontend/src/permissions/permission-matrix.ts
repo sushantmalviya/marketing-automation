@@ -1,6 +1,6 @@
 import { ROLES, type UserRole } from "@/constants/roles";
 
-export type ModuleKey = "dashboard" | "admins" | "users" | "analytics" | "audiences" | "automations" | "campaigns" | "channels" | "communications" | "content" | "customers" | "forms" | "tasks" | "templates";
+export type ModuleKey = "dashboard" | "admins" | "users" | "analytics" | "audiences" | "automations" | "campaigns" | "channels" | "communications" | "content" | "customers" | "forms" | "tasks" | "templates" | "ads";
 export type Action = "view" | "create" | "update" | "delete" | "approve" | "publish" | "execute" | "send";
 
 const matrix: Record<UserRole, Partial<Record<ModuleKey, readonly Action[]>>> = {
@@ -12,7 +12,7 @@ const matrix: Record<UserRole, Partial<Record<ModuleKey, readonly Action[]>>> = 
   [ROLES.ADMIN]: {
     dashboard: ["view"], users: ["view", "create", "delete"], analytics: ["view"], audiences: ["view", "create"],
     automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view", "create", "approve"], channels: ["view"],
-    communications: ["view", "create"], content: ["view", "create", "update", "approve", "publish"], customers: ["view", "create"], forms: ["view", "create", "update", "delete", "publish"], tasks: ["view", "create", "approve"], templates: ["view", "create", "update"],
+    communications: ["view", "create"], content: ["view", "create", "update", "approve", "publish"], customers: ["view", "create"], forms: ["view", "create", "update", "delete", "publish"], tasks: ["view", "create", "approve"], templates: ["view", "create", "update"], ads: ["view", "create", "update"],
   },
   [ROLES.USER]: {
     dashboard: ["view"], automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view", "create", "update", "send"],
