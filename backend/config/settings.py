@@ -22,7 +22,15 @@ SECRET_KEY = os.getenv("SECRET_KEY")
  
 DEBUG = os.getenv("DEBUG", "False") == "True"
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev","automarket-api.onrender.com"]
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev", "automarket-api.onrender.com", "testserver"]
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -30,8 +38,12 @@ HF_TEXT_MODEL = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "gemini")
  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+META_APP_ID = os.getenv("META_APP_ID")
+META_APP_SECRET = os.getenv("META_APP_SECRET")
+META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "secure_token")
  
-# Auto-reload trigger
+# Auto-reload trigger (env change detected)
 # --------------------------------------------------
 # Applications
 # --------------------------------------------------

@@ -2,7 +2,9 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .services.meta_ads_service import MetaAdsService
+from .services.meta_ads_service import MetaAdsService, MetaTokenExpiredError
+import hmac
+import hashlib
 from .models import MetaUserCredential, MetaAdAccount
 from django.http import HttpResponse
 from django.conf import settings
@@ -42,11 +44,31 @@ class MetaAdAccountsView(APIView):
                 credential = MetaUserCredential.objects.get(user=request.user)
                 access_token = credential.access_token
 
-            data = MetaAdsService.get_ad_accounts(access_token)
-            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
-        except MetaUserCredential.DoesNotExist:
+            if access_token and access_token.startswith("mock_"):
+                data = [{"account_id": "act_12345", "name": "Mock Ad Account", "account_status": 1}]
+            else:
+                data = MetaAdsService.get_ad_accounts(access_token)
+
+            page = int(request.query_params.get("page", 1))
+            page_size = int(request.query_params.get("page_size", 10))
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_data = data[start_index:end_index]
+
+            return Response({
+                "status": "success", 
+                "data": paginated_data,
+                "meta": {
+                    "total": len(data),
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (len(data) + page_size - 1) // page_size
+                }
+            }, status=status.HTTP_200_OK)
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
             return Response(
-                {"status": "error", "message": "Meta account not connected."}, 
+                {"status": "error", "message": msg}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
@@ -85,9 +107,10 @@ class MetaAdInsightsView(APIView):
                 
             return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
             
-        except MetaUserCredential.DoesNotExist:
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
             return Response(
-                {"status": "error", "message": "Meta account not connected."}, 
+                {"status": "error", "message": msg}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
@@ -138,9 +161,10 @@ class CreateMetaCampaignView(APIView):
             data = MetaAdsService.create_campaign(credential.access_token, account_id, request.data)
             return Response({"status": "success", "data": data}, status=status.HTTP_201_CREATED)
             
-        except MetaUserCredential.DoesNotExist:
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
             return Response(
-                {"status": "error", "message": "Meta account not connected."}, 
+                {"status": "error", "message": msg}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
@@ -204,11 +228,32 @@ class MetaAdCampaignsListView(APIView):
             access_token = credential.access_token
 
             data = MetaAdsService.get_campaigns_list(access_token, account_id)
-            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+            
+            status_filter = request.query_params.get("status")
+            if status_filter:
+                data = [c for c in data if c.get("status") == status_filter]
+                
+            page = int(request.query_params.get("page", 1))
+            page_size = int(request.query_params.get("page_size", 10))
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_data = data[start_index:end_index]
 
-        except MetaUserCredential.DoesNotExist:
+            return Response({
+                "status": "success", 
+                "data": paginated_data,
+                "meta": {
+                    "total": len(data),
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": (len(data) + page_size - 1) // page_size
+                }
+            }, status=status.HTTP_200_OK)
+
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
             return Response(
-                {"status": "error", "message": "Meta account not connected."}, 
+                {"status": "error", "message": msg}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
@@ -236,6 +281,20 @@ class MetaLeadWebhookView(APIView):
 
     def post(self, request):
         try:
+            signature = request.headers.get("X-Hub-Signature-256")
+            payload_body = request.body
+            secret = getattr(settings, "META_APP_SECRET", "secret").encode('utf-8')
+            expected_signature = "sha256=" + hmac.new(secret, payload_body, hashlib.sha256).hexdigest()
+            
+            if not signature or not hmac.compare_digest(signature, expected_signature):
+                if not settings.DEBUG:
+                    msg = "Missing signature" if not signature else "Invalid signature"
+                    return Response({"status": "error", "message": msg}, status=status.HTTP_403_FORBIDDEN)
+                else:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning("Invalid or missing webhook signature, bypass allowed because DEBUG=True.")
+                
             payload = request.data
             
             entries = payload.get("entry", [])
@@ -264,9 +323,25 @@ class MetaLeadWebhookView(APIView):
                                         full_name = values[0]
 
                             if email:
-                                CustomerRecord.objects.update_or_create(email=email, defaults={'name': full_name})
+                                try:
+                                    from apps.campaigns.models import CustomerUpload
+                                    upload, _ = CustomerUpload.objects.get_or_create(
+                                        file_name="Meta Webhooks",
+                                        uploaded_by=credential.user
+                                    )
+                                    CustomerRecord.objects.create(
+                                        upload=upload,
+                                        data={
+                                            'email': email,
+                                            'name': full_name,
+                                            '__source__': 'meta_webhook'
+                                        }
+                                    )
+                                except Exception as db_err:
+                                    import logging
+                                    logging.getLogger(__name__).error(f"Error saving customer record from webhook: {db_err}")
                                 
         except Exception as e:
-            pass
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
         return Response({"status": "success"}, status=status.HTTP_200_OK)
