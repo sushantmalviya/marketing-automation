@@ -155,28 +155,28 @@ function SidebarBg() {
         </defs>
 
         {/* Wave 1 — deep back */}
-        <motion.path fill="url(#wg1)" animate={{d:[
+        <motion.path fill="url(#wg1)" d="M-5 110 C30 75, 80 55, 130 80 C180 105, 240 95, 305 70 L305 200 L-5 200 Z" animate={{d:[
           "M-5 110 C30 75, 80 55, 130 80 C180 105, 240 95, 305 70 L305 200 L-5 200 Z",
           "M-5 125 C30 90, 80 70, 130 95 C180 120, 240 108, 305 85 L305 200 L-5 200 Z",
           "M-5 110 C30 75, 80 55, 130 80 C180 105, 240 95, 305 70 L305 200 L-5 200 Z",
         ]}} transition={{duration:8, repeat:Infinity, ease:"easeInOut"}}/>
 
         {/* Wave 2 — mid */}
-        <motion.path fill="url(#wg2)" animate={{d:[
+        <motion.path fill="url(#wg2)" d="M-5 130 C40 100, 95 88, 150 108 C205 128, 260 115, 305 100 L305 200 L-5 200 Z" animate={{d:[
           "M-5 130 C40 100, 95 88, 150 108 C205 128, 260 115, 305 100 L305 200 L-5 200 Z",
           "M-5 142 C40 114, 95 102, 150 120 C205 140, 260 126, 305 113 L305 200 L-5 200 Z",
           "M-5 130 C40 100, 95 88, 150 108 C205 128, 260 115, 305 100 L305 200 L-5 200 Z",
         ]}} transition={{duration:10, repeat:Infinity, ease:"easeInOut", delay:1.5}}/>
 
         {/* Wave 3 — front bright */}
-        <motion.path fill="url(#wg3)" animate={{d:[
+        <motion.path fill="url(#wg3)" d="M-5 152 C50 132, 110 122, 165 138 C220 154, 270 142, 305 130 L305 200 L-5 200 Z" animate={{d:[
           "M-5 152 C50 132, 110 122, 165 138 C220 154, 270 142, 305 130 L305 200 L-5 200 Z",
           "M-5 162 C50 144, 110 134, 165 148 C220 164, 270 152, 305 142 L305 200 L-5 200 Z",
           "M-5 152 C50 132, 110 122, 165 138 C220 154, 270 142, 305 130 L305 200 L-5 200 Z",
         ]}} transition={{duration:7, repeat:Infinity, ease:"easeInOut", delay:0.8}}/>
 
         {/* Wave 4 — shimmer crest */}
-        <motion.path fill="url(#wg4)" animate={{d:[
+        <motion.path fill="url(#wg4)" d="M-5 170 C60 158, 120 150, 180 162 C238 174, 278 165, 305 158 L305 200 L-5 200 Z" animate={{d:[
           "M-5 170 C60 158, 120 150, 180 162 C238 174, 278 165, 305 158 L305 200 L-5 200 Z",
           "M-5 178 C60 166, 120 160, 180 170 C238 182, 278 173, 305 166 L305 200 L-5 200 Z",
           "M-5 170 C60 158, 120 150, 180 162 C238 174, 278 165, 305 158 L305 200 L-5 200 Z",
