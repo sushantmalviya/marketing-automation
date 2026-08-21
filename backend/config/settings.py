@@ -20,9 +20,23 @@ load_dotenv(BASE_DIR / ".env", override=True)
  
 SECRET_KEY = os.getenv("SECRET_KEY")
  
-DEBUG = os.getenv("DEBUG", "False") == "True"
+# DEBUG should be False in production (e.g., set DEBUG=False in Render env vars).
+# Locally, it can default to True if not set.
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev", ".onrender.com"]
+# This setup allows the project to run locally, on ngrok, and on Render simultaneously
+# without needing to comment/uncomment anything.
+ALLOWED_HOSTS = [
+    "127.0.0.1", 
+    "localhost", 
+    ".ngrok-free.dev",
+    ".onrender.com"
+]
+
+# Allow adding more hosts dynamically via environment variable
+_env_hosts = os.getenv("ALLOWED_HOSTS", "")
+if _env_hosts:
+    ALLOWED_HOSTS.extend([h.strip() for h in _env_hosts.split(",") if h.strip()])
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -173,7 +187,8 @@ USE_TZ = True
 # --------------------------------------------------
  
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles") # Required for collectstatic in production (Render)
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
  
@@ -189,11 +204,29 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
  
 AUTH_USER_MODEL = "accounts.User"
  
+# These origins can access the API. It includes both local frontend and deployed Vercel frontend.
+# No need to comment/uncomment when switching between local and deployed.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://marketing-automation-smoky.vercel.app",
 ]
+
+# Allow adding more CORS origins dynamically via environment variable
+_env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+if _env_cors:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in _env_cors.split(",") if o.strip()])
+
+# Required if your frontend sends cookies or authorization headers
 CORS_ALLOW_CREDENTIALS = True
+ 
+# CSRF Trusted Origins are required for Django admin and API POST requests from the frontend in production
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://marketing-automation-uo4q.onrender.com",
+    "https://marketing-automation-smoky.vercel.app",
+]
  
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
