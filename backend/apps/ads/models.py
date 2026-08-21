@@ -29,6 +29,11 @@ class MetaAdAccount(TimeStampedUUIDModel):
         blank=True,
         null=True
     )
+    amount_spent = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0.00
+    )
     is_active = models.BooleanField(
         default=True
     )
