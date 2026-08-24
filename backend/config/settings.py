@@ -23,6 +23,8 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # DEBUG should be False in production (e.g., set DEBUG=False in Render env vars).
 # Locally, it can default to True if not set.
 DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
+
+PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8000")
  
 # This setup allows the project to run locally, on ngrok, and on Render simultaneously
 # without needing to comment/uncomment anything.

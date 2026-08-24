@@ -28,6 +28,7 @@ class SMTPEmailProvider(BaseEmailProvider):
             to=recipients,
             connection=get_connection(),
         )
+        email.content_subtype = "html" # Ensure email is sent as HTML
         return email.send(fail_silently=False)
 
 
@@ -60,7 +61,7 @@ class SESEmailProvider(BaseEmailProvider):
                     "Data": subject,
                 },
                 "Body": {
-                    "Text": {
+                    "Html": {
                         "Data": message,
                     }
                 },
