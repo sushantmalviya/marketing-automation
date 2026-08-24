@@ -73,40 +73,13 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
       return <SendWhatsAppConfig formData={formData} onChange={handleChange} />;
     }
 
-    if (actionName === "Webhook") {
+    if (actionName === "SendToCRM") {
       return (
         <div className="space-y-4 mt-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Webhook URL</label>
-            <input 
-              type="url" 
-              className="sa-input w-full"
-              placeholder="https://api.example.com/webhook"
-              value={formData.url || ""}
-              onChange={(e) => handleChange("url", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">HTTP Method</label>
-            <select 
-              className="sa-input w-full"
-              value={formData.method || "POST"}
-              onChange={(e) => handleChange("method", e.target.value)}
-            >
-              <option value="POST">POST</option>
-              <option value="GET">GET</option>
-              <option value="PUT">PUT</option>
-              <option value="PATCH">PATCH</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">JSON Payload</label>
-            <textarea 
-              className="sa-input w-full h-32 font-mono text-xs"
-              placeholder={'{\n  "contact_id": "{{ contact.id }}"\n}'}
-              value={formData.payload || ""}
-              onChange={(e) => handleChange("payload", e.target.value)}
-            />
+          <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-700">
+            <p className="font-semibold mb-1">Automatic CRM Sync</p>
+            <p>This node automatically pushes the contact's details (Name, Email, Phone, Tags) to our internal CRM as a new Lead.</p>
+            <p className="mt-2 text-xs opacity-80">No further technical configuration is required.</p>
           </div>
         </div>
       );
@@ -138,31 +111,37 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
       return <FormTriggerConfig formData={formData} onChange={handleChange} onBatchChange={handleBatchChange} />;
     }
 
-    if (actionName === "EmailOpened") {
+    if (actionName === "ConditionSplit") {
       return (
         <div className="space-y-4 mt-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Condition Property</label>
-            <select className="sa-input w-full" value={formData.property || "email"} onChange={(e) => handleChange("property", e.target.value)}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Channel</label>
+            <select className="sa-input w-full" value={formData.channel || "email"} onChange={(e) => handleChange("channel", e.target.value)}>
               <option value="email">Email</option>
-              <option value="status">Status</option>
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Operator</label>
-            <select className="sa-input w-full" value={formData.operator || "contains"} onChange={(e) => handleChange("operator", e.target.value)}>
-              <option value="equals">is equal to</option>
-              <option value="contains">contains any of</option>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Event Type</label>
+            <select className="sa-input w-full" value={formData.eventType || "opened"} onChange={(e) => handleChange("eventType", e.target.value)}>
+              <option value="delivered">Delivered</option>
+              <option value="opened">Opened / Read</option>
+              <option value="clicked">Clicked</option>
+              <option value="replied">Replied</option>
+              <option value="bounced">Bounced / Failed</option>
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Value</label>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Wait up to (Days)</label>
             <input 
-              type="text" 
+              type="number" 
               className="sa-input w-full"
-              value={formData.value || ""}
-              onChange={(e) => handleChange("value", e.target.value)}
+              min="0"
+              value={formData.waitDays ?? 2}
+              onChange={(e) => handleChange("waitDays", e.target.value)}
             />
+            <p className="text-xs text-slate-500 mt-2">The automation will wait up to this many days for the event to happen before proceeding down the "No" path. Enter 0 to check instantly.</p>
           </div>
         </div>
       );

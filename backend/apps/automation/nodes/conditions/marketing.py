@@ -91,3 +91,78 @@ class OrCondition:
 class NotCondition:
     def execute(self, execution, node, config):
         return not bool(resolve_value(config, "left", execution))
+
+
+from datetime import timedelta
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from apps.events.models import SystemEvent
+
+class CommunicationEventCondition:
+    def execute(self, execution, node, config):
+        channel = config.get("channel", "email").upper()
+        event_type = config.get("eventType", "opened").upper()
+        wait_days = int(config.get("waitDays") if config.get("waitDays") is not None else 2)
+        
+        target_event = f"{channel}_{event_type}"
+        
+        contact = getattr(execution, "contact", None)
+        if not contact:
+            return False
+            
+        # Check if event happened after automation started
+        has_event = SystemEvent.objects.filter(
+            event_type="COMMUNICATION",
+            event_name=target_event,
+            user_identifier=str(contact.id),
+            created_at__gte=execution.started_at
+        ).exists()
+        
+        if has_event:
+            return True
+            
+        if wait_days <= 0:
+            return False
+            
+        context_key = f"wait_started_{node.get('id')}"
+        now = timezone.now()
+        
+        if context_key not in execution.context:
+            # First time reaching this condition, start the wait timer
+            execution.context[context_key] = now.isoformat()
+            execution.save(update_fields=["context"])
+            
+            # Pause and resume in 1 hour to check again
+            delay = timedelta(hours=1)
+            
+            execution.status = "WAITING"
+            execution.paused_at = now
+            execution.resume_at = now + delay
+            execution.current_node_id = node.get("id")
+            execution.save(update_fields=["status", "paused_at", "resume_at", "current_node_id"])
+            
+            return {
+                "paused": True,
+                "resume_at": execution.resume_at.isoformat(),
+                "message": f"Waiting up to {wait_days} days for {target_event}..."
+            }
+        else:
+            # We are already waiting, check if timer expired
+            wait_started_at = parse_datetime(execution.context[context_key])
+            if now > wait_started_at + timedelta(days=wait_days):
+                return False
+            else:
+                # Still waiting
+                delay = timedelta(hours=1)
+                
+                execution.status = "WAITING"
+                execution.paused_at = now
+                execution.resume_at = now + delay
+                execution.current_node_id = node.get("id")
+                execution.save(update_fields=["status", "paused_at", "resume_at", "current_node_id"])
+                
+                return {
+                    "paused": True,
+                    "resume_at": execution.resume_at.isoformat(),
+                    "message": f"Still waiting for {target_event}..."
+                }
