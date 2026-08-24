@@ -271,6 +271,16 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
  
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL",EMAIL_HOST_USER)
  
+# --------------------------------------------------
+# IMAP Polling Configuration (for Bounces & Replies)
+# --------------------------------------------------
+IMAP_HOST = os.getenv("IMAP_HOST")
+IMAP_PORT = int(os.getenv("IMAP_PORT", 993))
+IMAP_USER = os.getenv("IMAP_USER", EMAIL_HOST_USER)
+IMAP_PASSWORD = os.getenv("IMAP_PASSWORD", EMAIL_HOST_PASSWORD)
+TRACKING_EMAIL = os.getenv("TRACKING_EMAIL", IMAP_USER) # Generic catch-all or dedicated inbox for tracking
+
+ 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

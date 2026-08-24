@@ -51,12 +51,23 @@ def send_email(subject, message, recipients, sender=None, execution=None, campai
             
         recipient_message = re.sub(r'href=[\'"](http[^\'"]+)[\'"]', link_replacer, recipient_message)
         
-        # 4. Send individually
+        # 4. Inject Headers for Bounce & Reply Tracking
+        domain = public_url.replace("https://", "").replace("http://", "").split(":")[0]
+        # Clean domain (e.g., marketing-automation-backend.onrender.com)
+        message_id = f"<{event.id}@{domain}>"
+        tracking_email = getattr(settings, "TRACKING_EMAIL", sender)
+        headers = {
+            "Message-ID": message_id,
+            "Reply-To": tracking_email
+        }
+        
+        # 5. Send individually
         provider.send(
             subject,
             recipient_message,
             sender,
             [recipient],
+            headers=headers
         )
 
     return True
