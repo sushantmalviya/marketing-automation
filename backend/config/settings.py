@@ -30,6 +30,8 @@ ALLOWED_HOSTS = [
     "127.0.0.1", 
     "localhost", 
     ".ngrok-free.dev",
+    ".ngrok-free.app", # Added for ngrok flexibility
+    ".ngrok.io",
     "automarket-api.onrender.com"
 ]
 

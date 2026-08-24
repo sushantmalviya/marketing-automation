@@ -32,9 +32,12 @@ def resume_workflows():
             execution
         )
 
-        next_node = executor.get_next(
-            executor.current
-        )
+        if executor.current and executor.current.get("type") == "CONDITION":
+            next_node = executor.current
+        else:
+            next_node = executor.get_next(
+                executor.current
+            )
 
         if not next_node:
             execution.status = "SUCCESS"
