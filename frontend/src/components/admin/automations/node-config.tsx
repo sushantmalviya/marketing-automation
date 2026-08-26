@@ -207,12 +207,12 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
     queryKey: ["email-templates"],
     queryFn: async () => {
       // Actually fetch templates from the backend API
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data;
     },
   });
 
-  const templates = data?.results || data || [];
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("EMAIL"));
   const mode = formData.mode || "select";
 
   return (
@@ -711,12 +711,12 @@ function SendSMSConfig({ formData, onChange }: { formData: any, onChange: (k: st
   const { data, isLoading } = useQuery({
     queryKey: ["sms-templates"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data.results || response.data;
     },
   });
 
-  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "sms" || String(t.channel?.name).toLowerCase() === "sms");
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("SMS"));
   const mode = formData.mode || "select";
 
   return (
@@ -777,12 +777,12 @@ function SendWhatsAppConfig({ formData, onChange }: { formData: any, onChange: (
   const { data, isLoading } = useQuery({
     queryKey: ["whatsapp-templates"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data.results || response.data;
     },
   });
 
-  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "whatsapp" || String(t.channel?.name).toLowerCase() === "whatsapp");
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("WHATSAPP"));
   const mode = formData.mode || "select";
 
   return (

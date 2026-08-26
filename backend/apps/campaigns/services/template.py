@@ -21,9 +21,9 @@ class TemplateService:
             user_id=user
         ).first()
 
-        if not ma_user or ma_user.role != "USER":
+        if not ma_user or ma_user.role not in ["USER", "ADMIN"]:
             raise ValidationError(
-                "Only users can create templates."
+                "Only users and admins can create templates."
             )
 
         return Template.objects.create(
@@ -40,7 +40,7 @@ class TemplateService:
         *,
         user,
     ):
-        templates = Template.objects.filter(status=Template.Status.ACTIVE)
+        templates = Template.objects.filter(status=Template.Status.ACTIVE).select_related("channel", "created_by")
         
         from apps.common.ownership import filter_templates_for_admin
         return filter_templates_for_admin(templates, user).order_by("name")
@@ -61,7 +61,10 @@ class TemplateService:
         user,
         validated_data,
     ):
-        if template.created_by != user:
+        ma_user = MAUser.objects.filter(user_id=user).first()
+        is_admin = ma_user and ma_user.role == "ADMIN"
+        
+        if not is_admin and template.created_by != user:
             raise ValidationError(
                 "You can only edit your own templates."
             )
@@ -82,6 +85,39 @@ class TemplateService:
             template.body = validated_data["body"]
             
         template.save(update_fields=["subject", "body", "updated_at"])
+
+        from apps.campaigns.services.campaign import CampaignService
+        for campaign in campaigns:
+            CampaignService.handle_rejected_to_draft(campaign)
+
+        return template
+
+    @staticmethod
+    def delete_template(
+        *,
+        template,
+        user,
+    ):
+        ma_user = MAUser.objects.filter(user_id=user).first()
+        is_admin = ma_user and ma_user.role == "ADMIN"
+        
+        if not is_admin and template.created_by != user:
+            raise ValidationError(
+                "You can only delete your own templates."
+            )
+
+        # Check all associated campaigns
+        campaign_templates = template.campaign_templates.select_related("campaign")
+        campaigns = [ct.campaign for ct in campaign_templates]
+
+        for campaign in campaigns:
+            if campaign.status not in [Campaign.Status.DRAFT, Campaign.Status.REJECTED]:
+                raise ValidationError(
+                    f"Template is used by a campaign in {campaign.status} status and cannot be deleted."
+                )
+
+        template.status = Template.Status.ARCHIVED
+        template.save(update_fields=["status"])
 
         from apps.campaigns.services.campaign import CampaignService
         for campaign in campaigns:

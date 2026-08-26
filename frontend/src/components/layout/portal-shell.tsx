@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3, Bot, ChevronLeft, ContactRound, CreditCard,
+  BarChart3, Bot, ChevronLeft, ContactRound, CreditCard, FileText,
   FolderOpen, Gauge, ListChecks, LogOut, Megaphone,
   Menu, Settings, Share2, SquarePen, Tags, TrendingUp, Users, Workflow, X,
 } from "lucide-react";
@@ -35,6 +35,7 @@ const adminNavigation = [
   {key:"audiences",   label:"Segmentation",        icon:Tags},
   {key:"tasks",       label:"Task Management",     icon:ListChecks},
   {key:"forms",       label:"Forms",               icon:ListChecks},
+  {key:"templates",   label:"Templates",           icon:FileText},
   {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
   {key:"automations", label:"Workflow Automation", icon:Workflow},
   {key:"channels",    label:"Social Publisher",    icon:Share2},
@@ -45,6 +46,7 @@ const adminNavigation = [
 const userNavigation = [
   {key:"dashboard",   label:"Dashboard",      icon:Gauge},
   {key:"tasks",       label:"My Tasks",       icon:ListChecks},
+  {key:"templates",   label:"Templates",      icon:FileText},
   {key:"campaigns",   label:"Campaigns",      icon:Megaphone},
   {key:"content",     label:"Content Studio", icon:SquarePen},
   {key:"assets",      label:"Asset Library",  icon:FolderOpen},

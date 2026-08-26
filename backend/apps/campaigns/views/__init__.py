@@ -18,7 +18,8 @@ from .template import (
     TemplateListAPIView,
     CampaignTemplateAssignAPIView,
     TemplateUpdateAPIView,
-    TemplateSubmitAPIView
+    TemplateSubmitAPIView,
+    TemplateDeleteAPIView,
 )
 from .preview import CampaignPreviewAPIView
 
