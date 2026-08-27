@@ -32,7 +32,6 @@ class AssetCreateSerializer(serializers.Serializer):
     file_url = serializers.URLField(required=False, allow_blank=True)
     asset_type = serializers.ChoiceField(
         choices=Asset.AssetType.choices,
-        default=Asset.AssetType.OTHER,
         required=False,
     )
     is_personal = serializers.BooleanField(default=False, required=False)
