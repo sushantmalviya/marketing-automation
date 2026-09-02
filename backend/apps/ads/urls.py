@@ -6,7 +6,17 @@ from .views import (
     CreateMetaCampaignView,
     SelectMetaAdAccountView,
     MetaAdCampaignsListView,
-    MetaLeadWebhookView
+    MetaLeadWebhookView,
+    UpdateMetaCampaignStatusView,
+    UpdateMetaCampaignView,
+    DeleteMetaCampaignView,
+    MetaWebhookLeadsView,
+    MetaPixelSettingsView,
+    MetaCapiEventLogsView,
+    UpdateMetaObjectStatusView,
+    UpdateMetaAdsetBudgetView,
+    SyncMetaFormLeadsView,
+    UploadMetaMediaView
 )
 
 urlpatterns = [
@@ -16,5 +26,15 @@ urlpatterns = [
     path('meta/insights/', MetaAdInsightsView.as_view(), name='meta_ad_insights'),
     path('meta/campaigns/create/', CreateMetaCampaignView.as_view(), name='create_meta_campaign'),
     path('meta/campaigns/list/', MetaAdCampaignsListView.as_view(), name='meta_ad_campaigns_list'),
+    path('meta/campaigns/<str:campaign_id>/status/', UpdateMetaCampaignStatusView.as_view(), name='update_meta_campaign_status'),
+    path('meta/campaigns/<str:campaign_id>/update/', UpdateMetaCampaignView.as_view(), name='update_meta_campaign'),
+    path('meta/campaigns/<str:campaign_id>/delete/', DeleteMetaCampaignView.as_view(), name='delete_meta_campaign'),
+    path('meta/objects/<str:object_id>/status/', UpdateMetaObjectStatusView.as_view(), name='update_meta_object_status'),
+    path('meta/adsets/<str:adset_id>/budget/', UpdateMetaAdsetBudgetView.as_view(), name='update_meta_adset_budget'),
+    path('meta/forms/<str:form_id>/leads/sync/', SyncMetaFormLeadsView.as_view(), name='sync_meta_form_leads'),
+    path('meta/media/upload/', UploadMetaMediaView.as_view(), name='upload_meta_media'),
     path('meta/webhook/', MetaLeadWebhookView.as_view(), name='meta_lead_webhook'),
+    path('meta/leads/', MetaWebhookLeadsView.as_view(), name='meta_webhook_leads'),
+    path('meta/pixel/', MetaPixelSettingsView.as_view(), name='meta_pixel_settings'),
+    path('meta/pixel/events/', MetaCapiEventLogsView.as_view(), name='meta_capi_event_logs'),
 ]

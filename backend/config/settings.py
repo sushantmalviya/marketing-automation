@@ -46,8 +46,13 @@ HF_TEXT_MODEL = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "gemini")
  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+META_APP_ID = os.getenv("META_APP_ID")
+META_APP_SECRET = os.getenv("META_APP_SECRET")
+META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "secure_token")
+META_REDIRECT_URI = os.getenv("META_REDIRECT_URI", "http://localhost:3000/admin/ads")
  
-# Auto-reload trigger
+# Auto-reload trigger (env change detected)
 # --------------------------------------------------
 # Applications
 # --------------------------------------------------
