@@ -83,9 +83,18 @@ export interface CreateMetaCampaignPayload {
   age_max?: number;
   interests?: string[];
   image_hash?: string;
+  video_id?: string;
   ad_text: string;
+  headline?: string;
+  description?: string;
   call_to_action?: string;
   leadgen_form_id?: string;
   page_id?: string;
   link?: string;
+  geo_locations?: {
+    location_type: string;
+    lat: number;
+    lng: number;
+    radius: number;
+  };
 }
