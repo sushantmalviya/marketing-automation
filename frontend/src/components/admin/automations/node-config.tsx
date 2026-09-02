@@ -181,7 +181,7 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
               type="text" 
               readOnly
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-14 pr-4 py-3 text-sm font-medium text-slate-500 cursor-not-allowed transition-all shadow-sm focus:outline-none"
-              value={formData.label || ""}
+              value={(formData.actionName === "SendToCRM" || formData.action_name === "SendToCRM" || selectedNode.data?.actionName === "SendToCRM" || selectedNode.data?.action_name === "SendToCRM") ? "Send to CRM" : (formData.label || "")}
             />
           </div>
         </div>

@@ -83,10 +83,10 @@ export function AutomationSidebar() {
             </div>
             <div 
               className="flex items-center gap-3 p-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg cursor-grab hover:bg-amber-100 transition text-sm font-semibold"
-              onDragStart={(event) => onDragStart(event, "utilityNode", "SendToCRM", "Push to CRM")}
+              onDragStart={(event) => onDragStart(event, "utilityNode", "SendToCRM", "Send to CRM")}
               draggable
             >
-              <Globe size={16} /> Push to CRM
+              <Globe size={16} /> Send to CRM
             </div>
           </div>
         </div>

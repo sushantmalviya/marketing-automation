@@ -565,7 +565,7 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
                               <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">{v}</span>
                               <input 
                                 className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                                value={testVariables[v] !== undefined ? testVariables[v] : (v === 'name' ? (user.data?.name || user.data?.first_name || "John Doe") : "")}
+                                value={testVariables[v] !== undefined ? testVariables[v] : (v === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "")}
                                 onChange={e => setTestVariables(prev => ({...prev, [v]: e.target.value}))}
                                 placeholder={`Enter ${v}...`}
                               />
@@ -594,7 +594,7 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
                   if (!text || typeof text !== "string") return "";
                   return text.replace(/\{\{(.*?)\}\}/g, (match, v) => {
                     const cleanV = v.trim();
-                    const val = testVariables[cleanV] !== undefined ? testVariables[cleanV] : (cleanV === 'name' ? (user.data?.name || user.data?.first_name || "John Doe") : "");
+                    const val = testVariables[cleanV] !== undefined ? testVariables[cleanV] : (cleanV === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "");
                     return val || `{{${cleanV}}}`;
                   });
                 };

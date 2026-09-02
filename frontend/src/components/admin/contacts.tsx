@@ -86,7 +86,7 @@ export function AdminContacts() {
     // Use __col_order__ from first row that has it
     const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
     if (orderRow) {
-      return (orderRow.data.__col_order__ as string[]).filter(k => k !== "__col_order__");
+      return (orderRow.data.__col_order__ as string[]).filter(k => k !== "__col_order__" && k.toLowerCase() !== "tags");
     }
     // Fallback: union of all keys preserving first-seen order
     const seen = new Set<string>();
@@ -96,7 +96,7 @@ export function AdminContacts() {
         if (key !== "__col_order__" && !seen.has(key)) { seen.add(key); cols.push(key); }
       }
     }
-    return cols;
+    return cols.filter(col => col.toLowerCase() !== "tags");
   }, [rows]);
 
   const contacts = useMemo(() => {
@@ -128,9 +128,13 @@ export function AdminContacts() {
 
   // ── mutations ─────────────────────────────────────────────────────────────────
   const save = useMutation({
-    mutationFn: () => editing
-      ? apiClient.patch(`/api/customers/${editing}/`, form)
-      : apiClient.post("/api/customers/", { ...form, audience_id: selectedAudience || undefined }),
+    mutationFn: () => {
+      const originalRow = editing ? rows.find(r => r.id === editing) : null;
+      const payload = originalRow ? { ...originalRow.data, ...form } : form;
+      return editing
+        ? apiClient.patch(`/api/customers/${editing}/`, payload)
+        : apiClient.post("/api/customers/", { ...payload, audience_id: selectedAudience || undefined });
+    },
     onSuccess: () => {
       toast.success(editing ? "Contact updated" : "Contact added");
       setEditorOpen(false); setEditing(null); setForm(blank);
@@ -350,22 +354,18 @@ export function AdminContacts() {
                     </td>
                     {dynamicColumns.filter(col => col !== "__col_order__").map(col => {
                       const raw = row.data[col];
-                      const isTags = col.toLowerCase() === "tags";
-                      const tags = isTags
-                        ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
-                        : [];
+                      const isName = ["name", "full_name", "full name"].includes(col.toLowerCase());
                       return (
                         <td key={col} className="px-4 py-3.5 max-w-[220px]">
-                          {isTags ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {tags.length
-                                ? tags.map(tag => <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700" key={tag}>{tag}</span>)
-                                : <span className="text-slate-400">—</span>}
+                          <span className="block truncate text-slate-700" title={String(raw ?? "")}>
+                            {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
+                          </span>
+                          {isName && contact.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {contact.tags.map(tag => (
+                                <span className="rounded bg-blue-50/80 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100/50" key={tag}>{tag}</span>
+                              ))}
                             </div>
-                          ) : (
-                            <span className="block truncate text-slate-700" title={String(raw ?? "")}>
-                              {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
-                            </span>
                           )}
                         </td>
                       );

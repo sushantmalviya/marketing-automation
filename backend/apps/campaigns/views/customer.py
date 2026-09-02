@@ -148,7 +148,8 @@ def _validated_contact(payload):
     if not name or not email:
         from rest_framework.exceptions import ValidationError
         raise ValidationError({"detail": "Name and email are required."})
-    return {
+    result = dict(payload)
+    result.update({
         "name": name,
         "email": email,
         "phone_no": str(payload.get("phone_no", payload.get("phone", ""))).strip(),
@@ -157,7 +158,8 @@ def _validated_contact(payload):
         "score": max(0, min(100, int(payload.get("score", 0) or 0))),
         "status": str(payload.get("status", "Active")),
         "activity": str(payload.get("activity", "Just added")),
-    }
+    })
+    return result
 
 class CustomerBulkDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated]
