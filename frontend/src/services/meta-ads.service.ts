@@ -14,6 +14,9 @@ export const metaAdsService = {
   async getAuthorizationUrl() {
     return unwrap<{ auth_url: string; csrf_state?: string }>(await apiClient.get("/api/meta-ads/meta/auth-url/"));
   },
+  async disconnectAccount() {
+    return unwrap<unknown>(await apiClient.delete("/api/meta-ads/meta/disconnect/"));
+  },
   async getAdAccounts(code?: string) {
     return unwrap<MetaAdAccount[]>(await apiClient.get("/api/meta-ads/meta/ad-accounts/", code ? { params: { code } } : undefined));
   },

@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     MetaAuthURLView,
+    DisconnectMetaAccountView,
     MetaAdAccountsView,
     MetaAdInsightsView,
     CreateMetaCampaignView,
@@ -21,6 +22,7 @@ from .views import (
 
 urlpatterns = [
     path('meta/auth-url/', MetaAuthURLView.as_view(), name='meta_auth_url'),
+    path('meta/disconnect/', DisconnectMetaAccountView.as_view(), name='meta_disconnect'),
     path('meta/ad-accounts/', MetaAdAccountsView.as_view(), name='meta_ad_accounts'),
     path('meta/ad-accounts/select/', SelectMetaAdAccountView.as_view(), name='select_meta_ad_account'),
     path('meta/insights/', MetaAdInsightsView.as_view(), name='meta_ad_insights'),

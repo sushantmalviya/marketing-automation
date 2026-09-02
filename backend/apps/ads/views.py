@@ -24,6 +24,19 @@ class MetaAuthURLView(APIView):
         return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
 
 
+class DisconnectMetaAccountView(APIView):
+    """
+    Triggered when the user clicks 'Disconnect' in the frontend.
+    Completely removes the user's Meta credentials and connected ad accounts.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        MetaUserCredential.objects.filter(user=request.user).delete()
+        MetaAdAccount.objects.filter(user=request.user).delete()
+        return Response({"status": "success", "message": "Meta account disconnected successfully."}, status=status.HTTP_200_OK)
+
+
 class MetaAdAccountsView(APIView):
     """
     Triggered when the frontend needs to display the user's available Meta Ad Accounts

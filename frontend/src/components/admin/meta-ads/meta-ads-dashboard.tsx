@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, CheckCircle2, Facebook, Funnel, Megaphone, Plus, RefreshCw, Search, Trash2, X, FolderOpen, Info, Pencil, AlertTriangle, Copy, Check } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -24,6 +24,7 @@ const benefits = [
 ];
 
 export function MetaAdsDashboard() {
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const code = searchParams.get("code") ?? undefined;
 
@@ -119,11 +120,25 @@ export function MetaAdsDashboard() {
     toast.success(`${account.name} is now the active ad account`);
   };
 
+  const disconnectMutation = useMutation({
+    mutationFn: () => metaAdsService.disconnectAccount(),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["meta-ad-accounts"] });
+      queryClient.removeQueries({ queryKey: ["meta-campaigns"] });
+      setActiveAccount(null);
+      setIsDisconnected(true);
+      setDisconnectOpen(false);
+      localStorage.removeItem("metaActiveAccountId");
+      sessionStorage.removeItem("metaActiveAccountId");
+      toast.success("Meta ad account disconnected");
+    },
+    onError: (error) => {
+      toast.error(parseApiError(error));
+    }
+  });
+
   const disconnect = () => {
-    setActiveAccount(null);
-    setIsDisconnected(true);
-    setDisconnectOpen(false);
-    toast.success("Meta ad account disconnected");
+    disconnectMutation.mutate();
   };
 
   if (connected) {
