@@ -133,3 +133,16 @@ class TemplateSubmitAPIView(APIView):
             {"message": "Template submitted successfully", "provider_data": template.provider_data},
             status=status.HTTP_200_OK
         )
+
+class TemplateDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, template_id):
+        template = TemplateService.get_template_for_user(template_id, request.user)
+        
+        TemplateService.delete_template(
+            template=template,
+            user=request.user,
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

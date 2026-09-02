@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
 import { Trash2, X, Plus, Settings2, Tag, FileText, RefreshCw, GripVertical, User, Mail, Phone, Info, ChevronDown } from "lucide-react";
+import { TemplatePickerModal } from "@/components/modules/template-picker";
+import { AnimatePresence } from "framer-motion";
 
 interface NodeConfigProps {
   selectedNode: any;
@@ -179,7 +181,7 @@ export function NodeConfigPanel({ selectedNode, onUpdateNode, onDeleteNode, onCl
               type="text" 
               readOnly
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-14 pr-4 py-3 text-sm font-medium text-slate-500 cursor-not-allowed transition-all shadow-sm focus:outline-none"
-              value={formData.label || ""}
+              value={(formData.actionName === "SendToCRM" || formData.action_name === "SendToCRM" || selectedNode.data?.actionName === "SendToCRM" || selectedNode.data?.action_name === "SendToCRM") ? "Send to CRM" : (formData.label || "")}
             />
           </div>
         </div>
@@ -207,13 +209,16 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
     queryKey: ["email-templates"],
     queryFn: async () => {
       // Actually fetch templates from the backend API
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data;
     },
   });
 
-  const templates = data?.results || data || [];
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("EMAIL"));
   const mode = formData.mode || "select";
+  const [showPicker, setShowPicker] = useState(false);
+  
+  const selectedTemplate = templates.find((t: any) => String(t.id) === String(formData.templateId));
 
   return (
     <div className="space-y-4 mt-4">
@@ -239,16 +244,31 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
           {isLoading ? (
             <div className="h-10 bg-slate-100 animate-pulse rounded-md w-full"></div>
           ) : (
-            <select 
-              className="sa-input w-full"
-              value={formData.templateId || ""}
-              onChange={(e) => onChange("templateId", e.target.value)}
-            >
-              <option value="">Select a template...</option>
-              {templates.map((tpl: any) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name || tpl.subject || `Template #${tpl.id}`}</option>
-              ))}
-            </select>
+            <>
+              <button 
+                type="button"
+                className="sa-input w-full text-left flex items-center justify-between"
+                onClick={() => setShowPicker(true)}
+              >
+                <span className={selectedTemplate ? "text-slate-900" : "text-slate-500 truncate block pr-2"}>
+                  {selectedTemplate ? (selectedTemplate.name || selectedTemplate.subject || `Template #${selectedTemplate.id}`) : "Select a template..."}
+                </span>
+                <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
+              </button>
+              
+              <AnimatePresence>
+                {showPicker && (
+                  <TemplatePickerModal
+                    channelId={1}
+                    onClose={() => setShowPicker(false)}
+                    onSelect={(tpl) => {
+                      onChange("templateId", String(tpl.id));
+                      setShowPicker(false);
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+            </>
           )}
         </div>
       ) : (
@@ -711,13 +731,16 @@ function SendSMSConfig({ formData, onChange }: { formData: any, onChange: (k: st
   const { data, isLoading } = useQuery({
     queryKey: ["sms-templates"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data.results || response.data;
     },
   });
 
-  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "sms" || String(t.channel?.name).toLowerCase() === "sms");
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("SMS"));
   const mode = formData.mode || "select";
+  const [showPicker, setShowPicker] = useState(false);
+  
+  const selectedTemplate = templates.find((t: any) => String(t.id) === String(formData.templateId));
 
   return (
     <div className="space-y-4 mt-4">
@@ -742,16 +765,31 @@ function SendSMSConfig({ formData, onChange }: { formData: any, onChange: (k: st
           {isLoading ? (
             <div className="h-10 bg-slate-100 animate-pulse rounded-md w-full"></div>
           ) : (
-            <select 
-              className="sa-input w-full"
-              value={formData.templateId || ""}
-              onChange={(e) => onChange("templateId", e.target.value)}
-            >
-              <option value="">Select a template...</option>
-              {templates.map((tpl: any) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name || `Template #${tpl.id}`}</option>
-              ))}
-            </select>
+            <>
+              <button 
+                type="button"
+                className="sa-input w-full text-left flex items-center justify-between"
+                onClick={() => setShowPicker(true)}
+              >
+                <span className={selectedTemplate ? "text-slate-900" : "text-slate-500 truncate block pr-2"}>
+                  {selectedTemplate ? (selectedTemplate.name || `Template #${selectedTemplate.id}`) : "Select a template..."}
+                </span>
+                <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
+              </button>
+              
+              <AnimatePresence>
+                {showPicker && (
+                  <TemplatePickerModal
+                    channelId={3}
+                    onClose={() => setShowPicker(false)}
+                    onSelect={(tpl) => {
+                      onChange("templateId", String(tpl.id));
+                      setShowPicker(false);
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+            </>
           )}
         </div>
       ) : (
@@ -777,13 +815,16 @@ function SendWhatsAppConfig({ formData, onChange }: { formData: any, onChange: (
   const { data, isLoading } = useQuery({
     queryKey: ["whatsapp-templates"],
     queryFn: async () => {
-      const response = await apiClient.get("/api/templates/");
+      const response = await apiClient.get("/api/templates");
       return response.data.results || response.data;
     },
   });
 
-  const templates = (data || []).filter((t: any) => !t.channel || String(t.channel).toLowerCase() === "whatsapp" || String(t.channel?.name).toLowerCase() === "whatsapp");
+  const templates = (data?.results || data || []).filter((t: any) => !t.channel_name || String(t.channel_name).toUpperCase().includes("WHATSAPP"));
   const mode = formData.mode || "select";
+  const [showPicker, setShowPicker] = useState(false);
+  
+  const selectedTemplate = templates.find((t: any) => String(t.id) === String(formData.templateId));
 
   return (
     <div className="space-y-4 mt-4">
@@ -808,16 +849,31 @@ function SendWhatsAppConfig({ formData, onChange }: { formData: any, onChange: (
           {isLoading ? (
             <div className="h-10 bg-slate-100 animate-pulse rounded-md w-full"></div>
           ) : (
-            <select 
-              className="sa-input w-full"
-              value={formData.templateId || ""}
-              onChange={(e) => onChange("templateId", e.target.value)}
-            >
-              <option value="">Select a template...</option>
-              {templates.map((tpl: any) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name || `Template #${tpl.id}`}</option>
-              ))}
-            </select>
+            <>
+              <button 
+                type="button"
+                className="sa-input w-full text-left flex items-center justify-between"
+                onClick={() => setShowPicker(true)}
+              >
+                <span className={selectedTemplate ? "text-slate-900" : "text-slate-500 truncate block pr-2"}>
+                  {selectedTemplate ? (selectedTemplate.name || `Template #${selectedTemplate.id}`) : "Select a template..."}
+                </span>
+                <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
+              </button>
+              
+              <AnimatePresence>
+                {showPicker && (
+                  <TemplatePickerModal
+                    channelId={2}
+                    onClose={() => setShowPicker(false)}
+                    onSelect={(tpl) => {
+                      onChange("templateId", String(tpl.id));
+                      setShowPicker(false);
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+            </>
           )}
         </div>
       ) : (

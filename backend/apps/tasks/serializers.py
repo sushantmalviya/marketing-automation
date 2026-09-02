@@ -218,6 +218,15 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    audience_size = serializers.SerializerMethodField()
+
+    def get_audience_size(self, obj):
+        try:
+            return obj.audience.customer_upload.total_records
+        except AttributeError:
+            return 0
+
+
     channels = serializers.PrimaryKeyRelatedField(
         many=True,
         read_only=True,
@@ -292,6 +301,14 @@ class TaskSummarySerializer(serializers.ModelSerializer):
         source="audience.name",
         read_only=True,
     )
+
+    audience_size = serializers.SerializerMethodField()
+
+    def get_audience_size(self, obj):
+        try:
+            return obj.audience.customer_upload.total_records
+        except AttributeError:
+            return 0
 
     statistics = serializers.SerializerMethodField()
 

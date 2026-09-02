@@ -9,7 +9,7 @@ import {
   Eye, Download, Trash2, X,
 } from "lucide-react";
 import NextImage from "next/image";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
@@ -428,12 +428,27 @@ function SectionRow({
 
 function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [isPersonal, setIsPersonal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [drag, setDrag] = useState(false);
 
-  const handleFile = (f: File) => { setFile(f); if (!name) setName(f.name); };
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const handleFile = (f: File) => {
+    setFile(f);
+    if (!name) setName(f.name);
+    if (f.type.startsWith("image/")) {
+      setPreviewUrl(URL.createObjectURL(f));
+    } else {
+      setPreviewUrl(null);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!file) return;
@@ -478,9 +493,15 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed py-10 transition cursor-pointer ${drag ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-blue-300"}`}
             onClick={() => document.getElementById("asset-file-input")?.click()}
           >
-            <FolderOpen size={36} className="text-slate-400" />
             {file ? (
-              <p className="text-sm font-semibold text-slate-700">{file.name}</p>
+              <div className="flex flex-col items-center gap-2">
+                {previewUrl ? (
+                  <img src={previewUrl} alt="Preview" className="max-h-32 rounded-lg object-contain" />
+                ) : (
+                  <FolderOpen size={36} className="text-slate-400" />
+                )}
+                <p className="text-sm font-semibold text-slate-700">{file.name}</p>
+              </div>
             ) : (
               <>
                 <p className="text-sm font-semibold text-slate-600">Drop file here or click to browse</p>

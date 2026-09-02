@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, MoreVertical, Pencil, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Target, ThumbsUp, Trash2, Underline, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
+import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
 import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,8 +10,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { useDateRange } from "@/components/ui/date-range-picker";
 import { PromptEnhancerModal } from "@/components/user/prompt-enhancer-modal";
+import { TemplatePickerModal } from "@/components/modules/template-picker";
 
 type TaskInfo={id:number;title:string;description:string;instructions:string;audience:number;audience_name:string;channels:number[];priority:string;status:string;due_date:string;created_at?:string};
 type Assignment={id:number;task:TaskInfo;status:string;remarks:string;created_at:string;updated_at:string;submitted_at:string|null};
@@ -330,23 +332,17 @@ export function UserCampaigns(){
     <AnimatePresence>{createOpen&&<div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.form initial={{opacity:0,scale:.96,y:12}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.97}} className="w-full max-w-lg rounded-3xl bg-white shadow-2xl" onSubmit={event=>{event.preventDefault();create.mutate()}}><ModalHeader title="Create Campaign" onClose={()=>setCreateOpen(false)}/><div className="space-y-5 p-6"><label className="field"><span>Assigned task *</span><select required value={form.task} onChange={event=>setForm({...form,task:event.target.value})}><option value="">Select task</option>{(tasks.data??[]).map(row=><option value={row.task.id} key={row.id}>{row.task.title}</option>)}</select></label><label className="field"><span>Campaign name *</span><input required minLength={3} placeholder="Enter campaign name" value={form.name} onChange={event=>setForm({...form,name:event.target.value})}/></label><label className="field"><span>Description</span><textarea rows={4} placeholder="Describe this campaign" value={form.description} onChange={event=>setForm({...form,description:event.target.value})}/></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-5"><button type="button" className="secondary-button" onClick={()=>setCreateOpen(false)}>Cancel</button><button className="primary-button px-6" disabled={create.isPending}>{create.isPending?"Creating...":"Create Campaign"}</button></div></motion.form></div>}{viewing&&<div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{opacity:0,scale:.96,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.97}} className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><button aria-label="Close" className="absolute right-4 top-4 icon-button z-10" type="button" onClick={()=>{setViewing(null);setScheduleOpen(false);setScheduleDate("")}}><X size={20}/></button><div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 pb-5 pt-7 text-center"><span className={`grid h-14 w-14 place-items-center rounded-full ${viewing.status==="REJECTED"?"bg-red-50 text-red-500":viewing.status==="APPROVED"?"bg-emerald-50 text-emerald-600":"bg-blue-50 text-blue-500"}`}><Megaphone size={24}/></span><h2 className="text-xl font-black text-slate-900">Campaign Details</h2></div><div className="p-6 space-y-4"><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-600"><Megaphone size={17}/></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Campaign Name</p><p className="text-sm font-semibold text-slate-800">{viewing.campaign_name}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${viewing.status==="APPROVED"?"bg-emerald-100 text-emerald-600":viewing.status==="REJECTED"?"bg-red-100 text-red-500":"bg-slate-200 text-slate-500"}`}><CheckCircle2 size={17}/></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Status</p><Badge className={campaignTone[viewing.status]}>{pretty(viewing.status)}</Badge></div></div>{viewing.status==="REJECTED"&&<div className="rounded-2xl border border-red-100 bg-red-50 p-4"><div className="flex items-center gap-2 mb-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-500"><X size={13}/></span><p className="text-sm font-black text-red-700">Rejected by Admin</p></div>{viewing.rejection_reason&&<div className="mb-3"><p className="text-xs font-bold uppercase tracking-wide text-red-400">Rejected Reason</p><p className="mt-1 text-sm text-red-800">{viewing.rejection_reason}</p></div>}{viewing.review_comments&&<div><p className="text-xs font-bold uppercase tracking-wide text-red-400">Description</p><p className="mt-1 text-sm text-red-800">{viewing.review_comments}</p></div>}</div>}{viewing.status==="APPROVED"&&!scheduleOpen&&<div className="grid grid-cols-2 gap-3 pt-1"><button disabled={send.isPending} onClick={()=>send.mutate(viewing.id)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-blue-100 bg-blue-50 px-4 py-5 text-center transition hover:border-blue-400 hover:bg-blue-100 disabled:opacity-60"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-blue-600 shadow-sm"><Send size={20}/></span><span className="text-sm font-black text-blue-700">{send.isPending?"Sending…":"Send Now"}</span><span className="text-[11px] text-slate-500">Send campaign immediately</span></button><button onClick={()=>setScheduleOpen(true)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm"><CalendarClock size={20}/></span><span className="text-sm font-black text-indigo-700">Schedule</span><span className="text-[11px] text-slate-500">Schedule for later</span></button></div>}{viewing.status==="APPROVED"&&scheduleOpen&&<div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 space-y-3"><p className="text-sm font-black text-indigo-700 flex items-center gap-2"><CalendarClock size={16}/>Pick a date &amp; time</p><input type="datetime-local" min={new Date(Date.now()+60000).toISOString().slice(0,16)} value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"/><div className="flex gap-2"><button className="secondary-button flex-1" onClick={()=>{setScheduleOpen(false);setScheduleDate("")}}>Cancel</button><button disabled={!scheduleDate||schedule.isPending} onClick={()=>{if(viewing&&scheduleDate)schedule.mutate({id:viewing.id,at:scheduleDate})}} className="primary-button flex-1 justify-center disabled:opacity-60">{schedule.isPending?"Scheduling…":"Confirm"}</button></div></div>}<div className="grid grid-cols-2 gap-3"><Info label="Task" value={viewing.task_name||"—"}/><Info label="Audience" value={viewing.audience_name||"—"}/></div></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">{viewing.status==="REJECTED"&&<button className="secondary-button flex items-center gap-2 px-5 text-blue-600 border-blue-300" onClick={()=>{storeCampaignDraft(null);setViewing(null);setCreateOpen(true)}}><Pencil size={15}/>Edit Campaign</button>}<button className="secondary-button px-5" onClick={()=>{setViewing(null);setScheduleOpen(false);setScheduleDate("")}}>Close</button>{viewing.available_actions.includes("submit")&&<button className="primary-button px-5" disabled={submit.isPending} onClick={()=>submit.mutate(viewing.id)}>Submit for approval</button>}</div></motion.div></div>}{deleteTarget&&<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{opacity:0,scale:.95,y:10}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.97}} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex flex-col items-center gap-3 p-8 text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-red-50"><Trash2 size={28} className="text-red-500"/></span><h2 className="text-xl font-black text-slate-900">Delete Campaign?</h2><p className="text-sm text-slate-500">Are you sure you want to delete <strong>&quot;{deleteTarget.campaign_name}&quot;</strong>? This action cannot be undone.</p></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button className="secondary-button px-6" onClick={()=>setDeleteTarget(null)} disabled={remove.isPending}>Cancel</button><button className="flex min-h-10 items-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50" onClick={()=>remove.mutate(deleteTarget.id)} disabled={remove.isPending}>{remove.isPending?"Deleting...":"Delete"}</button></div></motion.div></motion.div>}</AnimatePresence></div>;
 }
 
-export function UserTemplates(){
-  const router=useRouter();const [search,setSearch]=useState("");const [channel,setChannel]=useState("");const [page,setPage]=useState(1);const pageSize=6;
-  const templates=useQuery({queryKey:["user-templates"],queryFn:async()=>(await apiClient.get<Template[]>("/api/templates/")).data});
-  const tasks=useQuery({queryKey:["user-tasks"],queryFn:async()=>(await apiClient.get<Assignment[]>("/api/tasks/my/")).data});
-  const rows=(templates.data??[]).filter(template=>(!search||`${template.name} ${template.subject||""} ${template.body}`.toLowerCase().includes(search.toLowerCase()))&&(!channel||String(template.channel)===channel));
-  const channels=Array.from(new Map((templates.data??[]).map(template=>[template.channel,template.channel_name])).entries());const shown=rows.slice((page-1)*pageSize,page*pageSize);
-  const resume=(template?:Template)=>{const draft=readCampaignDraft();if(!draft?.task){toast.error("Start a campaign and complete Campaign Details before choosing a template.");router.push("/user/campaigns");return}if(template){const assignment=(tasks.data??[]).find(row=>String(row.task.id)===draft.task);if(assignment&&!assignment.task.channels.includes(template.channel)){toast.error(`${template.channel_name} is not assigned to this campaign task.`);return}storeCampaignDraft({...draft,template_id:String(template.id),template_name:template.name,channel:String(template.channel),subject:template.subject||"",body:template.body})}else storeCampaignDraft({...draft,template_id:"",template_name:"",channel:"",subject:"",body:""});router.push("/user/campaigns?resume=1")};
-  return <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}><div className="flex items-center justify-between gap-4"><h1 className="sa-title normal-case">Create Campaign</h1><span className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold">Step 2 of 3</span></div><Link href="/user/campaigns" className="mt-6 flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-blue-600"><ChevronLeft size={17}/>Back to Campaigns</Link><section className="sa-card mt-5 overflow-hidden p-6 sm:p-8"><WizardProgress step={2}/><div className="mt-10 flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-black">My Templates</h2><p className="mt-1 text-sm text-slate-500">Choose a template you&apos;ve created previously or create a new one.</p></div><div className="flex flex-wrap gap-3"><button type="button" className="secondary-button flex items-center gap-2 px-5" onClick={()=>resume()}><ChevronLeft size={17}/>Create New Template</button><span className="secondary-button flex items-center gap-2 border-indigo-300 px-5 text-indigo-600"><FileText size={17}/>My Templates</span></div></div><div className="mt-7 grid gap-4 md:grid-cols-[1fr_220px]"><SearchInput value={search} onChange={value=>{setSearch(value);setPage(1)}} placeholder="Search templates..."/><select className="h-12 rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" value={channel} onChange={event=>{setChannel(event.target.value);setPage(1)}}><option value="">All Channels</option>{channels.map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></div>{templates.isError?<ErrorState error={templates.error}/>:templates.isLoading?<Skeleton/>:<div className="mt-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">{shown.map((template,index)=><motion.article role="button" tabIndex={0} aria-label={`Use ${template.name}`} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:index*.04}} className="cursor-pointer rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg" key={template.id} onClick={()=>resume(template)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")resume(template)}}><div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${template.channel_name.toUpperCase().includes("WHATS")?"bg-emerald-50 text-emerald-600":"bg-blue-50 text-blue-600"}`}><ChannelGlyph name={template.channel_name}/></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><h3 className="truncate font-black text-slate-950">{template.name}</h3><MoreVertical size={18}/></div><Badge className={template.channel_name.toUpperCase().includes("WHATS")?"bg-emerald-50 text-emerald-600":"bg-blue-50 text-blue-600"}>{template.channel_name}</Badge></div></div>{template.subject&&<p className="mt-4 truncate text-sm text-slate-700">{template.subject}</p>}<p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-slate-700">{template.body}</p><p className="mt-4 text-xs text-slate-500">Created on {formatDate(template.created_at)}</p></motion.article>)}</div>}{!templates.isLoading&&!shown.length&&<Empty message="No templates match your filters."/>}<Pagination page={page} count={rows.length} pageSize={pageSize} setPage={setPage}/></section></motion.div>;
-}
 
 function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignments:Assignment[];initialDraft:CampaignDraft|null;onCancel:()=>void;onCreated:()=>void}){
+  const user = useQuery({ queryKey: ["auth-profile"], queryFn: authService.profile });
+  const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const router=useRouter();
   const [step,setStep]=useState(initialDraft?.task?2:1);
   const [channelIndex,setChannelIndex]=useState(0);
   const [form,setForm]=useState<CampaignDraft>(()=>initialDraft?{...emptyCampaignDraft,...initialDraft}:{...emptyCampaignDraft});
   const [previewPage,setPreviewPage]=useState(1);
   const [previewSearch,setPreviewSearch]=useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [previewChannelIdx,setPreviewChannelIdx]=useState(0);
   const [previewCustomerIdx,setPreviewCustomerIdx]=useState(0);
   const [saving,setSaving]=useState(false);
@@ -360,7 +356,11 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
   const currentChannel=taskChannels[channelIndex];
   // Current channel template draft
   const currentCT:ChannelTemplate=form.channelTemplates[String(currentChannel?.id??"")] ?? {template_id:"",template_name:"",subject:"",body:""};
-  const setCurrentCT=(patch:Partial<ChannelTemplate>)=>setForm(f=>({...f,channelTemplates:{...f.channelTemplates,[String(currentChannel?.id??"")]:{...currentCT,...patch}}}));
+  const setCurrentCT=(patch:Partial<ChannelTemplate>)=>setForm(f=>{
+    const channelId = String(currentChannel?.id??"");
+    const existing = f.channelTemplates[channelId] || {template_id:"",template_name:"",subject:"",body:""};
+    return {...f, channelTemplates: {...f.channelTemplates, [channelId]: {...existing, ...patch}}};
+  });
   const isEmail=(name:string)=>name.toUpperCase().includes("EMAIL");
 
   // Save all templates + create campaign
@@ -374,7 +374,7 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
       for(const ch of taskChannels){
         const ct=form.channelTemplates[String(ch.id)];
         if(!ct?.body?.trim()) continue;
-        const templateId=ct.template_id?Number(ct.template_id):(await apiClient.post<Template>("/api/templates/create/",{name:ct.template_name.trim()||`${form.name} - ${ch.name}`,channel:ch.id,subject:ct.subject?.trim()||"",body:ct.body,status:"ACTIVE"})).data.id;
+        const templateId=ct.template_id?Number(ct.template_id):(await apiClient.post<Template>("/api/templates/create",{name:ct.template_name.trim()||`${form.name} - ${ch.name}`,channel:ch.id,subject:ct.subject?.trim()||"",body:ct.body,status:"ACTIVE"})).data.id;
         await apiClient.post("/api/campaigns/templates/assign/",{campaign:created.id,channel:ch.id,template:templateId});
       }
       if(form.scheduled_at)await apiClient.patch(`/api/campaigns/${created.id}/schedule/`,{scheduled_at:new Date(form.scheduled_at).toISOString()});
@@ -401,7 +401,7 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
       // Auto-save template if new
       if(!currentCT.template_id){
         try{
-          const saved=await apiClient.post<Template>("/api/templates/create/",{name:currentCT.template_name.trim(),channel:currentChannel.id,subject:currentCT.subject?.trim()||"",body:currentCT.body,status:"ACTIVE"});
+          const saved=await apiClient.post<Template>("/api/templates/create",{name:currentCT.template_name.trim(),channel:currentChannel.id,subject:currentCT.subject?.trim()||"",body:currentCT.body,status:"ACTIVE"});
           setCurrentCT({template_id:String(saved.data.id)});
           toast.success(`"${currentChannel.name}" template saved to My Templates`);
         }catch(err){toast.error("Could not save template: "+parseApiError(err));return;}
@@ -464,10 +464,9 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
               </div>
               <p className="text-sm text-slate-500 ml-10">Template {channelIndex+1} of {taskChannels.length} — auto-saved to My Templates on Next</p>
             </div>
-            <button type="button" className="secondary-button flex items-center gap-2 border-blue-300 px-5 text-blue-600" onClick={()=>{storeCampaignDraft(form);router.push("/user/templates")}}><FileText size={17}/>My Templates</button>
+            <button type="button" className="secondary-button flex items-center gap-2 border-blue-300 px-5 text-blue-600" onClick={()=>setPickerOpen(true)}><FileText size={17}/>My Templates</button>
           </div>
           <div className="mt-7 space-y-5">
-            {currentCT.template_id&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">✓ Saved to My Templates (#{currentCT.template_id})</div>}
             <label className="field"><span>Template Name <b className="text-red-500">*</b></span><input placeholder={`${form.name} - ${currentChannel.name}`} value={currentCT.template_name} onChange={e=>setCurrentCT({template_name:e.target.value,template_id:""})}/></label>
             {isEmail(currentChannel.name)&&<label className="field"><span>Subject <span className="ml-1 text-[10px] font-normal text-slate-400">(max 255 characters)</span></span><input placeholder="Email subject line" maxLength={255} value={currentCT.subject??""} onChange={e=>setCurrentCT({subject:e.target.value,template_id:""})}/><span className={`mt-1 block text-right text-[11px] font-semibold ${(currentCT.subject?.length??0)>220?"text-red-500":(currentCT.subject?.length??0)>180?"text-amber-500":"text-slate-400"}`}>{currentCT.subject?.length??0}/255</span></label>}
             <label className="field"><span>Body <b className="text-red-500">*</b></span>
@@ -518,13 +517,13 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
           {/* Template Preview */}
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             {/* Header row: title + channel tabs */}
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 bg-slate-50">
               <div>
-                <h3 className="font-black text-slate-900">Template Preview</h3>
-                <p className="mt-0.5 text-xs text-slate-500">This is how your message will appear to recipients.</p>
+                <h3 className="font-black text-slate-900">Campaign Preview</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Test your message appearance and personalization.</p>
               </div>
               {/* Channel tabs */}
-              <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+              <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
                 {taskChannels.map((ch,i)=>{
                   const active=previewChannelIdx===i;
                   const normalized=ch.name.toUpperCase();
@@ -541,89 +540,130 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
             </div>
 
             {/* Preview body: left panel + right panel */}
-            {(audiencePreview.data?.preview??[]).length>0?(
-              <div className="grid sm:grid-cols-[260px_1fr]">
-                {/* ── Left panel ── */}
-                {(()=>{
-                  const previewCustomers=audiencePreview.data?.preview??[];
-                  const customer=previewCustomers[previewCustomerIdx]??previewCustomers[0];
-                  if(!customer)return null;
-                  const cdata=customer.data;
-                  const cname=customerName(cdata);
-                  const cinitials=cname.split(/\s+/).slice(0,2).map((p:string)=>p[0]).join("").toUpperCase();
-                  const activeChId=taskChannels[previewChannelIdx]?.id;
-                  const activeCT=form.channelTemplates[String(activeChId??"")] ?? {template_id:"",template_name:"",subject:"",body:""};
-                  const usedVars=Array.from(new Set([...(activeCT.subject+activeCT.body).matchAll(/\{\{(.*?)\}\}/g)].map((m:RegExpMatchArray)=>m[1].trim())));
-                  return(
-                    <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:border-b-0 sm:border-r">
-                      <div>
-                        <p className="mb-2 text-xs font-semibold text-slate-500">Preview With Sample Data</p>
-                        {/* Customer selector */}
-                        <div className="relative">
-                          <select
-                            value={previewCustomerIdx}
-                            onChange={e=>setPreviewCustomerIdx(Number(e.target.value))}
-                            className="w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-sm font-semibold text-slate-800 outline-none focus:border-blue-400">
-                            {previewCustomers.map((c,i)=>(
-                              <option key={c.id} value={i}>{customerName(c.data)}</option>
-                            ))}
-                          </select>
-                          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 grid h-5 w-5 place-items-center rounded-full bg-indigo-100 text-[9px] font-bold text-indigo-600">{cinitials}</span>
-                          <ChevronDown size={13} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"/>
+            <div className="grid lg:grid-cols-[280px_1fr]">
+              {/* ── Left panel ── */}
+              {(()=>{
+                const activeChId=taskChannels[previewChannelIdx]?.id;
+                const activeCT=form.channelTemplates[String(activeChId??"")] ?? {template_id:"",template_name:"",subject:"",body:""};
+                const combinedText = (activeCT.subject || "") + (activeCT.body || "");
+                const usedVars=Array.from(new Set([...combinedText.matchAll(/\{\{(.*?)\}\}/g)].map((m:RegExpMatchArray)=>m[1].trim())));
+                
+                return(
+                  <div className="flex flex-col gap-4 border-b border-slate-200 p-5 lg:border-b-0 lg:border-r bg-white">
+                    <div>
+                      <p className="mb-2 text-sm font-black text-slate-900">Test Variables</p>
+                      <p className="mb-4 text-xs text-slate-500">Fill in sample data to see how personalization looks.</p>
+                      
+                      <div className="space-y-4">
+                        {usedVars.length === 0 ? (
+                          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
+                            <span className="text-xs font-semibold text-slate-400">No variables used</span>
+                          </div>
+                        ) : (
+                          usedVars.map((v:string)=>(
+                            <label key={v} className="block">
+                              <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">{v}</span>
+                              <input 
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                                value={testVariables[v] !== undefined ? testVariables[v] : (v === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "")}
+                                onChange={e => setTestVariables(prev => ({...prev, [v]: e.target.value}))}
+                                placeholder={`Enter ${v}...`}
+                              />
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── Right panel: rendered message ── */}
+              {(()=>{
+                const activeCh=taskChannels[previewChannelIdx];
+                const channelName = activeCh?.name || "";
+                const isWhatsapp = channelName.toUpperCase().includes("WHATS");
+                const isSms = channelName.toUpperCase().includes("SMS");
+                const isEmail = !isWhatsapp && !isSms;
+
+                const activeChId=activeCh?.id;
+                const activeCT=form.channelTemplates[String(activeChId??"")] ?? {template_id:"",template_name:"",subject:"",body:""};
+                
+                // Helper to resolve variables
+                const resolveText = (text?: string | null) => {
+                  if (!text || typeof text !== "string") return "";
+                  return text.replace(/\{\{(.*?)\}\}/g, (match, v) => {
+                    const cleanV = v.trim();
+                    const val = testVariables[cleanV] !== undefined ? testVariables[cleanV] : (cleanV === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "");
+                    return val || `{{${cleanV}}}`;
+                  });
+                };
+
+                const resolvedSubject=resolveText(activeCT.subject??"");
+                const resolvedBody=resolveText(activeCT.body);
+
+                return(
+                  <div className="p-8 flex items-center justify-center bg-slate-50/50">
+                    
+                    {/* EMAIL MOCKUP */}
+                    {isEmail && (
+                      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                        <div className="border-b border-slate-100 bg-slate-50 p-4">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Subject:</p>
+                          <p className="mt-1 text-sm font-bold text-slate-900">{resolvedSubject || <span className="italic text-slate-400">No subject</span>}</p>
+                        </div>
+                        <div className="p-6">
+                          <div
+                            className="text-sm leading-relaxed text-slate-800 [&_b]:font-bold [&_strong]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:rounded-lg"
+                            dangerouslySetInnerHTML={{__html:resolvedBody||"<span style='color:#94a3b8'>No message body.</span>"}}
+                          />
                         </div>
                       </div>
+                    )}
 
-                      {usedVars.length>0&&(
-                        <div>
-                          <p className="mb-2 text-xs font-semibold text-slate-500">Personalization Variables</p>
-                          <div className="space-y-1.5">
-                            {usedVars.map((v:string)=>(
-                              <div key={v} className="flex items-center justify-between gap-2 text-xs">
-                                <span className="font-mono text-slate-500">{`{{${v}}}`}</span>
-                                <span className="font-semibold text-slate-700 truncate text-right max-w-[120px]">{customerValue(cdata,v)||<span className="italic text-slate-400">—</span>}</span>
-                              </div>
-                            ))}
+                    {/* WHATSAPP MOCKUP */}
+                    {isWhatsapp && (
+                      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-[#efeae2] shadow-sm overflow-hidden relative h-[600px] flex flex-col">
+                        <div className="bg-[#075e54] px-4 py-3 text-white flex items-center gap-3">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-300 overflow-hidden"><User size={24} className="text-[#075e54]"/></span>
+                          <div>
+                            <p className="font-bold">Your Brand</p>
+                            <p className="text-[10px] text-white/80">Business Account</p>
                           </div>
                         </div>
-                      )}
-
-                      <p className="mt-auto text-[11px] leading-relaxed text-slate-400">Note: The actual campaign will use data from your audience.</p>
-                    </div>
-                  );
-                })()}
-
-                {/* ── Right panel: rendered message ── */}
-                {(()=>{
-                  const previewCustomers=audiencePreview.data?.preview??[];
-                  const customer=previewCustomers[previewCustomerIdx]??previewCustomers[0];
-                  if(!customer)return null;
-                  const cdata=customer.data;
-                  const activeChId=taskChannels[previewChannelIdx]?.id;
-                  const activeCT=form.channelTemplates[String(activeChId??"")] ?? {template_id:"",template_name:"",subject:"",body:""};
-                  const resolvedSubject=renderCustomerText(activeCT.subject??""  ,cdata);
-                  const resolvedBody=renderCustomerText(activeCT.body,cdata);
-                  const cname=customerName(cdata);
-                  return(
-                    <div className="p-5">
-                      {activeCT.subject&&(
-                        <div className="mb-4">
-                          <p className="text-xs font-bold text-blue-600 uppercase tracking-wide">Subject:</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-800">{resolvedSubject}</p>
+                        <div className="flex-1 p-4 overflow-y-auto" style={{backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundSize: 'cover', backgroundBlendMode: 'overlay', backgroundColor: 'rgba(239, 234, 226, 0.9)'}}>
+                          <div className="bg-white rounded-tr-xl rounded-b-xl p-3 shadow-sm text-[15px] leading-snug text-slate-900 w-[90%] whitespace-pre-wrap float-left">
+                            <div dangerouslySetInnerHTML={{__html:resolvedBody.replace(/\n/g, "<br/>")||"<span style='color:#94a3b8'>No message...</span>"}} />
+                            <p className="text-[10px] text-right text-slate-400 mt-2">11:30 AM</p>
+                          </div>
                         </div>
-                      )}
-                      <div
-                        className="text-sm leading-7 text-slate-800 [&_b]:font-bold [&_strong]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline"
-                        dangerouslySetInnerHTML={{__html:resolvedBody.replace(/\{\{name\}\}/gi,`<span style="color:#2563eb;font-weight:600">${cname}</span>`)||"<span style='color:#94a3b8'>No message body.</span>"}}
-                      />
-                    </div>
-                  );
-                })()}
-              </div>
-            ):(
-              audiencePreview.isLoading?<div className="p-8"><Skeleton/></div>:
-              audiencePreview.isError?<div className="p-4"><ErrorState error={audiencePreview.error}/></div>:
-              <Empty message="No customers match this audience."/>
-            )}
+                        <div className="bg-[#f0f0f0] p-2 flex gap-2 items-center">
+                          <div className="bg-white rounded-full flex-1 px-4 py-2.5 text-sm text-slate-400">Message</div>
+                          <div className="bg-[#00a884] rounded-full h-10 w-10 flex items-center justify-center text-white"><Mic size={18}/></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SMS MOCKUP */}
+                    {isSms && (
+                      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden relative h-[600px] flex flex-col">
+                        <div className="bg-white border-b border-slate-100 px-4 py-3 flex flex-col items-center">
+                          <span className="grid h-14 w-14 place-items-center rounded-full bg-slate-200 text-slate-400 mb-2"><User size={32}/></span>
+                          <p className="text-xs font-medium text-slate-900">+1 (800) 555-0199</p>
+                        </div>
+                        <div className="flex-1 p-4 overflow-y-auto bg-white flex flex-col">
+                          <p className="text-center text-[10px] font-semibold text-slate-400 mb-4">Text Message<br/>Today 11:30 AM</p>
+                          <div className="bg-[#e9e9eb] rounded-2xl rounded-bl-sm p-3 shadow-sm text-[15px] leading-snug text-black w-fit max-w-[85%] whitespace-pre-wrap">
+                            <div dangerouslySetInnerHTML={{__html:resolvedBody.replace(/\n/g, "<br/>")||"<span style='color:#94a3b8'>No message...</span>"}} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
         </motion.div>}
@@ -642,6 +682,21 @@ function CampaignWizard({assignments,initialDraft,onCancel,onCreated}:{assignmen
           </>}
         </div>
       </div>
+      {pickerOpen && currentChannel && (
+        <TemplatePickerModal
+          channelId={currentChannel.id}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(template) => {
+            setCurrentCT({
+              template_id: String(template.id),
+              template_name: template.name,
+              subject: template.subject,
+              body: template.body,
+            });
+            setPickerOpen(false);
+          }}
+        />
+      )}
     </section>
   </motion.div>;
 }
@@ -652,12 +707,10 @@ function RichBodyEditor({value,onChange,placeholder}:{value:string;onChange:(v:s
   const [showImg,setShowImg]=useState(false);const [imgUrl,setImgUrl]=useState("");
   const [showVar,setShowVar]=useState(false);const [varInput,setVarInput]=useState("");
 
-  // Init editor HTML from value prop (only on first mount)
-  const initialized=useRef(false);
+  // Init and update editor HTML from value prop
   useEffect(()=>{
-    if(!initialized.current&&editorRef.current){
-      initialized.current=true;
-      if(value) editorRef.current.innerHTML=value;
+    if(editorRef.current && value !== editorRef.current.innerHTML){
+      editorRef.current.innerHTML=value;
     }
   },[value]);
 

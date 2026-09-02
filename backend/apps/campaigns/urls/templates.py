@@ -4,7 +4,8 @@ from apps.campaigns.views import (
     TemplateCreateAPIView,
     TemplateListAPIView,
     TemplateUpdateAPIView,
-    TemplateSubmitAPIView
+    TemplateSubmitAPIView,
+    TemplateDeleteAPIView
 )
 
 urlpatterns = [
@@ -29,5 +30,10 @@ urlpatterns = [
         "<int:template_id>/submit-to-provider/",
         TemplateSubmitAPIView.as_view(),
         name="template-submit",
+    ),
+    path(
+        "<int:template_id>/delete/",
+        TemplateDeleteAPIView.as_view(),
+        name="template-delete",
     )
 ]

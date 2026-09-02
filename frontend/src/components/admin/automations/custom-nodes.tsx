@@ -76,7 +76,7 @@ export function UtilityNode({ data }: { data: any }) {
           {getIcon(data.action_name || "Utility")}
         </div>
         <div>
-          <h4 className="font-bold text-sm text-slate-800">{data.label}</h4>
+          <h4 className="font-bold text-sm text-slate-800">{(data.actionName === "SendToCRM" || data.action_name === "SendToCRM") ? "Send to CRM" : data.label}</h4>
           <p className="text-xs text-slate-500">Utility</p>
         </div>
       </div>
