@@ -143,7 +143,7 @@ urlpatterns = [
         include("apps.analytics.urls"),
     ),
     path("api/templates/", include("apps.campaigns.urls.templates")),
-    path("api/ads/", include("apps.ads.urls")),
+    path("api/meta-ads/", include("apps.ads.urls")),
 
     path(
         "api/dashboard/",

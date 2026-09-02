@@ -1236,7 +1236,7 @@ function LeadSyncTab() {
             <div>
               <span className="block text-slate-500 font-semibold mb-1">Webhook URL</span>
               <code className="block rounded bg-slate-50 border border-slate-100 p-2 text-slate-700 font-mono text-[10px] select-all">
-                http://localhost:8000/api/ads/meta/webhook/
+                http://localhost:8000/api/meta-ads/meta/webhook/
               </code>
             </div>
             <div className="grid grid-cols-2 gap-4">
