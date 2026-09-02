@@ -44,7 +44,7 @@ class MetaAdAccountsView(APIView):
                 credential = MetaUserCredential.objects.get(user=request.user)
                 access_token = credential.access_token
 
-            if access_token and access_token.startswith("mock_"):
+            if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
                 data = [{"account_id": "act_12345", "name": "Mock Ad Account", "account_status": 1}]
             else:
                 data = MetaAdsService.get_ad_accounts(access_token)

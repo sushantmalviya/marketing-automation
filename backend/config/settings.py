@@ -51,6 +51,7 @@ META_APP_ID = os.getenv("META_APP_ID")
 META_APP_SECRET = os.getenv("META_APP_SECRET")
 META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "secure_token")
 META_REDIRECT_URI = os.getenv("META_REDIRECT_URI", "http://localhost:3000/admin/ads")
+META_MOCK_MODE = os.getenv("META_MOCK_MODE", "False").lower() in ("true", "1", "t")
  
 # Auto-reload trigger (env change detected)
 # --------------------------------------------------
@@ -234,6 +235,7 @@ AUTH_USER_MODEL = "accounts.User"
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://marketing-automation-uo4q.onrender.com",
     "https://marketing-automation-smoky.vercel.app",
 ]
 
@@ -332,9 +334,10 @@ CACHES = {
 # --------------------------------------------------
 # Celery Configuration for Demo (Bypass Redis)
 # --------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = False
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+# If REDIS_URL is not provided (e.g. on Render without a Redis add-on), run tasks synchronously
+CELERY_TASK_ALWAYS_EAGER = not bool(os.environ.get("REDIS_URL"))
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
