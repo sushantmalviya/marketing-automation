@@ -67,7 +67,7 @@ export function TemplatesManager() {
       if (editTarget) {
         return apiClient.patch(`/api/templates/${editTarget.id}`, payload);
       } else {
-        return apiClient.post("/api/templates/create", payload);
+        return apiClient.post("/api/templates/create/", payload);
       }
     },
     onSuccess: () => {
