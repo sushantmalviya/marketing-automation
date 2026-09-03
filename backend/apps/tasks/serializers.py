@@ -223,7 +223,7 @@ class TaskSerializer(serializers.ModelSerializer):
     def get_audience_size(self, obj):
         try:
             return obj.audience.customer_upload.total_records
-        except AttributeError:
+        except Exception:
             return 0
 
 
@@ -255,6 +255,7 @@ class TaskSerializer(serializers.ModelSerializer):
 
             "audience",
             "audience_name",
+            "audience_size",
             "channels",
             "priority",
             
@@ -307,7 +308,7 @@ class TaskSummarySerializer(serializers.ModelSerializer):
     def get_audience_size(self, obj):
         try:
             return obj.audience.customer_upload.total_records
-        except AttributeError:
+        except Exception:
             return 0
 
     statistics = serializers.SerializerMethodField()
@@ -325,6 +326,7 @@ class TaskSummarySerializer(serializers.ModelSerializer):
             "instructions",
             "audience",
             "audience_name",
+            "audience_size",
             "priority",
             "status",
             "last_activity_at",
