@@ -121,6 +121,9 @@ class InstagramProvider(BaseSocialProvider):
             if not image_url:
                 return {"success": False, "error": "Instagram requires a media URL to post."}
 
+            if image_url and not any(image_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.mp4', '.mov']):
+                image_url = f"{image_url}.jpg"
+
             is_video = image_url.lower().endswith(('.mp4', '.mov'))
             media_type = 'REELS' if is_video else 'IMAGE'
 
