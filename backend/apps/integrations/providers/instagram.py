@@ -143,16 +143,15 @@ class InstagramProvider(BaseSocialProvider):
             container_resp.raise_for_status()
             creation_id = container_resp.json().get("id")
             
-            if media_type == 'REELS':
-                import time
-                max_retries = 20
-                for _ in range(max_retries):
-                    status = self.check_media_status(creation_id, access_token)
-                    if status == "FINISHED":
-                        break
-                    elif status == "ERROR":
-                        return {"success": False, "error": "Instagram video processing failed."}
-                    time.sleep(3)
+            import time
+            max_retries = 20
+            for _ in range(max_retries):
+                status = self.check_media_status(creation_id, access_token)
+                if status == "FINISHED":
+                    break
+                elif status == "ERROR":
+                    return {"success": False, "error": "Instagram media processing failed."}
+                time.sleep(3)
             
             # 2. Publish Container
             publish_url = f"{self.GRAPH_URL}/{ig_user_id}/media_publish"

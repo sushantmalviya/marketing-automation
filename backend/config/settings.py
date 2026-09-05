@@ -335,8 +335,9 @@ CACHES = {
 # Celery Configuration for Demo (Bypass Redis)
 # --------------------------------------------------
 _redis_url = os.environ.get("REDIS_URL")
+_worker_enabled = os.environ.get("CELERY_WORKER_ENABLED", "false").lower() == "true"
 
-if _redis_url:
+if _redis_url and _worker_enabled:
     CELERY_BROKER_URL = _redis_url
     CELERY_RESULT_BACKEND = _redis_url
     CELERY_TASK_ALWAYS_EAGER = False
