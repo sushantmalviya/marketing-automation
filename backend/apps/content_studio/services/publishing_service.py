@@ -58,8 +58,11 @@ class PublishingService:
                 if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
                     # Execute in a standard background thread to avoid blocking the web request
                     import threading
+                    def run_task(p_id, u_id):
+                        publish_social_post_task.apply(args=[p_id, u_id])
+                        
                     threading.Thread(
-                        target=publish_social_post_task, 
+                        target=run_task, 
                         args=(str(platform.id), user_id_str)
                     ).start()
                     logger.info("Dispatched immediately to background thread")
