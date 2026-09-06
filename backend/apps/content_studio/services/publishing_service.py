@@ -54,9 +54,19 @@ class PublishingService:
                 )
                 logger.info(f"Scheduled for {platform.scheduled_datetime}")
             else:
-                # Publish immediately in background
-                publish_social_post_task.delay(str(platform.id), user_id_str)
-                logger.info("Dispatched immediately to background queue")
+                from django.conf import settings
+                if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+                    # Execute in a standard background thread to avoid blocking the web request
+                    import threading
+                    threading.Thread(
+                        target=publish_social_post_task, 
+                        args=(str(platform.id), user_id_str)
+                    ).start()
+                    logger.info("Dispatched immediately to background thread")
+                else:
+                    # Publish immediately in background queue
+                    publish_social_post_task.delay(str(platform.id), user_id_str)
+                    logger.info("Dispatched immediately to background queue")
                 
             dispatched = True
 

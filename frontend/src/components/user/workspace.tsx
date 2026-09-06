@@ -242,7 +242,34 @@ function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenera
   const regenerate = async (images: boolean, captions: boolean) => run(images ? "image" : "caption", async () => { await apiClient.post(`/api/content/content-drafts/${draft.id}/regenerate/`, { reason: images ? "Replace post image" : "Improve caption", generate_images: images, generate_captions: captions }, { timeout: 180000 }); await refresh(); if (captions) { setEdits({}); } toast.success(images ? "Post image regenerated" : "Caption regenerated") });
   const schedule = () => run("schedule", async () => { if (!scheduleAt) throw new Error("Select a future date and time."); await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/schedule/`, { schedules: Object.fromEntries(draft.platforms.map(item => [item.platform, new Date(scheduleAt).toISOString()])) }, { timeout: 60000 }); await refresh(); toast.success("Content scheduled") });
   const approval = () => run("approval", async () => { await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/request_approval/`, {}, { timeout: 60000 }); await refresh(); toast.success("Sent to Admin for approval") });
-  const publish = () => run("publish", async () => { await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/publish/`, {}, { timeout: 60000 }); const updated = await refresh(); if (updated.workflow_state === "PUBLISHED") { toast.success("Content published to all selected channels!"); client.invalidateQueries({ queryKey: ["user-content-history"] }); client.invalidateQueries({ queryKey: ["user-content-drafts"] }); onBack(); } else { const failedPlatforms = updated.platforms.filter(p => p.status === "FAILED").map(p => p.platform); toast.error(failedPlatforms.length > 0 ? `Publishing failed on: ${failedPlatforms.join(", ")}` : "Publishing failed on one or more channels."); } });
+  const publish = () => run("publish", async () => { 
+    await persist(false); 
+    await apiClient.post(`/api/content/content-drafts/${draft.id}/publish/`, {}, { timeout: 60000 }); 
+    
+    let updated = await refresh(); 
+    let retries = 0;
+    // Poll until no platforms are PENDING (max 45 seconds)
+    while (updated.platforms.some((p: any) => p.status === "PENDING") && retries < 15) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        updated = await refresh();
+        retries++;
+    }
+
+    if (updated.workflow_state === "PUBLISHED") { 
+        toast.success("Content published to all selected channels!"); 
+        client.invalidateQueries({ queryKey: ["user-content-history"] }); 
+        client.invalidateQueries({ queryKey: ["user-content-drafts"] }); 
+        onBack(); 
+    } else { 
+        const failedPlatforms = updated.platforms.filter((p: any) => p.status === "FAILED").map((p: any) => p.platform); 
+        if (updated.platforms.some((p: any) => p.status === "PENDING")) {
+            toast.error("Publishing is taking longer than expected. It will continue in the background.");
+            onBack();
+        } else {
+            toast.error(failedPlatforms.length > 0 ? `Publishing failed on: ${failedPlatforms.join(", ")}` : "Publishing failed on one or more channels."); 
+        }
+    } 
+  });
   return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}><button className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-700" onClick={onBack}><ChevronLeft size={17} />Back to Content Studio</button><div className="flex flex-wrap items-start justify-between gap-4"><PageHeading title="Preview & Customize" subtitle="Review and refine your content before publishing." /><div className="flex gap-3"><button className="secondary-button px-5" disabled={generating || !!busy} onClick={() => void run("save", () => persist())}><Save size={17} />{busy === "save" ? "Saving..." : "Save to Drafts"}</button></div></div>{generating && <div className="mt-5 flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-800 shadow-sm"><LoaderCircle className="animate-spin" size={20} /><div><p>Generating your prompt-based image and captions…</p><p className="mt-1 text-xs font-normal text-blue-600">The preview is open. It will update automatically when AI generation finishes.</p></div></div>}
     <div className="mt-6 grid overflow-hidden rounded-xl border border-slate-200 bg-white sm:grid-cols-4">{draft.platforms.map(platform => { const item = contentPlatforms.find(entry => entry.value === platform.platform); const Icon = item?.icon; const isFailed = platform.status === "FAILED"; return <button className={`flex items-center justify-center gap-2 border-b-2 px-4 py-4 text-sm font-bold transition ${active?.id === platform.id ? "border-blue-600 bg-blue-50/40 text-blue-700" : "border-transparent hover:bg-slate-50"} ${isFailed ? "text-red-600" : ""}`} key={platform.id} onClick={() => setActiveId(platform.id)}>{Icon ? <Icon className={isFailed ? "text-red-600" : item?.tone} size={19} /> : <b>𝕏</b>}{item?.label}{isFailed && <span title={platform.error_message || "Publish failed"}><InfoIcon size={15} className="ml-1 text-red-500" /></span>}</button> })}</div>
     <div className="mt-6 grid gap-6 xl:grid-cols-[1.02fr_.98fr]"><section><h2 className="mb-1 flex items-center gap-2 text-lg font-black">{ActiveIcon ? <ActiveIcon className={meta?.tone} size={20} /> : <b>𝕏</b>}{isFacebook ? "Facebook Post Preview" : isInstagram ? "Instagram Feed Preview" : isLinkedIn ? "LinkedIn Post Preview" : isX ? "X (Twitter) Post Preview" : `${meta?.label} Post Preview`}</h2>{(isFacebook || isLinkedIn || isX) && <p className="mb-4 text-sm text-slate-500">{isFacebook ? "This is how your post will appear in the Facebook feed." : isLinkedIn ? "This is how your post will appear on LinkedIn." : "This is how your post will appear on X."}</p>}<SocialContentPreview platform={active?.platform ?? "INSTAGRAM"} caption={caption} image={image} location={location} /></section><div className="space-y-4"><section className="sa-card p-5"><h2 className="font-black">{isFacebook || isLinkedIn || isX ? "Post Content" : "Caption"}</h2><label className="field mt-4">{isX && <span>Content</span>}{isLinkedIn && <span>Caption</span>}<textarea maxLength={contentLimit} rows={9} value={caption} onChange={event => active && setEdits(value => ({ ...value, [active.id]: event.target.value }))} /><small className="text-right">{caption.length} / {contentLimit}</small></label><div className="mt-4 flex flex-wrap justify-between gap-3"><button className="secondary-button px-4" disabled={!!busy} onClick={() => void regenerate(false, true)}><RefreshCw size={16} />{busy === "caption" ? "Regenerating..." : "Regenerate"}</button><button className="primary-button px-4" disabled={!!busy} onClick={() => void run("improve", () => persist())}><Sparkles size={16} />{isX ? "Improve Content" : "Improve Caption"}</button></div></section>
