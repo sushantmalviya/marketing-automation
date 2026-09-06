@@ -341,10 +341,12 @@ if _redis_url and _worker_enabled:
     CELERY_BROKER_URL = _redis_url
     CELERY_RESULT_BACKEND = _redis_url
     CELERY_TASK_ALWAYS_EAGER = False
+    CELERY_ALWAYS_EAGER = False
 else:
     CELERY_BROKER_URL = "memory://"
     CELERY_RESULT_BACKEND = None
     CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_ALWAYS_EAGER = True
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
