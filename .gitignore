@@ -83,7 +83,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# AI Coding Assistants / IDE Caches
+# AI Coding Assistants / IDE Caches / Planning
 .codex/
 .cursor/
 .gemini/
