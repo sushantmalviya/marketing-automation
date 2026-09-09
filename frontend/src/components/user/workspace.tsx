@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
 import { authService } from "@/services/auth.service";
 import { useDateRange } from "@/components/ui/date-range-picker";
+import { useAuth } from "@/providers/auth-provider";
 import { PromptEnhancerModal } from "@/components/user/prompt-enhancer-modal";
 import { TemplatePickerModal } from "@/components/modules/template-picker";
 
@@ -46,6 +47,15 @@ const customerValue = (data: Record<string, unknown>, ...keys: string[]) => { co
 const customerName = (data: Record<string, unknown>) => customerValue(data, "name", "full_name", "customer_name") || [customerValue(data, "first_name", "firstname"), customerValue(data, "last_name", "lastname")].filter(Boolean).join(" ") || "Customer";
 const renderCustomerText = (text: string, data: Record<string, unknown>) => text.replace(/\{\{(.*?)\}\}/g, (_, field: string) => customerValue(data, field.trim()));
 
+// Dummy trend data for sparklines
+const generateTrend = () => Array.from({ length: 8 }, () => Math.floor(Math.random() * 40) + 10);
+const sparklineData1 = generateTrend().map((v, i) => ({ i, v }));
+const sparklineData2 = generateTrend().map((v, i) => ({ i, v }));
+const sparklineData3 = generateTrend().map((v, i) => ({ i, v }));
+const sparklineData4 = generateTrend().map((v, i) => ({ i, v }));
+const sparklineData5 = generateTrend().map((v, i) => ({ i, v }));
+const sparklineData6 = generateTrend().map((v, i) => ({ i, v }));
+
 function useWorkspaceData(dateFrom?: string, dateTo?: string) {
   const dateParams = dateFrom && dateTo ? { date_from: dateFrom, date_to: dateTo } : {};
   const tasks = useQuery({
@@ -65,6 +75,7 @@ function useWorkspaceData(dateFrom?: string, dateTo?: string) {
 
 export function UserDashboard() {
   const { startDate, endDate, picker } = useDateRange();
+  const { user } = useAuth();
   const { tasks, campaigns, dashboard } = useWorkspaceData(startDate, endDate);
   const taskRows = useMemo(() => tasks.data ?? [], [tasks.data]); const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]);
   const pendingTasks = taskRows.filter(row => !["APPROVED", "COMPLETED"].includes(row.status)).length;
@@ -80,11 +91,69 @@ export function UserDashboard() {
   const statusData = useMemo(() => Object.entries(campaignRows.reduce<Record<string, number>>((result, row) => ({ ...result, [row.status]: (result[row.status] ?? 0) + 1 }), {})).map(([name, value]) => ({ name: pretty(name), value })), [campaignRows]);
   const loading = tasks.isLoading || campaigns.isLoading || dashboard.isLoading; const error = tasks.error || campaigns.error || dashboard.error;
   if (error) return <ErrorState error={error} />;
-  return <div><div className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><p className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.18em] text-emerald-600"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />Welcome back</p><h1 className="sa-title mt-4">USER DASHBOARD</h1><p className="sa-subtitle">Track your tasks, campaigns and performance in one place.</p></div>{picker}</div>
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{cards.map(([label, value, Icon, gradient, caption], index) => <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .05 }} className="sa-card overflow-hidden p-5" key={label}><div className={`grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-lg`}><Icon size={21} /></div><strong className="mt-5 block text-3xl text-slate-950">{loading ? "—" : value}</strong><p className="mt-1 text-sm font-bold">{label}</p><p className="mt-2 text-xs text-slate-500">{caption}</p></motion.article>)}</div>
-    <div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr]"><section className="sa-card p-6"><div className="mb-5"><h2 className="font-black">Completed campaigns per month</h2><p className="text-xs text-slate-500">Overview of completed campaigns over time</p></div><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthly}><defs><linearGradient id="userLine" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2563eb" stopOpacity={.25} /><stop offset="95%" stopColor="#2563eb" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: "white", strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div></section>
-      <section className="sa-card p-6"><h2 className="font-black">Campaign status overview</h2><p className="text-xs text-slate-500">Distribution of your campaigns by status</p><div className="mt-4 grid items-center md:grid-cols-[1fr_1fr]"><div className="relative h-56"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]} dataKey="value" innerRadius={58} outerRadius={88} paddingAngle={2}>{(statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]).map((_, index) => <Cell fill={statusData.length ? pieColors[index % pieColors.length] : "#e2e8f0"} key={index} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><b className="block text-2xl">{campaigns.data?.count ?? 0}</b><span className="text-xs text-slate-500">Total</span></div></div></div><div className="space-y-2">{statusData.map((row, index) => <div className="flex items-center gap-2 text-xs" key={row.name}><span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColors[index % pieColors.length] }} /><span className="flex-1 text-slate-600">{row.name}</span><b>{row.value}</b></div>)}</div></div></section></div>
-    <div className="mt-5 grid gap-5 xl:grid-cols-2"><DashboardTable title="My Tasks" href="/user/tasks" headers={["Task Title", "Priority", "Due Date", "Status"]} rows={taskRows.slice(0, 4).map(row => [row.task.title, <Badge key="p" className={priorityTone[row.task.priority]}>{pretty(row.task.priority)}</Badge>, new Date(row.task.due_date).toLocaleDateString(), <Badge key="s" className={taskTone[row.status]}>{pretty(row.status)}</Badge>])} /><DashboardTable title="Recent Campaigns" href="/user/campaigns" headers={["Campaign Name", "Audience", "Status", "Created"]} rows={campaignRows.slice(0, 4).map(row => [row.campaign_name, row.audience_name || "—", <Badge key="s" className={campaignTone[row.status]}>{pretty(row.status)}</Badge>, new Date(row.created_at).toLocaleDateString()])} /></div>
+
+  const adminCards = [
+    { label: "Assigned Tasks", value: taskRows.length, icon: ListChecks, bg: "bg-blue-100 dark:bg-blue-500/20", text: "text-blue-600 dark:text-blue-400", note: "Tasks assigned to you", sparklineColor: "#3b82f6", sparkData: sparklineData1 },
+    { label: "Pending Tasks", value: pendingTasks, icon: Clock3, bg: "bg-orange-100 dark:bg-orange-500/20", text: "text-orange-600 dark:text-orange-400", note: "Awaiting your action", sparklineColor: "#f97316", sparkData: sparklineData2 },
+    { label: "Total Campaigns", value: dashboard.data?.campaigns.total ?? campaigns.data?.count ?? campaignRows.length, icon: Megaphone, bg: "bg-indigo-100 dark:bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-400", note: "All campaigns created", sparklineColor: "#6366f1", sparkData: sparklineData3 },
+    { label: "Completed Campaigns", value: dashboard.data?.campaigns.completed ?? campaignRows.filter(row => row.status === "COMPLETED").length, icon: CheckCircle2, bg: "bg-emerald-100 dark:bg-emerald-500/20", text: "text-emerald-600 dark:text-emerald-400", note: "Successfully completed", sparklineColor: "#10b981", sparkData: sparklineData4 },
+    { label: "Scheduled Campaigns", value: dashboard.data?.campaigns.scheduled ?? campaignRows.filter(row => row.status === "SCHEDULED").length, icon: CalendarDays, bg: "bg-violet-100 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400", note: "Upcoming scheduled", sparklineColor: "#8b5cf6", sparkData: sparklineData5 },
+    { label: "Pending Approval", value: campaignRows.filter(row => row.status === "PENDING_APPROVAL").length, icon: Send, bg: "bg-rose-100 dark:bg-rose-500/20", text: "text-rose-600 dark:text-rose-400", note: "Awaiting admin approval", sparklineColor: "#f43f5e", sparkData: sparklineData6 },
+  ];
+
+  return <div className="mx-auto max-w-7xl">
+    {/* ── Heading ── */}
+    <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5
+          text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+          LIVE WORKSPACE
+        </span>
+        <h1 className="page-title mt-2">
+          Welcome back, <span className="text-indigo-600 dark:text-indigo-400 mx-1.5">{user?.first_name || "User"}</span>! 👋
+        </h1>
+        <p className="page-subtitle">Track your tasks, campaigns and performance in one place.</p>
+      </div>
+      <div className="bg-white dark:bg-[#0c1222] rounded-lg shadow-sm border border-slate-200 dark:border-white/10 p-1">
+        {picker}
+      </div>
+    </div>
+
+    {/* ── Stat cards ── */}
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+      {adminCards.map((card, i) => (
+        <motion.div
+          key={card.label}
+          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.4 }}
+          className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-shadow hover:shadow-[0_8px_20px_rgb(0,0,0,0.06)] dark:bg-[#0c1222] dark:border-white/5"
+        >
+          <div className="flex items-start justify-between">
+            <div className={`grid h-10 w-10 place-items-center rounded-xl ${card.bg} ${card.text}`}>
+              <card.icon size={20} />
+            </div>
+          </div>
+          <strong className="mt-4 block text-[28px] font-bold tracking-tight text-slate-900 dark:text-white">
+            {loading ? "—" : card.value}
+          </strong>
+          <p className="mt-0.5 text-[14px] font-semibold text-slate-800 dark:text-slate-200">{card.label}</p>
+          <div className="flex items-end justify-between mt-1">
+            <p className="text-[12px] text-slate-500 dark:text-slate-400">{card.note}</p>
+            <div className="h-8 w-20">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={card.sparkData}>
+                  <Line type="monotone" dataKey="v" stroke={card.sparklineColor} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+
+    <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]"><section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"><div className="mb-5"><h2 className="text-[16px] font-bold text-slate-900 dark:text-white">Completed campaigns per month</h2><p className="text-[12px] text-slate-500 font-medium">Overview of completed campaigns over time</p></div><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthly}><defs><linearGradient id="userLine" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2563eb" stopOpacity={.25} /><stop offset="95%" stopColor="#2563eb" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: "white", strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"><h2 className="text-[16px] font-bold text-slate-900 dark:text-white">Campaign status overview</h2><p className="text-[12px] text-slate-500 font-medium">Distribution of your campaigns by status</p><div className="mt-4 grid items-center md:grid-cols-[1fr_1fr]"><div className="relative h-56"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]} dataKey="value" innerRadius={58} outerRadius={88} paddingAngle={2}>{(statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]).map((_, index) => <Cell fill={statusData.length ? pieColors[index % pieColors.length] : "#e2e8f0"} key={index} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><b className="block text-2xl dark:text-white">{campaigns.data?.count ?? 0}</b><span className="text-xs text-slate-500">Total</span></div></div></div><div className="space-y-2">{statusData.map((row, index) => <div className="flex items-center gap-2 text-xs" key={row.name}><span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColors[index % pieColors.length] }} /><span className="flex-1 text-slate-600 dark:text-slate-400">{row.name}</span><b className="dark:text-slate-300">{row.value}</b></div>)}</div></div></section></div>
+    <div className="mt-6 grid gap-6 xl:grid-cols-2"><DashboardTable title="My Tasks" href="/user/tasks" headers={["Task Title", "Priority", "Due Date", "Status"]} rows={taskRows.slice(0, 4).map(row => [row.task.title, <Badge key="p" className={priorityTone[row.task.priority]}>{pretty(row.task.priority)}</Badge>, new Date(row.task.due_date).toLocaleDateString(), <Badge key="s" className={taskTone[row.status]}>{pretty(row.status)}</Badge>])} /><DashboardTable title="Recent Campaigns" href="/user/campaigns" headers={["Campaign Name", "Audience", "Status", "Created"]} rows={campaignRows.slice(0, 4).map(row => [row.campaign_name, row.audience_name || "—", <Badge key="s" className={campaignTone[row.status]}>{pretty(row.status)}</Badge>, new Date(row.created_at).toLocaleDateString()])} /></div>
   </div>;
 }
 
@@ -884,7 +953,7 @@ function WizardProgress({ step }: { step: number }) { const stages = ["Campaign 
 
 function PreviewStat({ icon: Icon, label, value, tone = "blue" }: { icon: React.ComponentType<{ size?: number }>; label: string; value: string; tone?: "blue" | "orange" }) { return <div className="flex min-h-20 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${tone === "orange" ? "bg-orange-50 text-orange-500" : "bg-blue-50 text-blue-600"}`}><Icon size={21} /></span><div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><strong className="mt-1 block truncate text-sm text-slate-950" title={value}>{value}</strong></div></div> }
 
-function PageHeading({ title, subtitle }: { title: string; subtitle: string }) { return <div><h1 className="sa-title normal-case">{title}</h1><p className="sa-subtitle">{subtitle}</p></div> }
+function PageHeading({ title, subtitle }: { title: string; subtitle: string }) { return <div><span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span><h1 className="sa-title mt-2 normal-case">{title}</h1><p className="sa-subtitle">{subtitle}</p></div> }
 function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) { return <label className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} /><input className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100" placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} /></label> }
 function Select({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <select className="h-12 rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" value={value} onChange={event => onChange(event.target.value)}><option value="">{label}</option>{options.map(option => <option value={option} key={option}>{pretty(option)}</option>)}</select> }
 function Badge({ className = "", children }: { className?: string; children: React.ReactNode }) { return <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span> }

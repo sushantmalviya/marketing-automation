@@ -115,8 +115,9 @@ export function TemplatesManager() {
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
       <header className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="sa-title">Templates</h1>
-          <p className="text-slate-500 mt-1">Manage reusable message templates for your campaigns and automations.</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
+          <h1 className="sa-title mt-2 normal-case">Templates</h1>
+          <p className="sa-subtitle mt-1">Manage reusable message templates for your campaigns and automations.</p>
         </div>
         <button className="primary-button" onClick={() => setCreateOpen(true)}>
           <Plus size={18} /> New Template

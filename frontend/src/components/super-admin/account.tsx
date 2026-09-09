@@ -81,8 +81,9 @@ export function SuperAdminAccount() {
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="sa-title">ACCOUNT SETTINGS</h1>
-          <p className="sa-subtitle">{user.role.replaceAll("_", " ")} · {user.email}</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
+          <h1 className="sa-title mt-2 normal-case">Account Settings</h1>
+          <p className="sa-subtitle mt-1">{user.role.replaceAll("_", " ")} · {user.email}</p>
         </div>
         <DarkModeToggle />
       </div>

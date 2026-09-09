@@ -597,8 +597,9 @@ export function UserAssetLibrary() {
       {/* ── Page Header ── */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="sa-title">Asset Library</h1>
-          <p className="sa-subtitle">Organize, manage and reuse your content assets across campaigns.</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
+          <h1 className="sa-title mt-2 normal-case">Asset Library</h1>
+          <p className="sa-subtitle mt-1">Organize, manage and reuse your content assets across campaigns.</p>
         </div>
         <div className="relative">
           <button
