@@ -74,10 +74,12 @@ export default function LoginPage() {
         <section className="login-story">
 
           {/* Brand */}
-          <motion.div className="login-brand"
+          <motion.div className="login-brand flex items-center gap-3"
             initial={{opacity:0,x:-18}} animate={{opacity:1,x:0}} transition={{duration:.6}}>
-            <span><Zap size={22}/></span>
-            <strong>Auto-market</strong>
+            <div className="h-24 w-24 flex items-center justify-center drop-shadow-md">
+              <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
+            </div>
+            <strong className="text-[32px]">MARKETING-AUTOMATION</strong>
           </motion.div>
 
           {/* Heading — own flex item, cannot overlap canvas */}

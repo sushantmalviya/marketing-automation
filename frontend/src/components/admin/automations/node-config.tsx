@@ -279,7 +279,7 @@ function SendEmailConfig({ formData, onChange }: { formData: any, onChange: (k: 
             <input 
               type="text" 
               className="sa-input w-full text-sm"
-              placeholder="e.g. Welcome to Auto-Market!"
+              placeholder="e.g. Welcome to MARKETING-AUTOMATION!"
               value={formData.customSubject || ""}
               onChange={(e) => onChange("customSubject", e.target.value)}
             />

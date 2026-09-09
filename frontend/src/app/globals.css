@@ -241,9 +241,7 @@ html.dark .bi-textarea:focus { border-color:#a855f7; box-shadow:0 0 0 3px rgb(16
 
 /* Admin motion system — compact, high-contrast SaaS dashboard treatment */
 .admin-motion-shell {
-  background:
-    radial-gradient(circle at 78% -10%, rgb(206 225 255 / .62), transparent 28rem),
-    linear-gradient(135deg, #f8fbff 0%, #f3f7fc 52%, #f8fafc 100%);
+  background: #f9fafb;
   font-size: 14px;
 }
 .admin-motion-shell main { isolation:isolate; }
@@ -912,3 +910,12 @@ html.dark .shadow-lg  { box-shadow: 0 12px 36px rgba(0,0,0,.6) !important; }
 html.dark .shadow-xl  { box-shadow: 0 20px 56px rgba(0,0,0,.65) !important; }
 html.dark .shadow-2xl { box-shadow: 0 32px 80px rgba(0,0,0,.7) !important; }
 
+
+@layer components {
+  .page-title, .sa-title {
+    @apply flex items-center text-2xl md:text-[26px] font-bold text-slate-800 dark:text-slate-100 tracking-tight;
+  }
+  .page-subtitle, .sa-subtitle {
+    @apply text-[14px] text-slate-500 dark:text-slate-400 mt-1 font-medium;
+  }
+}

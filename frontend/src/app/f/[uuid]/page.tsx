@@ -179,7 +179,7 @@ export default function PublicFormPage() {
           </div>
         </div>
         <p className="text-center text-sm text-slate-400 mt-8">
-          Powered by Auto-Market
+          Powered by MARKETING-AUTOMATION
         </p>
       </div>
     </div>
