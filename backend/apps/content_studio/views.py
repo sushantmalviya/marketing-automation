@@ -141,7 +141,6 @@ class ContentDraftViewSet(viewsets.ModelViewSet):
 
         qs = filter_by_tenant(
             ContentDraft.objects.select_related('owner').prefetch_related(
-                'platforms__caption',
                 'platforms__images__asset',
                 'approvals',
                 'versions',

@@ -29,6 +29,11 @@ class MetaAdAccount(TimeStampedUUIDModel):
         blank=True,
         null=True
     )
+    amount_spent = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0.00
+    )
     is_active = models.BooleanField(
         default=True
     )
@@ -54,4 +59,36 @@ class MetaUserCredential(TimeStampedUUIDModel):
 
     class Meta:
         db_table = "ads_meta_credentials"
+
+
+class MetaPixelSettings(TimeStampedUUIDModel):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="meta_pixel_settings"
+    )
+    pixel_id = models.CharField(max_length=255, blank=True, null=True)
+    access_token = models.TextField(blank=True, null=True)
+    test_event_code = models.CharField(max_length=100, blank=True, null=True)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "ads_meta_pixel_settings"
+
+
+class MetaCapiEventLog(TimeStampedUUIDModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="meta_capi_event_logs"
+    )
+    event_name = models.CharField(max_length=100)
+    pixel_id = models.CharField(max_length=255)
+    test_event_code = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=50, default='Success')
+    response_payload = models.JSONField(blank=True, null=True)
+
+    class Meta:
+        db_table = "ads_meta_capi_event_logs"
+
 

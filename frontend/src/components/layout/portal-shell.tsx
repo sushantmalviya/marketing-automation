@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3, Bot, ChevronLeft, ContactRound, CreditCard,
+  BarChart3, Bot, ChevronLeft, ContactRound, CreditCard, FileText,
   FolderOpen, Gauge, ListChecks, LogOut, Megaphone,
   Menu, Settings, Share2, SquarePen, Tags, TrendingUp, Users, Workflow, X,
   Search, Bell, Moon, Sun
@@ -20,7 +20,7 @@ const labels: Record<ModuleKey, string> = {
   analytics:"Analytics", audiences:"Segmentation", automations:"Automations",
   campaigns:"Campaigns", channels:"Channels", communications:"Communications",
   content:"Content Studio", customers:"Customers", forms:"Forms",
-  tasks:"Tasks", templates:"Templates", ads:"Ads",
+  tasks:"Tasks", templates:"Templates", assets:"Asset Library",
 };
 
 const superNavigation = [
@@ -33,53 +33,31 @@ const superNavigation = [
 ];
 
 const adminNavigation = [
-  { group: "", items: [{key:"dashboard", label:"Dashboard", icon:Gauge}] },
-  { group: "MANAGEMENT", items: [
-    {key:"users",       label:"Team Management",     icon:Users},
-    {key:"contacts",    label:"Contacts",            icon:ContactRound},
-    {key:"audiences",   label:"Segmentation",        icon:Tags},
-    {key:"tasks",       label:"Task Management",     icon:ListChecks},
-    {key:"forms",       label:"Forms",               icon:FolderOpen}
-  ]},
-  { group: "CAMPAIGNS", items: [
-    {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
-    {key:"email-campaigns",label:"Email Campaigns",  icon:Share2}, 
-    {key:"sms-campaigns",  label:"SMS Campaigns",    icon:Share2}, 
-    {key:"whatsapp-campaigns",label:"WhatsApp Campaigns",icon:Share2}, 
-    {key:"landing-pages",  label:"Landing Pages",    icon:SquarePen}  
-  ]},
-  { group: "AUTOMATION", items: [
-    {key:"automations", label:"Workflow Automation", icon:Workflow},
-    {key:"drip-campaigns",label:"Drip Campaigns",    icon:Workflow}, 
-    {key:"triggers",    label:"Triggers",            icon:Bot}       
-  ]},
-  { group: "TOOLS", items: [
-    {key:"templates",   label:"Templates",           icon:FolderOpen},
-    {key:"channels",    label:"Social Publisher",    icon:Share2},
-    {key:"ads",         label:"Ads Manager",         icon:Megaphone}
-  ]},
-  { group: "ANALYTICS", items: [
-    {key:"reports",     label:"Reports",             icon:ListChecks},
-    {key:"analytics",   label:"Analytics",           icon:BarChart3}
-  ]},
-  { group: "SETTINGS", items: [
-    {key:"integrations",label:"Integrations",        icon:Settings},
-    {key:"account",     label:"Settings",            icon:Settings}
-  ]}
+  {key:"dashboard",   label:"Dashboard",           icon:Gauge},
+  {key:"users",       label:"Team Management",     icon:Users},
+  {key:"contacts",    label:"Contacts",            icon:ContactRound},
+  {key:"audiences",   label:"Segmentation",        icon:Tags},
+  {key:"tasks",       label:"Task Management",     icon:ListChecks},
+  {key:"forms",       label:"Forms",               icon:ListChecks},
+  {key:"templates",   label:"Templates",           icon:FileText},
+  {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
+  {key:"ads",         label:"Ads",                 icon:Megaphone},
+  {key:"automations", label:"Workflow Automation", icon:Workflow},
+  {key:"channels",    label:"Social Publisher",    icon:Share2},
+  {key:"assets",      label:"Asset Library",       icon:FolderOpen},
+  {key:"analytics",   label:"Analytics",           icon:BarChart3},
+  {key:"account",     label:"Account",             icon:Settings},
 ];
 
 const userNavigation = [
-  { group: "", items: [{key:"dashboard", label:"Dashboard", icon:Gauge}] },
-  { group: "MY WORK", items: [
-    {key:"tasks",       label:"My Tasks",       icon:ListChecks},
-    {key:"campaigns",   label:"Campaigns",      icon:Megaphone},
-    {key:"content",     label:"Content Studio", icon:SquarePen},
-    {key:"assets",      label:"Asset Library",  icon:FolderOpen},
-    {key:"performance", label:"My Performance", icon:TrendingUp}
-  ]},
-  { group: "SYSTEM", items: [
-    {key:"account",     label:"Settings",       icon:Settings}
-  ]}
+  {key:"dashboard",   label:"Dashboard",      icon:Gauge},
+  {key:"tasks",       label:"My Tasks",       icon:ListChecks},
+  {key:"templates",   label:"Templates",      icon:FileText},
+  {key:"campaigns",   label:"Campaigns",      icon:Megaphone},
+  {key:"content",     label:"Content Studio", icon:SquarePen},
+  {key:"assets",      label:"Asset Library",  icon:FolderOpen},
+  {key:"performance", label:"My Performance", icon:TrendingUp},
+  {key:"account",     label:"Account",        icon:Settings},
 ];
 
 function initials(email: string, first?: string, last?: string) {
@@ -143,7 +121,7 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
 
   const navGroups = rolePath === "super-admin" 
     ? superNavigation 
-    : rolePath === "admin" ? adminNavigation : userNavigation;
+    : [{ items: rolePath === "admin" ? adminNavigation : userNavigation }];
 
   /* ── sidebar JSX ── */
   const sidebar = (

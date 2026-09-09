@@ -31,11 +31,11 @@ from rest_framework import status as _status
 from apps.asset_library.models import Asset as _Asset
 from apps.asset_library.serializers import AssetSerializer as _AssetSer, AssetCreateSerializer as _AssetCreateSer
 
-def _auto_type(name):
+def _auto_type(name, mime=None):
     ext = os.path.splitext(name)[1].lower().lstrip(".")
-    if ext in {"jpg","jpeg","png","webp","gif","svg","bmp"}: return _Asset.AssetType.IMAGE
-    if ext in {"mp4","mov","avi","mkv","webm","m4v"}:        return _Asset.AssetType.VIDEO
-    if ext in {"pdf","doc","docx","xls","xlsx","ppt","pptx","txt","csv"}: return _Asset.AssetType.DOCUMENT
+    if ext in {"jpg","jpeg","png","webp","gif","svg","bmp"} or (mime and mime.startswith("image/")): return _Asset.AssetType.IMAGE
+    if ext in {"mp4","mov","avi","mkv","webm","m4v"} or (mime and mime.startswith("video/")):        return _Asset.AssetType.VIDEO
+    if ext in {"pdf","doc","docx","xls","xlsx","ppt","pptx","txt","csv"} or (mime and ("text/" in mime or "pdf" in mime or "spreadsheet" in mime or "word" in mime)): return _Asset.AssetType.DOCUMENT
     return _Asset.AssetType.OTHER
 
 class _AssetPager(_Pager):
@@ -61,9 +61,9 @@ class _AssetListCreate(_APIView):
         if f:
             ext = os.path.splitext(f.name)[1]
             saved = _storage.save(f"assets/{_uuid.uuid4().hex}{ext}", f)
-            file_url = request.build_absolute_uri(_settings.MEDIA_URL + saved)
+            file_url = _storage.url(saved)
         asset = _Asset.objects.create(name=d["name"], file_url=file_url,
-            asset_type=d.get("asset_type") or _auto_type(d["name"]),
+            asset_type=d.get("asset_type") or _auto_type(f.name if f else d["name"], f.content_type if f else None),
             is_personal=d.get("is_personal", False), uploaded_by=request.user,
             path=d.get("path", "/"), tags=d.get("tags", []))
         return _Resp(_AssetSer(asset).data, status=_status.HTTP_201_CREATED)
@@ -143,7 +143,7 @@ urlpatterns = [
         include("apps.analytics.urls"),
     ),
     path("api/templates/", include("apps.campaigns.urls.templates")),
-    path("api/ads/", include("apps.ads.urls")),
+    path("api/meta-ads/", include("apps.ads.urls")),
 
     path(
         "api/dashboard/",

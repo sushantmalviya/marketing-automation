@@ -20,9 +20,25 @@ load_dotenv(BASE_DIR / ".env", override=True)
  
 SECRET_KEY = os.getenv("SECRET_KEY")
  
-DEBUG = os.getenv("DEBUG", "False") == "True"
+# DEBUG should be False in production (e.g., set DEBUG=False in Render env vars).
+# Locally, it can default to True if not set.
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
+
+PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8000")
  
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".ngrok-free.dev","automarket-api.onrender.com"]
+# This setup allows the project to run locally, on ngrok, and on Render simultaneously
+# without needing to comment/uncomment anything.
+ALLOWED_HOSTS = [
+    "127.0.0.1", 
+    "localhost", 
+    ".ngrok-free.dev",
+    ".onrender.com"
+]
+
+# Allow adding more hosts dynamically via environment variable
+_env_hosts = os.getenv("ALLOWED_HOSTS", "")
+if _env_hosts:
+    ALLOWED_HOSTS.extend([h.strip() for h in _env_hosts.split(",") if h.strip()])
  
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -30,8 +46,14 @@ HF_TEXT_MODEL = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "gemini")
  
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+META_APP_ID = os.getenv("META_APP_ID")
+META_APP_SECRET = os.getenv("META_APP_SECRET")
+META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN", "secure_token")
+META_REDIRECT_URI = os.getenv("META_REDIRECT_URI", "http://localhost:3000/admin/ads")
+META_MOCK_MODE = os.getenv("META_MOCK_MODE", "False").lower() in ("true", "1", "t")
  
-# Auto-reload trigger
+# Auto-reload trigger (env change detected)
 # --------------------------------------------------
 # Applications
 # --------------------------------------------------
@@ -42,7 +64,9 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "cloudinary_storage",
     "django.contrib.staticfiles",
+    "cloudinary",
     "django.contrib.postgres",
  
     "apps.common",
@@ -173,9 +197,26 @@ USE_TZ = True
 # --------------------------------------------------
  
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles") # Required for collectstatic in production (Render)
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Cloudinary Configuration
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
+}
+
+STORAGES = {
+    "default": {
+        "BACKEND": "apps.common.storage.AutoCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
  
 # --------------------------------------------------
 # Default Primary Key
@@ -189,11 +230,30 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
  
 AUTH_USER_MODEL = "accounts.User"
  
+# These origins can access the API. It includes both local frontend and deployed Vercel frontend.
+# No need to comment/uncomment when switching between local and deployed.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://your-project.vercel.app",
+    "http://127.0.0.1:3000",
+    "https://marketing-automation-uo4q.onrender.com",
+    "https://marketing-automation-smoky.vercel.app",
 ]
+
+# Allow adding more CORS origins dynamically via environment variable
+_env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+if _env_cors:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in _env_cors.split(",") if o.strip()])
+
+# Required if your frontend sends cookies or authorization headers
 CORS_ALLOW_CREDENTIALS = True
+ 
+# CSRF Trusted Origins are required for Django admin and API POST requests from the frontend in production
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://marketing-automation-uo4q.onrender.com",
+    "https://marketing-automation-smoky.vercel.app",
+]
  
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -236,6 +296,16 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
  
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL",EMAIL_HOST_USER)
  
+# --------------------------------------------------
+# IMAP Polling Configuration (for Bounces & Replies)
+# --------------------------------------------------
+IMAP_HOST = os.getenv("IMAP_HOST")
+IMAP_PORT = int(os.getenv("IMAP_PORT", 993))
+IMAP_USER = os.getenv("IMAP_USER", EMAIL_HOST_USER)
+IMAP_PASSWORD = os.getenv("IMAP_PASSWORD", EMAIL_HOST_PASSWORD)
+TRACKING_EMAIL = os.getenv("TRACKING_EMAIL", IMAP_USER) # Generic catch-all or dedicated inbox for tracking
+
+ 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -264,9 +334,19 @@ CACHES = {
 # --------------------------------------------------
 # Celery Configuration for Demo (Bypass Redis)
 # --------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = False
-CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+_redis_url = os.environ.get("REDIS_URL")
+_worker_enabled = os.environ.get("CELERY_WORKER_ENABLED", "false").lower() == "true"
+
+if _redis_url and _worker_enabled:
+    CELERY_BROKER_URL = _redis_url
+    CELERY_RESULT_BACKEND = _redis_url
+    CELERY_TASK_ALWAYS_EAGER = False
+    CELERY_ALWAYS_EAGER = False
+else:
+    CELERY_BROKER_URL = "memory://"
+    CELERY_RESULT_BACKEND = None
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_ALWAYS_EAGER = True
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
