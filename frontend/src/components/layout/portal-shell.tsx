@@ -121,7 +121,7 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
 
   const navGroups = rolePath === "super-admin" 
     ? superNavigation 
-    : [{ items: rolePath === "admin" ? adminNavigation : userNavigation }];
+    : [{ group: "", items: rolePath === "admin" ? adminNavigation : userNavigation }];
 
   /* ── sidebar JSX ── */
   const sidebar = (
