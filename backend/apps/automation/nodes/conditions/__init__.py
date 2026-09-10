@@ -54,4 +54,7 @@ CONDITION_REGISTRY = {
 
     "ConditionSplit":
         CommunicationEventCondition(),
+
+    "CONDITION_SPLIT":
+        CommunicationEventCondition(),
 }

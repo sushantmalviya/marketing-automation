@@ -25,7 +25,7 @@ function val(data: Record<string, unknown>, keys: string[], fallback = "") {
 }
 function normalize(row: RecordRow): Contact {
   const rawTags = row.data.tags;
-  const src = row.data.__source__;
+  const src = (row.data.__source__ || row.data._source) as string | undefined;
   return {
     name:     val(row.data, ["name","full_name","Name","Full Name"], "Unnamed contact"),
     email:    val(row.data, ["email","Email","email_address"]),
@@ -34,7 +34,7 @@ function normalize(row: RecordRow): Contact {
     list:     val(row.data, ["list","List","segment"], "General"),
     score:    Number(val(row.data, ["score","Score"], "0")) || 0,
     status:   val(row.data, ["status","Status"], "Active"),
-    activity: src === "created" ? "Created" : src === "imported" ? "Imported" : val(row.data, ["activity","Activity"], "Imported contact"),
+    activity: src === "created" ? "Created" : src === "imported" ? "Imported" : src === "form" ? "Form Submission" : src === "meta" || src === "meta_sync" ? "Meta Lead" : val(row.data, ["activity","Activity"], "Imported contact"),
   };
 }
 

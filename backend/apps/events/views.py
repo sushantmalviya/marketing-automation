@@ -50,6 +50,7 @@ from django.views.decorators.csrf import csrf_exempt
 TRANSPARENT_1X1_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
 
 from apps.communications.models import CommunicationEvent
+from apps.automation.tasks_resume import resume_single_execution
 
 @method_decorator(csrf_exempt, name='dispatch')
 class EmailOpenTrackingView(APIView):
@@ -57,7 +58,6 @@ class EmailOpenTrackingView(APIView):
     
     def get(self, request, payload):
         try:
-            # payload is actually the event.id (UUID)
             comm_event = CommunicationEvent.objects.get(id=payload)
             SystemEvent.objects.create(
                 event_type=SystemEvent.EventType.COMMUNICATION,
@@ -65,6 +65,11 @@ class EmailOpenTrackingView(APIView):
                 user_identifier=comm_event.recipient, # We use the email as identifier
                 metadata={"communication_event_id": str(comm_event.id)},
             )
+            if comm_event.execution and comm_event.execution.status == "WAITING":
+                try:
+                    resume_single_execution(comm_event.execution.id, force=True)
+                except Exception:
+                    pass
         except CommunicationEvent.DoesNotExist:
             pass
             
@@ -87,6 +92,11 @@ class EmailClickTrackingView(APIView):
                     "target_url": target_url
                 },
             )
+            if comm_event.execution and comm_event.execution.status == "WAITING":
+                try:
+                    resume_single_execution(comm_event.execution.id, force=True)
+                except Exception:
+                    pass
         except CommunicationEvent.DoesNotExist:
             pass
             

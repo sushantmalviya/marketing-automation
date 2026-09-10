@@ -27,6 +27,9 @@ ACTION_REGISTRY = {
     "SEND_WHATSAPP":
         SendWhatsAppAction(),
 
+    "SEND_WHATS_APP":
+        SendWhatsAppAction(),
+
     "SEND_NOTIFICATION":
         SendNotificationAction(),
 
@@ -36,7 +39,13 @@ ACTION_REGISTRY = {
     "UPDATE_USER_PROPERTY":
         UpdateUserPropertyAction(),
 
+    "UPDATE_CONTACT":
+        UpdateUserPropertyAction(),
+
     "SendToCRM":
+        SyncToCRMAction(),
+
+    "SEND_TO_CRM":
         SyncToCRMAction(),
 
     "INTERNAL_API_CALL":

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiClient } from "@/services/api-client";
+import { apiClient, parseApiError } from "@/services/api-client";
 import { Loader2, CheckCircle2 } from "lucide-react";
 
 export default function PublicFormPage() {
@@ -31,7 +31,8 @@ export default function PublicFormPage() {
       setSubmitted(true);
     },
     onError: (err: any) => {
-      alert(err.response?.data?.detail || "Failed to submit form. Please try again.");
+      const msg = parseApiError(err);
+      alert(msg || "Failed to submit form. Please try again.");
     }
   });
 

@@ -29,8 +29,10 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8000")
 # This setup allows the project to run locally, on ngrok, and on Render simultaneously
 # without needing to comment/uncomment anything.
 ALLOWED_HOSTS = [
+    "*",
     "127.0.0.1", 
     "localhost", 
+    "testserver",
     ".ngrok-free.dev",
     ".onrender.com"
 ]

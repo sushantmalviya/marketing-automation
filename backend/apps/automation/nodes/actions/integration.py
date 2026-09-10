@@ -8,7 +8,7 @@ class SyncToCRMAction:
     def execute(self, execution, node, config):
         # We assume `execution.contact` is the contact currently passing through the automation.
         # If your execution model stores it differently, adjust accordingly.
-        contact = getattr(execution, "contact", None)
+        contact = getattr(execution, "contact", None) or (execution.context.get("contact") if isinstance(execution.context, dict) else None)
         
         if not contact:
             return {
@@ -16,16 +16,34 @@ class SyncToCRMAction:
                 "message": "No contact associated with this execution. Cannot sync to CRM.",
             }
 
+        if isinstance(contact, dict):
+            email = contact.get("email") or contact.get("Email")
+            name = contact.get("name") or contact.get("Name") or ""
+            phone = contact.get("phone") or contact.get("phone_no") or ""
+            tags = contact.get("tags") or []
+            contact_id = contact.get("id", "")
+        else:
+            email = getattr(contact, "email", None)
+            name = f"{getattr(contact, 'first_name', '')} {getattr(contact, 'last_name', '')}".strip() or getattr(contact, "name", "")
+            phone = getattr(contact, "phone_no", getattr(contact, "phone", ""))
+            tags = [tag.name for tag in contact.tags.all()] if hasattr(contact, 'tags') else []
+            contact_id = getattr(contact, "id", "")
+
+        if not email:
+            return {
+                "success": False,
+                "message": "No contact email address associated with this execution.",
+            }
+
         # Format the exact JSON structure the internal CRM expects
         payload_data = {
             "source": "Marketing Automation",
             "lead": {
-                "id": contact.id,
-                "first_name": contact.first_name,
-                "last_name": contact.last_name,
-                "email": contact.email,
-                "phone": contact.phone_no,
-                "tags": [tag.name for tag in contact.tags.all()] if hasattr(contact, 'tags') else [],
+                "id": str(contact_id),
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "tags": tags,
             }
         }
         

@@ -1,6 +1,6 @@
 from datetime import timedelta
-
 from django.utils import timezone
+from django.conf import settings
 
 
 class WaitNode:
@@ -44,6 +44,11 @@ class WaitNode:
                 "current_node_id",
             ]
         )
+
+        is_eager = getattr(settings, "CELERY_TASK_ALWAYS_EAGER", True)
+        if is_eager:
+            from apps.automation.tasks_resume import schedule_execution_resume
+            schedule_execution_resume(str(execution.id), delay.total_seconds())
 
         return {
             "success": True,

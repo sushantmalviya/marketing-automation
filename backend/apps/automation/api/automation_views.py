@@ -14,6 +14,7 @@ from .serializers import (
 
 from apps.automation.services.validator import (
     validate_workflow,
+    WorkflowValidationError,
 )
 
 from apps.automation.services.dispatcher import (
@@ -129,15 +130,14 @@ class ValidateAutomationView(APIView):
 
     def post(self, request, pk):
         permitted_automation(request.user, pk, can_edit)
-        validate_workflow(pk)
+        try:
+            validate_workflow(pk)
+        except WorkflowValidationError as err:
+            return Response({"error": str(err)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
-
             "success": True,
-
-            "message":
-                "Workflow validated."
-
+            "message": "Workflow validated."
         })
 
 
@@ -147,7 +147,10 @@ class PublishAutomationView(APIView):
 
         automation = permitted_automation(request.user, pk, can_edit)
 
-        validate_workflow(pk)
+        try:
+            validate_workflow(pk)
+        except WorkflowValidationError as err:
+            return Response({"error": str(err)}, status=status.HTTP_400_BAD_REQUEST)
 
         automation.status = (
             "PUBLISHED"
@@ -160,9 +163,7 @@ class PublishAutomationView(APIView):
         automation.save()
 
         return Response({
-
             "success": True
-
         })
 
 

@@ -51,9 +51,19 @@ class WorkflowParser:
         for edge in self.edges:
             source = edge.get("source")
             if source in graph:
+                source_handle = str(edge.get("sourceHandle") or edge.get("edge_type") or "").lower()
+                edge_type = "DEFAULT"
+                if source_handle in ("true", "yes", "success", "on_true"):
+                    edge_type = "YES"
+                elif source_handle in ("false", "no", "failed", "on_false"):
+                    edge_type = "NO"
+                else:
+                    edge_type = str(edge.get("edge_type") or "DEFAULT").upper()
+
                 graph[source].append({
                     "target": edge.get("target"),
-                    "type": edge.get("edge_type", "DEFAULT"),
+                    "type": edge_type,
+                    "source_handle": source_handle,
                 })
 
         return graph

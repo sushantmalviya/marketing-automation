@@ -106,15 +106,20 @@ class CommunicationEventCondition:
         
         target_event = f"{channel}_{event_type}"
         
-        contact = getattr(execution, "contact", None)
-        if not contact:
+        context = getattr(execution, "context", {}) or {}
+        contact = context.get("contact") or {}
+        contact_id = str(contact.get("id") or "")
+        contact_email = str(contact.get("email") or context.get("email") or "")
+        
+        if not contact_id and not contact_email:
             return False
             
         # Check if event happened after automation started
+        from django.db.models import Q
         has_event = SystemEvent.objects.filter(
+            Q(user_identifier=contact_id) | Q(user_identifier=contact_email),
             event_type="COMMUNICATION",
             event_name=target_event,
-            user_identifier=str(contact.id),
             created_at__gte=execution.started_at
         ).exists()
         

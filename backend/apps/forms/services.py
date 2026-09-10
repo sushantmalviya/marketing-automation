@@ -193,9 +193,6 @@ class FormService:
                 "Form has expired."
             )
 
-        # validate field ownership
-        valid_field_ids = {str(f.get("id", "")) for f in form.fields_schema}
-
         submission = FormSubmission.objects.create(
             form=form,
             ip_address=ip_address,
@@ -205,23 +202,21 @@ class FormService:
 
         answers_dict = {}
 
-        for item in answers:
-            if "field_id" not in item:
-                raise ValidationError({"answers": [{"field_id": "This field is required."}]})
-            field_id = str(item["field_id"])
-            answers_dict[field_id] = item.get("answer", "")
-
-            if field_id not in valid_field_ids:
-                raise ValidationError(
-                    f"Invalid field id: {field_id}"
-                )
+        if isinstance(answers, list):
+            for item in answers:
+                if isinstance(item, dict) and "field_id" in item:
+                    field_id = str(item["field_id"])
+                    answers_dict[field_id] = item.get("answer", "")
+        elif isinstance(answers, dict):
+            for k, v in answers.items():
+                answers_dict[str(k)] = v
 
         submission.answers = answers_dict
         submission.save(update_fields=['answers'])
         
         # Create a CustomerRecord for this submission
         fields_map = {str(f.get('id', '')): f for f in form.fields_schema}
-        customer_data = {"_source": "form"}
+        customer_data = {"_source": "form", "__source__": "form"}
         contact_name = ""
         contact_email = ""
         contact_phone = ""
@@ -250,97 +245,25 @@ class FormService:
         if not customer_data.get("Email"):
             customer_data["Email"] = contact_email
             
-        if contact_email or contact_phone:
-            try:
-                from apps.campaigns.models import CustomerUpload, CustomerRecord, Audience
-                
-                upload, _ = CustomerUpload.objects.get_or_create(
-                    uploaded_by=form.created_by,
-                    file_name="Form Submissions",
-                    defaults={"file_type": "forms", "status": "COMPLETED"},
-                )
-                
-                customer = CustomerRecord.objects.create(
-                    upload=upload,
-                    data=customer_data
-                )
-                
-                upload.total_records = upload.records.count()
-                upload.imported_records = upload.total_records
-                upload.save(update_fields=["total_records", "imported_records"])
-                
-            except Exception:
-                pass # Fail silently if customer record creation fails
-
         try:
-            from apps.automation.models import AutomationNode
-            from apps.automation.services.dispatcher import dispatch_workflow
-
-            matching_trigger_nodes = AutomationNode.objects.filter(
-                node_type="TRIGGER",
-                action_name="FORM_SUBMITTED",
-                business_config__form_id=str(form.id),
-                automation__status="PUBLISHED",
-                automation__is_active=True,
-            ).select_related("automation").distinct()
-
-            context = {
-                "form": {
-                    "id": str(form.id),
-                    "submission_id": str(submission.id),
-                }
-            }
-
-            for trigger_node in matching_trigger_nodes:
-                conditions = trigger_node.business_config.get("conditions")
-                reentry_rule = trigger_node.business_config.get("reentry_rule", "every_time")
-                reentry_days = int(trigger_node.business_config.get("reentry_days", 30))
-                reentry_identifier_type = trigger_node.business_config.get("reentry_identifier_type", "email")
-                
-                # Evaluate the conditions against the user's submitted answers
-                if FormService.evaluate_form_conditions(conditions, answers_dict):
-                    allow_dispatch = True
-                    
-                    if reentry_rule != "every_time":
-                        identifier_field = next((f for f in form.fields_schema if f.get('field_type') == reentry_identifier_type), None)
-                        
-                        if identifier_field:
-                            identifier_value = answers_dict.get(str(identifier_field.get('id')), "")
-                            
-                            if identifier_value:
-                                from apps.automation.models import AutomationExecution
-                                from datetime import timedelta
-                                
-                                # Use JSONField exact lookup 
-                                filter_kwargs = {
-                                    f"answers__{identifier_field.get('id')}__iexact": identifier_value
-                                }
-                                previous_submissions = FormSubmission.objects.filter(
-                                    form=form,
-                                    **filter_kwargs
-                                ).exclude(id=submission.id)
-                                
-                                past_executions_query = AutomationExecution.objects.filter(
-                                    automation=trigger_node.automation,
-                                    context__form__submission_id__in=[str(s.id) for s in previous_submissions]
-                                )
-                                
-                                if reentry_rule == "only_once":
-                                    if past_executions_query.exists():
-                                        allow_dispatch = False
-                                        
-                                elif reentry_rule == "custom_days":
-                                    cutoff_date = timezone.now() - timedelta(days=reentry_days)
-                                    if past_executions_query.filter(started_at__gte=cutoff_date).exists():
-                                        allow_dispatch = False
-                                        
-                    if allow_dispatch:
-                        dispatch_workflow(
-                            trigger_node.automation,
-                            None,
-                            context=context,
-                        )
+            from apps.campaigns.models import CustomerUpload, CustomerRecord, Audience
+            
+            upload, _ = CustomerUpload.objects.get_or_create(
+                uploaded_by=form.created_by,
+                file_name="Form Submissions",
+                defaults={"file_type": "forms", "status": "COMPLETED"},
+            )
+            
+            customer = CustomerRecord.objects.create(
+                upload=upload,
+                data=customer_data
+            )
+            
+            upload.total_records = upload.records.count()
+            upload.imported_records = upload.total_records
+            upload.save(update_fields=["total_records", "imported_records"])
+            
         except Exception:
-            pass # Failing to dispatch automation should not fail the form submission
+            pass # Fail silently if customer record creation fails
 
         return submission

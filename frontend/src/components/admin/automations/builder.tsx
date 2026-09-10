@@ -16,7 +16,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft, Save, Play } from "lucide-react";
+import { ArrowLeft, Save, Play, Pause } from "lucide-react";
 import { AutomationSidebar } from "./sidebar";
 import { TriggerNode, ActionNode, ConditionNode, UtilityNode } from "./custom-nodes";
 import { NodeConfigPanel } from "./node-config";
@@ -49,6 +49,7 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
   const [testEmail, setTestEmail] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const [workflowName, setWorkflowName] = useState(automationId === "new" ? "New Automation Workflow" : "Loading...");
+  const [workflowStatus, setWorkflowStatus] = useState<string>("DRAFT");
 
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -141,6 +142,9 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
           if (res.data.name) {
             setWorkflowName(res.data.name);
           }
+          if (res.data.status) {
+            setWorkflowStatus(res.data.status);
+          }
           const graph = res.data.workflow_graph;
           if (graph) {
             setNodes(graph.nodes || []);
@@ -209,10 +213,24 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
         workflow_graph: { nodes, edges }
       });
       await apiClient.post(`/api/automations/${automationId}/publish/`);
-      alert("Workflow published successfully!");
-    } catch (err) {
+      setWorkflowStatus("PUBLISHED");
+      alert("Workflow published successfully! Triggers are now Live.");
+    } catch (err: any) {
       console.error("Failed to publish workflow", err);
-      alert("Failed to publish workflow. Ensure your workflow has valid trigger and action nodes.");
+      const msg = err.response?.data?.error || err.response?.data?.detail || "Failed to publish workflow. Ensure your workflow has valid trigger and action nodes.";
+      alert(msg);
+    }
+  };
+
+  const handlePause = async () => {
+    if (automationId === "new") return;
+    try {
+      await apiClient.post(`/api/automations/${automationId}/pause/`);
+      setWorkflowStatus("PAUSED");
+      alert("Workflow paused. Triggers will not run while paused.");
+    } catch (err: any) {
+      console.error("Failed to pause workflow", err);
+      alert("Failed to pause workflow.");
     }
   };
 
@@ -227,7 +245,7 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
           >
             <ArrowLeft size={18} />
           </button>
-          <div>
+          <div className="flex items-center gap-3">
             <input 
               type="text" 
               className="font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none transition-colors px-1 py-0.5"
@@ -235,6 +253,18 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
               onChange={(e) => setWorkflowName(e.target.value)}
               placeholder="Workflow Name"
             />
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+              workflowStatus === "PUBLISHED" ? "bg-emerald-100 text-emerald-700" :
+              workflowStatus === "PAUSED" ? "bg-amber-100 text-amber-700" :
+              "bg-slate-100 text-slate-700"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                workflowStatus === "PUBLISHED" ? "bg-emerald-500 animate-pulse" :
+                workflowStatus === "PAUSED" ? "bg-amber-500" :
+                "bg-slate-400"
+              }`} />
+              {workflowStatus === "PUBLISHED" ? "Live / Active" : workflowStatus === "PAUSED" ? "Off / Paused" : "Draft"}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -244,9 +274,15 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
           <button className="secondary-button gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border-transparent" onClick={handleSaveDraft}>
             <Save size={16} /> Save Draft
           </button>
-          <button className="primary-button gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handlePublish}>
-            <Save size={16} /> Publish
-          </button>
+          {workflowStatus === "PUBLISHED" ? (
+            <button className="secondary-button gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200" onClick={handlePause}>
+              <Pause size={16} /> Pause (Turn Off)
+            </button>
+          ) : (
+            <button className="primary-button gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handlePublish}>
+              <Save size={16} /> Publish (Turn Live)
+            </button>
+          )}
         </div>
       </div>
 

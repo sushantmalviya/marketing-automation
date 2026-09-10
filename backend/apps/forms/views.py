@@ -160,12 +160,14 @@ class PublicFormView(
         FormDetailSerializer
     )
 
-    lookup_field = "uuid"
-
-    def get_queryset(self):
-        return Form.objects.filter(
-            status=FormStatus.PUBLISHED
-        )
+    def get_object(self):
+        from django.shortcuts import get_object_or_404
+        from django.db.models import Q
+        uuid_val = self.kwargs.get("uuid")
+        lookup = Q(uuid=uuid_val)
+        if str(uuid_val).isdigit():
+            lookup |= Q(pk=int(uuid_val))
+        return get_object_or_404(Form.objects.exclude(status=FormStatus.ARCHIVED), lookup)
     
 
 class SubmitFormView(
@@ -185,10 +187,16 @@ class SubmitFormView(
         request,
         uuid
     ):
+        from django.shortcuts import get_object_or_404
+        from django.db.models import Q
 
-        form = Form.objects.get(
-            uuid=uuid,
-            status=FormStatus.PUBLISHED,
+        lookup = Q(uuid=uuid)
+        if str(uuid).isdigit():
+            lookup |= Q(pk=int(uuid))
+
+        form = get_object_or_404(
+            Form.objects.exclude(status=FormStatus.ARCHIVED),
+            lookup
         )
 
         serializer = self.get_serializer(
@@ -202,12 +210,12 @@ class SubmitFormView(
             raise_exception=True
         )
 
+        raw_answers = serializer.validated_data.get("answers", [])
+
         submission = (
             FormService.submit_form(
                 form=form,
-                answers=serializer.validated_data[
-                    "answers"
-                ],
+                answers=raw_answers,
                 ip_address=request.META.get(
                     "REMOTE_ADDR"
                 ),
