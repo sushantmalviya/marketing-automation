@@ -1,12 +1,15 @@
 import React, { useState } from "react";
-import { Search, Download, Filter } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Search, Download, Filter, Eye, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
 
 export function FormResponses({ formId }: { formId: string }) {
   const [search, setSearch] = useState("");
   const [selectedResponse, setSelectedResponse] = useState<any>(null);
+  const [responseToDelete, setResponseToDelete] = useState<any>(null);
   
+  const queryClient = useQueryClient();
+
   const { data: formData } = useQuery({
     queryKey: ["admin-form", formId],
     enabled: formId !== "new" && !formId.startsWith("tmpl_")
@@ -20,6 +23,21 @@ export function FormResponses({ formId }: { formId: string }) {
       return res.data.results || res.data;
     },
     enabled: formId !== "new" && !formId.startsWith("tmpl_")
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/api/forms/responses/${id}/`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["form-responses", formId] });
+      queryClient.invalidateQueries({ queryKey: ["customer-records"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-form", formId] });
+      setResponseToDelete(null);
+    },
+    onError: () => {
+      alert("Failed to delete response. Please try again.");
+    }
   });
 
   const responses = data || [];
@@ -141,7 +159,22 @@ export function FormResponses({ formId }: { formId: string }) {
                       {new Date(res.submitted_at).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-right sticky right-0 bg-white border-l border-slate-100 group-hover:bg-slate-50 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)]">
-                      <button onClick={() => setSelectedResponse(res)} className="text-blue-600 font-medium hover:underline">View</button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button 
+                          onClick={() => setSelectedResponse(res)} 
+                          title="View Details"
+                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => setResponseToDelete(res)} 
+                          title="Delete Response"
+                          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -199,6 +232,37 @@ export function FormResponses({ formId }: { formId: string }) {
                 className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {responseToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-6 text-center">
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">Delete Response?</h3>
+            <p className="text-sm text-slate-500 mb-6">
+              Are you sure you want to delete this form response? This will also remove the lead from your Contacts list. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => setResponseToDelete(null)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(responseToDelete.id)}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deleteMutation.isPending ? "Deleting..." : "Delete Response"}
               </button>
             </div>
           </div>

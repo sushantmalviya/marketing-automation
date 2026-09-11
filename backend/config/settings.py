@@ -135,9 +135,6 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database (Neon PostgreSQL)
 # --------------------------------------------------
  
-import os
-import dj_database_url
-
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL is None:
     raise RuntimeError("DATABASE_URL environment variable is not set.")
@@ -151,7 +148,7 @@ DATABASES = {
         ssl_require=DATABASE_URL.startswith(("postgres://", "postgresql://")),
     )
 }
- 
+
 if DATABASE_URL and DATABASE_URL.startswith(("postgres://", "postgresql://")):
     DATABASES["default"].setdefault("OPTIONS", {}).update(
         {
@@ -162,6 +159,7 @@ if DATABASE_URL and DATABASE_URL.startswith(("postgres://", "postgresql://")):
             "keepalives_count": 3,
         }
     )
+
  
 # --------------------------------------------------
 # Password Validation

@@ -231,20 +231,30 @@ class FormService:
             if field_type == "email" or "email" in label_lower:
                 contact_email = answer
                 customer_data["Email"] = answer
-            elif field_type == "phone" or "phone" in label_lower:
+                customer_data["email"] = answer
+            elif field_type == "phone" or "phone" in label_lower or "number" in label_lower:
                 contact_phone = answer
                 customer_data["Phone"] = answer
+                customer_data["phone"] = answer
+                customer_data["phone_no"] = answer
+                customer_data["Number"] = answer
             elif field_type == "text" and "name" in label_lower:
                 contact_name = answer
                 customer_data["Name"] = answer
+                customer_data["name"] = answer
             else:
                 customer_data[field.get('label', field_id)] = answer
                 
         if not customer_data.get("Name"):
             customer_data["Name"] = contact_name or "Form User"
+            customer_data["name"] = customer_data["Name"]
         if not customer_data.get("Email"):
             customer_data["Email"] = contact_email
+            customer_data["email"] = contact_email
             
+        customer_data["__submission_id__"] = submission.id
+        customer_data["__form_id__"] = form.id
+
         try:
             from apps.campaigns.models import CustomerUpload, CustomerRecord, Audience
             
@@ -267,3 +277,56 @@ class FormService:
             pass # Fail silently if customer record creation fails
 
         return submission
+
+    @staticmethod
+    @transaction.atomic
+    def delete_submission(submission):
+        from apps.campaigns.models import CustomerRecord
+        
+        submission_id = submission.id
+        form = submission.form
+        answers_dict = submission.answers or {}
+        
+        # 1. Direct ID match
+        customer_qs = CustomerRecord.objects.filter(data_____submission_id__=submission_id)
+        
+        # 2. Fallback match by Name/Email for older records
+        if not customer_qs.exists():
+            fields_map = {str(f.get('id', '')): f for f in (form.fields_schema or [])}
+            name_val = ""
+            email_val = ""
+            
+            for fid, ans in answers_dict.items():
+                val_str = str(ans).strip()
+                field = fields_map.get(str(fid))
+                if not field:
+                    if "@" in val_str:
+                        email_val = val_str.lower()
+                    continue
+                lbl = field.get('label', '').lower()
+                ftype = field.get('field_type', '')
+                if ftype == "email" or "email" in lbl or "@" in val_str:
+                    email_val = val_str.lower()
+                elif ftype == "text" and "name" in lbl:
+                    name_val = val_str
+
+            qs = CustomerRecord.objects.filter(upload__file_name="Form Submissions")
+            if email_val:
+                qs = qs.filter(data__Email__iexact=email_val)
+            if name_val:
+                qs = qs.filter(data__Name__icontains=name_val)
+            customer_qs = qs
+
+        uploads_to_update = set()
+        for cust in customer_qs:
+            uploads_to_update.add(cust.upload)
+            cust.delete()
+
+        for up in uploads_to_update:
+            if up:
+                up.total_records = up.records.count()
+                up.imported_records = up.total_records
+                up.save(update_fields=["total_records", "imported_records"])
+
+        submission.delete()
+        return True

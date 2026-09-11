@@ -262,3 +262,24 @@ class FormResponsesView(
         return form.submissions.all()
 
 
+class FormResponseDetailView(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        CanAccessForms,
+    ]
+
+    def delete(self, request, pk):
+        from django.shortcuts import get_object_or_404
+        from .models import FormSubmission
+        submission = get_object_or_404(FormSubmission, pk=pk)
+        
+        # Check permissions on parent form
+        form = submission.form
+        if form.created_by != request.user and not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+            
+        FormService.delete_submission(submission)
+        return Response({"success": True, "message": "Submission deleted."}, status=status.HTTP_200_OK)
+
+
+
