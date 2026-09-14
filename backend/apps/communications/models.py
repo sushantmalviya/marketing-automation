@@ -95,11 +95,15 @@ class SenderIdentity(models.Model):
         ("MICROSOFT", "Microsoft Outlook"),
         ("YAHOO", "Yahoo"),
         ("CUSTOM_SMTP", "Custom SMTP"),
+        ("WHATSAPP_CLOUD", "WhatsApp Cloud API"),
+        ("TWILIO_SMS", "Twilio SMS"),
+        ("CUSTOM_SMS", "Custom SMS Gateway"),
     ]
 
     CONNECTION_TYPE_CHOICES = [
         ("OAUTH", "OAuth 2.0"),
         ("SMTP", "SMTP"),
+        ("API_KEY", "API Key / Token"),
     ]
 
     STATUS_CHOICES = [

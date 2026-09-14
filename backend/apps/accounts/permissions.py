@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from django.db import close_old_connections
 
 from .models import MAUser, User
 

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import urllib.parse
 import urllib.request
 from django.conf import settings
@@ -16,6 +17,8 @@ from apps.communications.providers.sender_abstraction import (
 )
 from apps.communications.serializers_sender import (
     ConnectSMTPSerializer,
+    ConnectWhatsAppSerializer,
+    ConnectSMSSerializer,
     SenderIdentitySerializer,
 )
 from apps.integrations.utils.crypto import encrypt_token
@@ -124,8 +127,8 @@ class GoogleOAuthUrlView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os_env("GOOGLE_CLIENT_ID", ""))
-        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os_env("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
+        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
+        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
 
         if not client_id:
             return Response({"detail": "Google OAuth client ID is not configured in backend."}, status=status.HTTP_400_BAD_REQUEST)
@@ -151,9 +154,9 @@ class GoogleOAuthCallbackView(APIView):
         if not code:
             return Response({"detail": "Authorization code is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os_env("GOOGLE_CLIENT_ID", ""))
-        client_secret = getattr(settings, "GOOGLE_CLIENT_SECRET", os_env("GOOGLE_CLIENT_SECRET", ""))
-        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os_env("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
+        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
+        client_secret = getattr(settings, "GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
+        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
 
         # Exchange code for tokens
         token_url = "https://oauth2.googleapis.com/token"
@@ -217,8 +220,8 @@ class MicrosoftOAuthUrlView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os_env("MICROSOFT_CLIENT_ID", ""))
-        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os_env("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
+        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os.getenv("MICROSOFT_CLIENT_ID", ""))
+        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
 
         if not client_id:
             return Response({"detail": "Microsoft OAuth client ID is not configured in backend."}, status=status.HTTP_400_BAD_REQUEST)
@@ -243,9 +246,9 @@ class MicrosoftOAuthCallbackView(APIView):
         if not code:
             return Response({"detail": "Authorization code is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os_env("MICROSOFT_CLIENT_ID", ""))
-        client_secret = getattr(settings, "MICROSOFT_CLIENT_SECRET", os_env("MICROSOFT_CLIENT_SECRET", ""))
-        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os_env("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
+        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os.getenv("MICROSOFT_CLIENT_ID", ""))
+        client_secret = getattr(settings, "MICROSOFT_CLIENT_SECRET", os.getenv("MICROSOFT_CLIENT_SECRET", ""))
+        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
 
         token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
         data = urllib.parse.urlencode({
@@ -334,6 +337,64 @@ class SendTestEmailView(APIView):
             return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class ConnectWhatsAppView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ConnectWhatsAppSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        credentials = {
+            "phone_number_id": data["phone_number_id"],
+            "waba_id": data.get("waba_id", ""),
+            "access_token": encrypt_token(data["access_token"]),
+        }
+
+        identity, _ = SenderIdentity.objects.update_or_create(
+            user=request.user,
+            email=data["phone_number"], # Store phone number in identifier field
+            defaults={
+                "display_name": data.get("display_name") or f"WhatsApp ({data['phone_number']})",
+                "provider": "WHATSAPP_CLOUD",
+                "connection_type": "API_KEY",
+                "status": "CONNECTED",
+                "encrypted_credentials": credentials,
+                "last_verified_at": timezone.now(),
+            }
+        )
+        return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
+
+
+class ConnectSMSView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ConnectSMSSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        credentials = {
+            "account_sid": data.get("account_sid", ""),
+            "auth_token": encrypt_token(data["auth_token"]),
+        }
+
+        identity, _ = SenderIdentity.objects.update_or_create(
+            user=request.user,
+            email=data["phone_number"], # Store sender number or ID in identifier field
+            defaults={
+                "display_name": data.get("display_name") or f"SMS Sender ({data['phone_number']})",
+                "provider": data["provider"],
+                "connection_type": "API_KEY",
+                "status": "CONNECTED",
+                "encrypted_credentials": credentials,
+                "last_verified_at": timezone.now(),
+            }
+        )
+        return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
+
+
 def os_env(key, default=""):
     import os
     return os.getenv(key, default)
+

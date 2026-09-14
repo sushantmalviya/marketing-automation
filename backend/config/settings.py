@@ -141,7 +141,7 @@ if DATABASE_URL is None:
 DATABASES = {
     "default": dj_database_url.parse(
         DATABASE_URL,
-        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "0")),
+        conn_max_age=int(os.getenv("DB_CONN_MAX_AGE", "60")),
         conn_health_checks=True,
         disable_server_side_cursors=True,
         ssl_require=DATABASE_URL.startswith(("postgres://", "postgresql://")),
@@ -266,12 +266,12 @@ from datetime import timedelta
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
- 
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
- 
+
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+
     "UPDATE_LAST_LOGIN": True,
- 
+
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
  

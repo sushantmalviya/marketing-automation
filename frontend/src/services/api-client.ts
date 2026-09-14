@@ -11,15 +11,26 @@ export function getStoredRefreshToken() {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("ma_refresh") ?? sessionStorage.getItem("ma_refresh");
 }
-export function storeRefreshToken(token: string | null, persistent = false) {
+
+export function getRefreshTokenStorageMode(): "local" | "session" | null {
+  if (typeof window === "undefined") return null;
+  if (localStorage.getItem("ma_refresh")) return "local";
+  if (sessionStorage.getItem("ma_refresh")) return "session";
+  return null;
+}
+
+export function storeRefreshToken(token: string | null, persistent: boolean = false) {
   if (typeof window === "undefined") return;
-  // Clear from both storages first to avoid stale tokens
-  localStorage.removeItem("ma_refresh");
-  sessionStorage.removeItem("ma_refresh");
-  if (!token) return;
+  if (!token) {
+    localStorage.removeItem("ma_refresh");
+    sessionStorage.removeItem("ma_refresh");
+    return;
+  }
   if (persistent) {
+    sessionStorage.removeItem("ma_refresh");
     localStorage.setItem("ma_refresh", token);
   } else {
+    localStorage.removeItem("ma_refresh");
     sessionStorage.setItem("ma_refresh", token);
   }
 }
@@ -30,23 +41,33 @@ apiClient.interceptors.request.use((config) => {
 });
 
 async function refreshAccess(): Promise<string> {
+  const mode = getRefreshTokenStorageMode();
   const refresh = getStoredRefreshToken();
   if (!refresh) throw new Error("No refresh token");
   const { data } = await axios.post<{ access: string; refresh?: string }>(`${baseURL}/api/auth/token/refresh/`, { refresh }, { timeout: 15000 });
   setAccessToken(data.access);
-  if (data.refresh) storeRefreshToken(data.refresh);
+  if (data.refresh) storeRefreshToken(data.refresh, mode === "local");
   return data.access;
 }
 
-export async function restoreAccessToken() { return refreshAccess(); }
+export async function restoreAccessToken(): Promise<string> {
+  refreshPromise ??= refreshAccess().finally(() => { refreshPromise = null; });
+  return refreshPromise;
+}
 
 apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
-  if (error.response?.status !== 401 || !request || request._retried || request.url?.includes("/api/auth/")) return Promise.reject(error);
+  const isNoRefreshUrl = request?.url?.includes("/api/auth/login/") || request?.url?.includes("/api/auth/token/refresh/") || request?.url?.includes("/api/auth/logout/");
+  if (error.response?.status !== 401 || !request || request._retried || isNoRefreshUrl) return Promise.reject(error);
   request._retried = true;
   try {
     refreshPromise ??= refreshAccess().finally(() => { refreshPromise = null; });
-    request.headers.Authorization = `Bearer ${await refreshPromise}`;
+    const newToken = await refreshPromise;
+    if (request.headers.set) {
+      request.headers.set("Authorization", `Bearer ${newToken}`);
+    } else {
+      request.headers.Authorization = `Bearer ${newToken}`;
+    }
     return apiClient(request);
   } catch {
     setAccessToken(null); storeRefreshToken(null);

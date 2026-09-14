@@ -42,7 +42,7 @@ class AuthenticationAPITests(APITestCase):
         self.assertEqual(data["user"]["role"], "USER")
         self.assertNotIn("password", str(response.data).lower())
 
-    def test_refresh_route_rotates_a_valid_refresh_token(self):
+    def test_refresh_route_returns_access_token_for_valid_refresh_token(self):
         self.create_role_user("refresh@example.com", "USER")
         login = self.client.post(
             reverse("login"),
@@ -56,7 +56,6 @@ class AuthenticationAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
 
     def test_super_admin_bootstrap_is_one_time_for_anonymous_clients(self):
         first = self.client.post(

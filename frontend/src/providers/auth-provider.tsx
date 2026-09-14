@@ -39,11 +39,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void restore();
   }, [restore]);
-  useEffect(() => { const expired = () => { clear(); router.replace("/login"); }; window.addEventListener("auth:expired", expired); return () => window.removeEventListener("auth:expired", expired); }, [clear, router]);
 
-  const login = useCallback(async (email: string, password: string, rememberMe = false) => {
+  useEffect(() => {
+    const expired = () => { clear(); router.replace("/login"); };
+    window.addEventListener("auth:expired", expired);
+    return () => window.removeEventListener("auth:expired", expired);
+  }, [clear, router]);
+
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === "ma_refresh") {
+        if (!event.newValue) {
+          clear();
+          router.replace("/login");
+        } else if (event.newValue && event.newValue !== event.oldValue) {
+          void restore();
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [clear, restore, router]);
+
+  const login = useCallback(async (email: string, password: string, rememberMe: boolean = false) => {
     const response = await authService.login({ email, password });
-    setAccessToken(response.data.access); storeRefreshToken(response.data.refresh, rememberMe);
+    setAccessToken(response.data.access);
+    storeRefreshToken(response.data.refresh, rememberMe);
     // Login already returns the authenticated profile. Reusing it avoids a
     // second remote database round-trip before the dashboard can open.
     const profile = response.data.user;

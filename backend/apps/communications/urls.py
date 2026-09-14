@@ -6,6 +6,8 @@ from apps.communications.views import (
 )
 from apps.communications.views_sender import (
     ConnectSMTPView,
+    ConnectWhatsAppView,
+    ConnectSMSView,
     GoogleOAuthCallbackView,
     GoogleOAuthUrlView,
     MicrosoftOAuthCallbackView,
@@ -40,6 +42,14 @@ urlpatterns = [
     path(
         "sender-identities/connect-smtp/",
         ConnectSMTPView.as_view(),
+    ),
+    path(
+        "sender-identities/connect-whatsapp/",
+        ConnectWhatsAppView.as_view(),
+    ),
+    path(
+        "sender-identities/connect-sms/",
+        ConnectSMSView.as_view(),
     ),
     path(
         "sender-identities/oauth/google/url/",

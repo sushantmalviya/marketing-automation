@@ -17,7 +17,9 @@ import { superAdminService } from "@/services/super-admin.service";
 import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
 
 import { ConnectEmailModal } from "@/components/admin/account/connect-email-modal";
-import { MessageSquare, ExternalLink, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ConnectWhatsAppModal } from "@/components/admin/account/connect-whatsapp-modal";
+import { ConnectSMSModal } from "@/components/admin/account/connect-sms-modal";
+import { MessageSquare, MessageSquareMore, ExternalLink, ChevronRight, CheckCircle2 } from "lucide-react";
 
 function ProfileField({ icon: Icon, label, value, isEditingMode, isEditable, onChange }: any) {
   return (
@@ -68,25 +70,24 @@ export function SuperAdminAccount() {
 
   if (!user) return null;
 
-  const isAdminOrAbove = user.role === "USER" || user.role === "ADMIN";
+  const isAdminOrAbove = (user.role as string) === "ADMIN" || (user.role as string) === "SUPER_ADMIN";
 
   const tabs = [
     { id: "profile", label: "Profile", icon: UserRound },
     { id: "security", label: "Security", icon: Lock },
     { id: "notifications", label: "Notifications", icon: Bell },
-    ...(isAdminOrAbove ? [
-      { id: "brand-identity", label: "Brand Identity", icon: Sparkles },
-      { id: "connect-socials", label: "Connect Socials", icon: Globe2 },
-      { id: "connect-sender-ids", label: "Connect Sender IDs", icon: Mail }
-    ] : []),
+    { id: "brand-identity", label: "Brand Identity", icon: Sparkles },
+    { id: "connect-socials", label: "Connect Socials", icon: Globe2 },
+    { id: "connect-sender-ids", label: "Connect Sender IDs", icon: Mail },
   ];
 
   return (
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="page-title mt-2">Account Settings</h1>
-          <p className="page-subtitle">Configure your profile</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
+          <h1 className="sa-title mt-2 normal-case">Account Settings</h1>
+          <p className="sa-subtitle mt-1">{user.role.replaceAll("_", " ")} · {user.email}</p>
         </div>
         <DarkModeToggle />
       </div>
@@ -355,9 +356,9 @@ export function SuperAdminAccount() {
             </motion.div>
           )}
 
-          {activeTab === "brand-identity" && isAdminOrAbove && <BrandIdentityTab />}
-          {activeTab === "connect-socials" && isAdminOrAbove && <ConnectSocialsTab />}
-          {activeTab === "connect-sender-ids" && isAdminOrAbove && <ConnectSenderIDsPanel />}
+          {activeTab === "brand-identity" && <BrandIdentityTab />}
+          {activeTab === "connect-socials" && <ConnectSocialsTab />}
+          {activeTab === "connect-sender-ids" && <ConnectSenderIDsPanel />}
 
         </div>{/* end right column */}
       </section>
@@ -506,8 +507,8 @@ function BrandIdentityTab() {
                       type="button"
                       onClick={() => toggleTone(t)}
                       className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${selectedTones.includes(t)
-                        ? "border-purple-500 bg-purple-600 text-white shadow-sm"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                          ? "border-purple-500 bg-purple-600 text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
                         }`}
                     >
                       {t}
@@ -736,7 +737,7 @@ function ConnectSocialsTab() {
 // ─── Connect Sender IDs Tab ───────────────────────────────────────────────────
 
 function ConnectSenderIDsPanel() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<"EMAIL" | "WHATSAPP" | "SMS" | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -752,7 +753,7 @@ function ConnectSenderIDsPanel() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/communications/sender-identities/${id}/`),
     onSuccess: () => {
-      toast.success("Sender email disconnected");
+      toast.success("Sender ID disconnected successfully");
       void qc.invalidateQueries({ queryKey: ["sender-identities"] });
       setDeletingId(null);
     },
@@ -775,108 +776,297 @@ function ConnectSenderIDsPanel() {
     }
   };
 
+  const emailIdentities = senderIdentities.filter((item: any) =>
+    ["GMAIL", "MICROSOFT", "YAHOO", "CUSTOM_SMTP"].includes(item.provider)
+  );
+
+  const whatsappIdentities = senderIdentities.filter((item: any) =>
+    ["WHATSAPP_CLOUD"].includes(item.provider)
+  );
+
+  const smsIdentities = senderIdentities.filter((item: any) =>
+    ["TWILIO_SMS", "CUSTOM_SMS"].includes(item.provider)
+  );
+
   return (
     <motion.div initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="p-6 sm:p-10">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Connect Sender Email</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Connect your personal or Google Workspace / Outlook / SMTP email to send emails from your own domain.
-          </p>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
-        >
-          <Mail size={16} /> + Connect Sender ID
-        </button>
+      {/* Header */}
+      <div className="mb-8">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Connect Sender IDs</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Integrate your communication channels to send emails, WhatsApp messages, and SMS from your own accounts.
+        </p>
       </div>
 
-      {isLoading ? (
-        <div className="flex h-40 items-center justify-center">
-          <Loader2 className="animate-spin text-blue-600" size={24} />
-        </div>
-      ) : senderIdentities.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-800">
-          <Mail className="mx-auto h-10 w-10 text-slate-400" />
-          <h3 className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">No Sender IDs Connected</h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Connect your Gmail, Outlook, Yahoo, or Custom SMTP account to start sending campaign and automation emails.
-          </p>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm transition"
-          >
-            Connect Sender ID
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {senderIdentities.map((item: any) => (
-            <div
-              key={item.id}
-              className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                  <Mail size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {item.display_name ? `${item.display_name} (${item.email})` : item.email}
-                    </h4>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.status === "CONNECTED"
-                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                          : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400"
-                        }`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Provider: <span className="font-medium text-slate-700 dark:text-slate-300">{item.provider}</span> • Connection:{" "}
-                    <span className="font-medium text-slate-700 dark:text-slate-300">{item.connection_type}</span>
-                    {item.last_verified_at && (
-                      <span> • Verified: {new Date(item.last_verified_at).toLocaleDateString()}</span>
-                    )}
-                  </p>
-                </div>
+      <div className="space-y-6">
+        {/* Card 1: Sender Email */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                <Mail size={24} />
               </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0 dark:border-slate-800">
-                <button
-                  disabled={testingId === item.id}
-                  onClick={() => sendTestEmail(item.id, item.email)}
-                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 flex items-center gap-1.5"
-                >
-                  {testingId === item.id ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Send Test Email
-                </button>
-                <button
-                  disabled={deletingId === item.id || deleteMutation.isPending}
-                  onClick={() => {
-                    setDeletingId(item.id);
-                    deleteMutation.mutate(item.id);
-                  }}
-                  className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50 hover:border-rose-200 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400 dark:hover:bg-rose-500/10 flex items-center gap-1.5"
-                >
-                  {deletingId === item.id ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Disconnect
-                </button>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Sender Email</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Connect your email account to send marketing emails and automated messages
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      )}
 
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <button
+                onClick={() => setActiveModal("EMAIL")}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
+              >
+                Connect Email <ChevronRight size={14} />
+              </button>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setActiveModal("EMAIL"); }}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Learn more <ExternalLink size={10} />
+              </a>
+            </div>
+          </div>
+
+          {/* Connected Email Identities List */}
+          {emailIdentities.length > 0 && (
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected Sender Emails</h4>
+              {emailIdentities.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 text-xs font-bold">
+                      {item.provider.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                          {item.display_name ? `${item.display_name} (${item.email})` : item.email}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Provider: {item.provider} • Connection: {item.connection_type}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={testingId === item.id}
+                      onClick={() => sendTestEmail(item.id, item.email)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      {testingId === item.id ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
+                      Test Email
+                    </button>
+                    <button
+                      disabled={deletingId === item.id || deleteMutation.isPending}
+                      onClick={() => {
+                        setDeletingId(item.id);
+                        deleteMutation.mutate(item.id);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400"
+                    >
+                      {deletingId === item.id ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: WhatsApp Account */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                <svg className="h-6 w-6 fill-current" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c0-5.445 4.43-9.874 9.877-9.874 2.636 0 5.115 1.027 6.979 2.894a9.818 9.818 0 012.875 6.979c-.001 5.446-4.43 9.874-9.847 9.874" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">WhatsApp Account</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Connect your WhatsApp Business account to send notifications, alerts, and campaigns.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <button
+                onClick={() => setActiveModal("WHATSAPP")}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
+              >
+                Connect WhatsApp <ChevronRight size={14} />
+              </button>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setActiveModal("WHATSAPP"); }}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Learn more <ExternalLink size={10} />
+              </a>
+            </div>
+          </div>
+
+          {/* Connected WhatsApp Accounts List */}
+          {whatsappIdentities.length > 0 && (
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected WhatsApp Accounts</h4>
+              {whatsappIdentities.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                      <MessageSquare size={16} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                          {item.display_name ? `${item.display_name} (${item.email})` : item.email}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Provider: WhatsApp Cloud API • Identifier: {item.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={deletingId === item.id || deleteMutation.isPending}
+                      onClick={() => {
+                        setDeletingId(item.id);
+                        deleteMutation.mutate(item.id);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400"
+                    >
+                      {deletingId === item.id ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card 3: SMS ID */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400">
+                <MessageSquareMore size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">SMS ID</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Connect your SMS provider to send text messages and alerts to your contacts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <button
+                onClick={() => setActiveModal("SMS")}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
+              >
+                Connect SMS <ChevronRight size={14} />
+              </button>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setActiveModal("SMS"); }}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Learn more <ExternalLink size={10} />
+              </a>
+            </div>
+          </div>
+
+          {/* Connected SMS Sender IDs List */}
+          {smsIdentities.length > 0 && (
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected SMS Sender IDs</h4>
+              {smsIdentities.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+                      <MessageSquare size={16} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-900 dark:text-white">
+                          {item.display_name ? `${item.display_name} (${item.email})` : item.email}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Provider: {item.provider} • Sender ID: {item.email}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={deletingId === item.id || deleteMutation.isPending}
+                      onClick={() => {
+                        setDeletingId(item.id);
+                        deleteMutation.mutate(item.id);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50 transition disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400"
+                    >
+                      {deletingId === item.id ? <Loader2 size={12} className="animate-spin inline mr-1" /> : null}
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Connection Modals */}
       <ConnectEmailModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={activeModal === "EMAIL"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={() => void qc.invalidateQueries({ queryKey: ["sender-identities"] })}
+      />
+
+      <ConnectWhatsAppModal
+        isOpen={activeModal === "WHATSAPP"}
+        onClose={() => setActiveModal(null)}
+        onSuccess={() => void qc.invalidateQueries({ queryKey: ["sender-identities"] })}
+      />
+
+      <ConnectSMSModal
+        isOpen={activeModal === "SMS"}
+        onClose={() => setActiveModal(null)}
         onSuccess={() => void qc.invalidateQueries({ queryKey: ["sender-identities"] })}
       />
     </motion.div>
   );
 }
+
 

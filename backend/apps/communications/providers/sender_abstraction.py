@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import os
 import smtplib
 import ssl
 import urllib.parse
@@ -100,8 +101,8 @@ class GmailSender(BaseEmailSender):
         refresh_token = decrypt_token(enc_refresh_token)
 
         from django.conf import settings
-        client_id = getattr(settings, "GOOGLE_CLIENT_ID", "")
-        client_secret = getattr(settings, "GOOGLE_CLIENT_SECRET", "")
+        client_id = (getattr(settings, "GOOGLE_CLIENT_ID", "") or os.getenv("GOOGLE_CLIENT_ID", "")).strip()
+        client_secret = (getattr(settings, "GOOGLE_CLIENT_SECRET", "") or os.getenv("GOOGLE_CLIENT_SECRET", "")).strip()
 
         if not client_id or not client_secret:
             logger.error("Google OAuth credentials missing in settings.")
@@ -189,8 +190,8 @@ class MicrosoftSender(BaseEmailSender):
         refresh_token = decrypt_token(enc_refresh_token)
 
         from django.conf import settings
-        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", "")
-        client_secret = getattr(settings, "MICROSOFT_CLIENT_SECRET", "")
+        client_id = (getattr(settings, "MICROSOFT_CLIENT_ID", "") or os.getenv("MICROSOFT_CLIENT_ID", "")).strip()
+        client_secret = (getattr(settings, "MICROSOFT_CLIENT_SECRET", "") or os.getenv("MICROSOFT_CLIENT_SECRET", "")).strip()
 
         if not client_id or not client_secret:
             logger.error("Microsoft OAuth credentials missing in settings.")

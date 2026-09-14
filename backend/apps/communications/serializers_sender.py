@@ -28,3 +28,20 @@ class ConnectSMTPSerializer(serializers.Serializer):
     security = serializers.ChoiceField(choices=["SSL/TLS", "STARTTLS", "NONE"], default="STARTTLS")
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+
+class ConnectWhatsAppSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    display_name = serializers.CharField(required=False, allow_blank=True, default="")
+    phone_number_id = serializers.CharField()
+    waba_id = serializers.CharField(required=False, allow_blank=True, default="")
+    access_token = serializers.CharField(write_only=True)
+
+
+class ConnectSMSSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    display_name = serializers.CharField(required=False, allow_blank=True, default="")
+    provider = serializers.ChoiceField(choices=["TWILIO_SMS", "CUSTOM_SMS"], default="TWILIO_SMS")
+    account_sid = serializers.CharField(required=False, allow_blank=True, default="")
+    auth_token = serializers.CharField(write_only=True)
+
