@@ -23,7 +23,7 @@ export function TeamManagement(){
   const rows=query.data?.results??[];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full max-w-full">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-600">
@@ -31,7 +31,7 @@ export function TeamManagement(){
             TEAM WORKSPACE
           </span>
           <h1 className="page-title mt-2">Team Management</h1>
-          <p className="page-subtitle">{query.data?.count??0} operational user accounts</p>
+          <p className="page-subtitle">Manage user access</p>
         </div>
         <button className="primary-button text-[14px]" onClick={()=>setMode("create")}>
           <Plus size={18}/>Create user

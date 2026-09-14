@@ -3,7 +3,7 @@ import { Globe, Shield, Bell } from "lucide-react";
 
 export function FormSettings({ formId, isLive, setIsLive }: { formId: string, isLive: boolean, setIsLive: (v: boolean) => void }) {
   return (
-    <div className="h-full overflow-y-auto p-8 max-w-4xl mx-auto">
+    <div className="h-full overflow-y-auto p-8 w-full max-w-full font-sans">
       <div className="mb-8">
         <h2 className="text-xl font-bold text-slate-800">Form Settings</h2>
         <p className="text-sm text-slate-500 mt-1">Configure publishing and behavior for this form.</p>

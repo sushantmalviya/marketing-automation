@@ -81,8 +81,8 @@ export function SuperAdminAccount() {
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="sa-title">ACCOUNT SETTINGS</h1>
-          <p className="sa-subtitle">{user.role.replaceAll("_", " ")} · {user.email}</p>
+          <h1 className="page-title mt-2">Account Settings</h1>
+          <p className="page-subtitle">Configure your profile</p>
         </div>
         <DarkModeToggle />
       </div>

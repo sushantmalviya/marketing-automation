@@ -29,10 +29,10 @@ export function AdminForms() {
   const filteredForms = myForms.filter((f: any) => f.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="p-8 max-w-7xl mx-auto font-sans">
+    <div className="p-8 w-full max-w-full font-sans">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">Forms Dashboard</h1>
-        <p className="text-slate-500 mt-1">Create and manage your lead generation forms.</p>
+        <h1 className="page-title mt-2">Forms Dashboard</h1>
+        <p className="page-subtitle">Build custom forms</p>
       </div>
 
       <div className="mb-12">

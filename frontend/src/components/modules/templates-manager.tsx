@@ -112,11 +112,11 @@ export function TemplatesManager() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-6 w-full max-w-full">
       <header className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="sa-title">Templates</h1>
-          <p className="text-slate-500 mt-1">Manage reusable message templates for your campaigns and automations.</p>
+          <h1 className="page-title mt-2">Templates</h1>
+          <p className="page-subtitle">Design your assets</p>
         </div>
         <button className="primary-button" onClick={() => setCreateOpen(true)}>
           <Plus size={18} /> New Template

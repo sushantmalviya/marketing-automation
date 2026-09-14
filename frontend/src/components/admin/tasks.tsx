@@ -85,7 +85,13 @@ export function AdminTasks() {
   }
 
   return <div>
-    <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[.23em] text-blue-600">Live workspace</p><h1 className="sa-title mt-4 normal-case">Tasks</h1><p className="sa-subtitle">Assigned work</p></div><button className="primary-button min-h-12 px-5" onClick={beginCreate}><Plus size={19} />Create Task</button></div>
+    <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 className="page-title mt-2">Tasks</h1>
+        <p className="page-subtitle">Manage your tasks</p>
+      </div>
+      <button className="primary-button min-h-12 px-5" onClick={beginCreate}><Plus size={19} />Create Task</button>
+    </div>
 
     <section className="sa-card overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white p-5"><label className="relative min-w-64 flex-1"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} /><input className="h-12 w-full rounded-xl border border-slate-200 pl-12 pr-4 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100" placeholder="Search tasks..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><FilterSelect label="Priority" value={priority} values={["All", ...priorities]} onChange={setPriority} /><FilterSelect label="Status" value={status} values={statuses} onChange={setStatus} /></div>

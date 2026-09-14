@@ -597,8 +597,8 @@ export function UserAssetLibrary() {
       {/* ── Page Header ── */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="sa-title">Asset Library</h1>
-          <p className="sa-subtitle">Organize, manage and reuse your content assets across campaigns.</p>
+          <h1 className="page-title mt-2">Asset Library</h1>
+          <p className="page-subtitle">Manage your assets</p>
         </div>
         <div className="relative">
           <button
