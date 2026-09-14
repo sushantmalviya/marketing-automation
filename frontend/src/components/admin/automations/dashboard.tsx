@@ -46,8 +46,8 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between border-b border-slate-200 pb-5">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">Workflow Automation</h1>
-          <p className="mt-1 text-sm text-slate-500">Create powerful workflows to automate your marketing and business processes.</p>
+          <h1 className="page-title mt-2">Workflow Automation</h1>
+          <p className="page-subtitle">Automate marketing tasks</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="secondary-button px-5">

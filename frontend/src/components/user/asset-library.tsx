@@ -40,17 +40,17 @@ const TYPE_META: Record<
   Exclude<AssetTypeFilter, "ALL">,
   { label: string; icon: React.ElementType; color: string; bg: string; statBg: string }
 > = {
-  DOCUMENT: { label: "Documents",       icon: FileText,         color: "text-blue-600",   bg: "bg-blue-100",   statBg: "bg-blue-50"   },
-  IMAGE:    { label: "Images",           icon: ImageIcon,        color: "text-amber-500",  bg: "bg-amber-100",  statBg: "bg-amber-50"  },
-  VIDEO:    { label: "Videos",           icon: Video,            color: "text-purple-600", bg: "bg-purple-100", statBg: "bg-purple-50" },
-  OTHER:    { label: "Captions (Texts)", icon: MessageSquareText,color: "text-rose-500",   bg: "bg-rose-100",   statBg: "bg-rose-50"   },
+  DOCUMENT: { label: "Documents", icon: FileText, color: "text-blue-600", bg: "bg-blue-100", statBg: "bg-blue-50" },
+  IMAGE: { label: "Images", icon: ImageIcon, color: "text-amber-500", bg: "bg-amber-100", statBg: "bg-amber-50" },
+  VIDEO: { label: "Videos", icon: Video, color: "text-purple-600", bg: "bg-purple-100", statBg: "bg-purple-50" },
+  OTHER: { label: "Captions (Texts)", icon: MessageSquareText, color: "text-rose-500", bg: "bg-rose-100", statBg: "bg-rose-50" },
 };
 
 const SORT_OPTIONS = [
-  { value: "newest",  label: "Newest First"  },
-  { value: "oldest",  label: "Oldest First"  },
-  { value: "name_az", label: "Name A → Z"    },
-  { value: "name_za", label: "Name Z → A"    },
+  { value: "newest", label: "Newest First" },
+  { value: "oldest", label: "Oldest First" },
+  { value: "name_az", label: "Name A → Z" },
+  { value: "name_za", label: "Name Z → A" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ function ext(name: string) {
 
 function sortAssets(assets: Asset[], sort: string) {
   const arr = [...assets];
-  if (sort === "oldest")  return arr.sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+  if (sort === "oldest") return arr.sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
   if (sort === "name_az") return arr.sort((a, b) => a.name.localeCompare(b.name));
   if (sort === "name_za") return arr.sort((a, b) => b.name.localeCompare(a.name));
   return arr.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
@@ -254,7 +254,7 @@ function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose
     const a = document.createElement("a"); a.href = url; a.download = asset.name; a.target = "_blank"; a.click();
     toast.success("Download started");
   };
-  
+
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this asset?")) return;
     setIsDeleting(true);
@@ -322,7 +322,7 @@ function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose
                   <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={selectedChannels.includes(p.value)} onChange={(e) => {
                     if (e.target.checked) setSelectedChannels([...selectedChannels, p.value]);
                     else setSelectedChannels(selectedChannels.filter(c => c !== p.value));
-                  }}/>
+                  }} />
                   <span className="text-sm font-semibold text-slate-700">{p.label}</span>
                 </label>
               ))}
@@ -337,7 +337,7 @@ function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose
             <button className="secondary-button flex items-center gap-2 px-4 text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700" onClick={handleDelete} disabled={isDeleting}>
               <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
             </button>
-            
+
             <div className="flex items-center gap-3">
               <button className="secondary-button px-5" onClick={onClose} disabled={isDeleting}>Close</button>
               {url && <button className="secondary-button flex items-center gap-2 px-5 text-sm" onClick={handleDownload} disabled={isDeleting}><Download size={15} />Download</button>}
@@ -540,13 +540,13 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function UserAssetLibrary() {
-  const [search, setSearch]         = useState("");
+  const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<AssetTypeFilter>("ALL");
-  const [sort, setSort]             = useState("newest");
-  const [viewMode, setViewMode]     = useState<"grid" | "list">("grid");
-  const [preview, setPreview]       = useState<Asset | null>(null);
+  const [sort, setSort] = useState("newest");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [preview, setPreview] = useState<Asset | null>(null);
   const [showUpload, setShowUpload] = useState(false);
-  const [sortOpen, setSortOpen]     = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useQuery<AssetPage>({
     queryKey: ["user-assets"],
@@ -558,9 +558,9 @@ export function UserAssetLibrary() {
   // Stat counts per type
   const counts = useMemo(() => ({
     DOCUMENT: all.filter(a => a.asset_type === "DOCUMENT").length,
-    IMAGE:    all.filter(a => a.asset_type === "IMAGE").length,
-    VIDEO:    all.filter(a => a.asset_type === "VIDEO").length,
-    OTHER:    all.filter(a => a.asset_type === "OTHER").length,
+    IMAGE: all.filter(a => a.asset_type === "IMAGE").length,
+    VIDEO: all.filter(a => a.asset_type === "VIDEO").length,
+    OTHER: all.filter(a => a.asset_type === "OTHER").length,
   }), [all]);
 
   // Filtered + sorted list
@@ -574,9 +574,9 @@ export function UserAssetLibrary() {
   // Grouped by type (for overview view)
   const groups = useMemo(() => ({
     DOCUMENT: sortAssets(all.filter(a => a.asset_type === "DOCUMENT"), sort),
-    IMAGE:    sortAssets(all.filter(a => a.asset_type === "IMAGE"),    sort),
-    VIDEO:    sortAssets(all.filter(a => a.asset_type === "VIDEO"),    sort),
-    OTHER:    sortAssets(all.filter(a => a.asset_type === "OTHER"),    sort),
+    IMAGE: sortAssets(all.filter(a => a.asset_type === "IMAGE"), sort),
+    VIDEO: sortAssets(all.filter(a => a.asset_type === "VIDEO"), sort),
+    OTHER: sortAssets(all.filter(a => a.asset_type === "OTHER"), sort),
   }), [all, sort]);
 
   const isOverview = typeFilter === "ALL" && !search.trim();
@@ -597,9 +597,8 @@ export function UserAssetLibrary() {
       {/* ── Page Header ── */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
-          <h1 className="sa-title mt-2 normal-case">Asset Library</h1>
-          <p className="sa-subtitle mt-1">Organize, manage and reuse your content assets across campaigns.</p>
+          <h1 className="page-title mt-2">Asset Library</h1>
+          <p className="page-subtitle">Manage your assets</p>
         </div>
         <div className="relative">
           <button

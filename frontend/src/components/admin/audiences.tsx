@@ -205,7 +205,10 @@ export function AdminAudiences() {
   return (
     <div>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-        <div><h1 className="sa-title normal-case">Segmentation</h1><p className="sa-subtitle">Manage and organize your audience segments</p></div>
+        <div>
+          <h1 className="page-title mt-2">Segmentation</h1>
+          <p className="page-subtitle">Group your audience</p>
+        </div>
         <button className="primary-button min-h-12 px-5" onClick={createSegment}><Plus size={19} />Create Segment</button>
       </div>
       <section className="sa-card overflow-hidden">

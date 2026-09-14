@@ -46,11 +46,11 @@ export function TemplatesManager() {
     queryFn: async () => (await apiClient.get<Channel[]>("/api/channels")).data,
   });
 
-  const rows = (templates.data ?? []).filter((tpl) => 
+  const rows = (templates.data ?? []).filter((tpl) =>
     (!search || `${tpl.name} ${tpl.subject || ""} ${tpl.body}`.toLowerCase().includes(search.toLowerCase())) &&
     (!channelFilter || String(tpl.channel) === channelFilter)
   );
-  
+
   const shown = rows.slice((page - 1) * pageSize, page * pageSize);
   const activeChannelName = form.channel ? (channels.data?.find(c => String(c.id) === form.channel)?.name || "") : "";
   const isEmail = activeChannelName.toUpperCase().includes("EMAIL");
@@ -112,12 +112,11 @@ export function TemplatesManager() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="p-6 w-full max-w-full">
       <header className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
-          <h1 className="sa-title mt-2 normal-case">Templates</h1>
-          <p className="sa-subtitle mt-1">Manage reusable message templates for your campaigns and automations.</p>
+          <h1 className="page-title mt-2">Templates</h1>
+          <p className="page-subtitle">Design your assets</p>
         </div>
         <button className="primary-button" onClick={() => setCreateOpen(true)}>
           <Plus size={18} /> New Template
@@ -161,17 +160,16 @@ export function TemplatesManager() {
               >
                 <div>
                   <div className="flex items-start justify-between mb-4">
-                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                      tpl.channel_name.toUpperCase().includes("WHATSAPP") ? "bg-emerald-100 text-emerald-600" :
-                      tpl.channel_name.toUpperCase().includes("SMS") ? "bg-indigo-100 text-indigo-600" :
-                      "bg-blue-100 text-blue-600"
-                    }`}>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tpl.channel_name.toUpperCase().includes("WHATSAPP") ? "bg-emerald-100 text-emerald-600" :
+                        tpl.channel_name.toUpperCase().includes("SMS") ? "bg-indigo-100 text-indigo-600" :
+                          "bg-blue-100 text-blue-600"
+                      }`}>
                       <ChannelGlyph name={tpl.channel_name} />
                     </span>
                     <Badge className={
                       tpl.channel_name.toUpperCase().includes("WHATSAPP") ? "bg-emerald-50 text-emerald-600" :
-                      tpl.channel_name.toUpperCase().includes("SMS") ? "bg-indigo-50 text-indigo-600" :
-                      "bg-blue-50 text-blue-600"
+                        tpl.channel_name.toUpperCase().includes("SMS") ? "bg-indigo-50 text-indigo-600" :
+                          "bg-blue-50 text-blue-600"
                     }>{tpl.channel_name}</Badge>
                   </div>
                   <h3 className="font-bold text-slate-900 line-clamp-1" title={tpl.name}>{tpl.name}</h3>
@@ -193,7 +191,7 @@ export function TemplatesManager() {
             ))}
           </div>
         )}
-        
+
         {rows.length > 0 && (
           <div className="mt-8">
             <Pagination page={page} count={rows.length} pageSize={pageSize} setPage={setPage} />
@@ -205,13 +203,13 @@ export function TemplatesManager() {
       <AnimatePresence>
         {createOpen && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm">
-            <motion.form 
+            <motion.form
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden"
               onSubmit={e => { e.preventDefault(); save.mutate(); }}
             >
               <ModalHeader title={editTarget ? "Edit Template" : "Create Template"} onClose={closeForm} />
-              
+
               <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
                 <label className="field">
                   <span>Channel <b className="text-red-500">*</b></span>

@@ -260,9 +260,8 @@ export function AdminContacts() {
       {/* ── Header ── */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-[.24em] text-blue-600">Audience workspace</p>
-          <h1 className="sa-title mt-4">CONTACTS</h1>
-          <p className="sa-subtitle">{rows.length} contacts{someSelected ? ` · ${selected.size} selected` : ""}</p>
+          <h1 className="page-title mt-2">Contacts</h1>
+          <p className="page-subtitle">Manage your contacts{someSelected ? ` · ${selected.size} selected` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <input ref={fileRef} className="hidden" type="file" accept=".csv,.xlsx,.xls" onChange={e => void importFile(e.target.files?.[0])} />

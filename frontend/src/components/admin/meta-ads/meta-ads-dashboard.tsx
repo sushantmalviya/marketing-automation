@@ -181,7 +181,7 @@ export function MetaAdsDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-8">
+    <div className="w-full max-w-full pb-8">
       <nav aria-label="Breadcrumb" className="mb-9 flex items-center gap-2 text-sm text-slate-500">
         <span>Settings</span>
         <span className="text-slate-300">/</span>
@@ -646,15 +646,18 @@ function AdsPerformanceDashboard({
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-7xl pb-8">
+    <div className="w-full max-w-full pb-8">
       {/* Header section */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-black text-slate-950">
-          {currentView === 'dashboard' && 'Insights'}
-          {currentView === 'campaigns' && 'Campaign List'}
-          {currentView === 'leads' && 'Lead Sync Manager'}
-          {currentView === 'pixel' && 'Meta Pixel & Events'}
-        </h1>
+        <div>
+          <h1 className="page-title mt-2">
+            {currentView === 'dashboard' && 'Insights'}
+            {currentView === 'campaigns' && 'Campaign List'}
+            {currentView === 'leads' && 'Lead Sync Manager'}
+            {currentView === 'pixel' && 'Meta Pixel & Events'}
+          </h1>
+          <p className="page-subtitle">Manage your ads</p>
+        </div>
         <div className="flex items-center gap-2">
           {/* Working Calendar Dropdown */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>

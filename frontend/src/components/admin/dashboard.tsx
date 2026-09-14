@@ -115,7 +115,7 @@ export function AdminDashboard() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full max-w-full">
       {/* ── Heading ── */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -127,7 +127,7 @@ export function AdminDashboard() {
           <h1 className="page-title mt-2">
             Welcome back, <span className="text-indigo-600 dark:text-indigo-400 mx-1.5">{user?.first_name || "Admin"}</span>! 👋
           </h1>
-          <p className="page-subtitle">Here's what's happening with your marketing automation today.</p>
+          <p className="page-subtitle">Marketing Overview</p>
         </div>
         <div className="bg-white dark:bg-[#0c1222] rounded-lg shadow-sm border border-slate-200 dark:border-white/10 p-1">
           {picker}

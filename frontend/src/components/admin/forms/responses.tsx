@@ -76,7 +76,7 @@ export function FormResponses({ formId }: { formId: string }) {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-8 max-w-7xl mx-auto font-sans">
+    <div className="h-full overflow-y-auto p-8 w-full max-w-full font-sans">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Form Responses</h2>

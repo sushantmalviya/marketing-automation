@@ -85,9 +85,8 @@ export function SuperAdminAccount() {
     <div>
       <div className="flex items-start justify-between">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
-          <h1 className="sa-title mt-2 normal-case">Account Settings</h1>
-          <p className="sa-subtitle mt-1">{user.role.replaceAll("_", " ")} · {user.email}</p>
+          <h1 className="page-title mt-2">Account Settings</h1>
+          <p className="page-subtitle">Configure your profile</p>
         </div>
         <DarkModeToggle />
       </div>
@@ -507,8 +506,8 @@ function BrandIdentityTab() {
                       type="button"
                       onClick={() => toggleTone(t)}
                       className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${selectedTones.includes(t)
-                          ? "border-purple-500 bg-purple-600 text-white shadow-sm"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                        ? "border-purple-500 bg-purple-600 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
                         }`}
                     >
                       {t}
@@ -828,11 +827,10 @@ function ConnectSenderIDsPanel() {
                       {item.display_name ? `${item.display_name} (${item.email})` : item.email}
                     </h4>
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        item.status === "CONNECTED"
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.status === "CONNECTED"
                           ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                           : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400"
-                      }`}
+                        }`}
                     >
                       {item.status}
                     </span>

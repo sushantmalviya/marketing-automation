@@ -51,6 +51,10 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
   const [workflowName, setWorkflowName] = useState(automationId === "new" ? "New Automation Workflow" : "Loading...");
   const [workflowStatus, setWorkflowStatus] = useState<string>("DRAFT");
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
+
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
