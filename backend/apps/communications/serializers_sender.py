@@ -12,6 +12,13 @@ class SenderIdentitySerializer(serializers.ModelSerializer):
             "provider",
             "connection_type",
             "status",
+            "waba_id",
+            "phone_number_id",
+            "business_id",
+            "quality_rating",
+            "verified_name",
+            "code_verification_status",
+            "account_review_status",
             "last_verified_at",
             "created_at",
             "updated_at",
@@ -30,12 +37,11 @@ class ConnectSMTPSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 
-class ConnectWhatsAppSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
-    display_name = serializers.CharField(required=False, allow_blank=True, default="")
-    phone_number_id = serializers.CharField()
-    waba_id = serializers.CharField(required=False, allow_blank=True, default="")
-    access_token = serializers.CharField(write_only=True)
+class WhatsAppEmbeddedSignupSerializer(serializers.Serializer):
+    code = serializers.CharField(required=False, allow_blank=True, default="")
+    waba_id = serializers.CharField(required=True)
+    phone_number_id = serializers.CharField(required=True)
+    access_token = serializers.CharField(required=False, allow_blank=True, default="", write_only=True)
 
 
 class ConnectSMSSerializer(serializers.Serializer):
@@ -44,4 +50,5 @@ class ConnectSMSSerializer(serializers.Serializer):
     provider = serializers.ChoiceField(choices=["TWILIO_SMS", "CUSTOM_SMS"], default="TWILIO_SMS")
     account_sid = serializers.CharField(required=False, allow_blank=True, default="")
     auth_token = serializers.CharField(write_only=True)
+
 

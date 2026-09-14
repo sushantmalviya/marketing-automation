@@ -13,9 +13,11 @@ class BaseWhatsAppProvider:
 
 
 class MetaWhatsAppProvider(BaseWhatsAppProvider):
-    def __init__(self, access_token=None, phone_number_id=None):
+    def __init__(self, access_token=None, phone_number_id=None, api_version=None):
+        from django.conf import settings
         self.access_token = access_token
         self.phone_number_id = phone_number_id
+        self.api_version = api_version or getattr(settings, "META_GRAPH_API_VERSION", "v19.0")
 
     def send(self, to, message, metadata=None):
         try:
@@ -37,7 +39,7 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
         )
         session.mount("https://", HTTPAdapter(max_retries=retries))
 
-        url = f"https://graph.facebook.com/v17.0/{self.phone_number_id}/messages"
+        url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}/messages"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",

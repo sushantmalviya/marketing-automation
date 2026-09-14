@@ -21,6 +21,7 @@ class CommunicationEvent(models.Model):
         ("CLICKED", "Clicked"),
         ("READ", "Read"),
         ("REPLIED", "Replied"),
+        ("RECEIVED", "Received"),
         ("BOUNCED", "Bounced"),
         ("UNSUBSCRIBED", "Unsubscribed"),
         ("FAILED", "Failed"),
@@ -132,6 +133,15 @@ class SenderIdentity(models.Model):
     # Store encrypted credentials (tokens, app passwords, host, port, security settings)
     encrypted_credentials = models.JSONField(default=dict, blank=True)
     
+    # Meta WhatsApp explicit fields for fast lookup & multi-tenant isolation
+    waba_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    phone_number_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    business_id = models.CharField(max_length=255, blank=True, default="")
+    quality_rating = models.CharField(max_length=50, blank=True, default="")
+    verified_name = models.CharField(max_length=255, blank=True, default="")
+    code_verification_status = models.CharField(max_length=50, blank=True, default="")
+    account_review_status = models.CharField(max_length=50, blank=True, default="")
+
     last_verified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -142,6 +152,8 @@ class SenderIdentity(models.Model):
         indexes = [
             models.Index(fields=["user", "provider"]),
             models.Index(fields=["email"]),
+            models.Index(fields=["phone_number_id"]),
+            models.Index(fields=["waba_id"]),
         ]
 
     def __str__(self):

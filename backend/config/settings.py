@@ -288,6 +288,13 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
 OAUTH_REDIRECT_BASE_URL = os.getenv("OAUTH_REDIRECT_BASE_URL")
 OAUTH_SUCCESS_REDIRECT_URL = os.getenv("OAUTH_SUCCESS_REDIRECT_URL")
 
+# --------------------------------------------------
+# Meta WhatsApp Cloud API Configuration
+# --------------------------------------------------
+META_APP_ID = os.getenv("META_APP_ID", os.getenv("FACEBOOK_CLIENT_ID", ""))
+META_APP_SECRET = os.getenv("META_APP_SECRET", os.getenv("FACEBOOK_CLIENT_SECRET", ""))
+META_GRAPH_API_VERSION = os.getenv("META_GRAPH_API_VERSION", "v19.0")
+META_CONFIG_ID = os.getenv("NEXT_PUBLIC_META_CONFIG_ID", "")
 WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "auto-market-whatsapp-secure-token")
 
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")

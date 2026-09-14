@@ -17,10 +17,11 @@ from apps.communications.providers.sender_abstraction import (
 )
 from apps.communications.serializers_sender import (
     ConnectSMTPSerializer,
-    ConnectWhatsAppSerializer,
+    WhatsAppEmbeddedSignupSerializer,
     ConnectSMSSerializer,
     SenderIdentitySerializer,
 )
+from apps.communications.services.meta_api import MetaAPIService
 from apps.integrations.utils.crypto import encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -337,32 +338,78 @@ class SendTestEmailView(APIView):
             return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class ConnectWhatsAppView(APIView):
+class WhatsAppEmbeddedSignupCallbackView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = ConnectWhatsAppSerializer(data=request.data)
+        serializer = WhatsAppEmbeddedSignupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        code = data.get("code")
+        waba_id = data["waba_id"]
+        phone_number_id = data["phone_number_id"]
+        access_token = data.get("access_token", "")
+
+        meta_api = MetaAPIService()
+
+        if code and not access_token:
+            try:
+                token_data = meta_api.exchange_code_for_token(code)
+                access_token = token_data.get("access_token")
+            except Exception as exc:
+                logger.error(f"Embedded signup token exchange failed for user {request.user.id}: {exc}")
+                return Response(
+                    {"detail": f"Meta token exchange failed: {str(exc)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if not access_token:
+            return Response(
+                {"detail": "Access token or authorization code is required for WhatsApp setup."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 1. Auto-subscribe WABA to webhook application
+        meta_api.subscribe_waba_to_app(waba_id, access_token)
+
+        # 2. Register Phone Number if required
+        meta_api.register_phone_number(phone_number_id, access_token)
+
+        # 3. Fetch phone details & quality rating from Meta Graph API
+        phone_info = meta_api.get_phone_number_details(phone_number_id, access_token)
+        display_phone = phone_info.get("display_phone_number") or phone_number_id
+        verified_name = phone_info.get("verified_name") or ""
+        quality_rating = phone_info.get("quality_rating") or "UNKNOWN"
+        code_verification_status = phone_info.get("code_verification_status") or "UNKNOWN"
+        account_review_status = phone_info.get("account_review_status") or "UNKNOWN"
+
         credentials = {
-            "phone_number_id": data["phone_number_id"],
-            "waba_id": data.get("waba_id", ""),
-            "access_token": encrypt_token(data["access_token"]),
+            "phone_number_id": phone_number_id,
+            "waba_id": waba_id,
+            "access_token": encrypt_token(access_token),
         }
 
+        # 4. Save/Update SenderIdentity scoped to request.user (strict multi-tenant isolation)
         identity, _ = SenderIdentity.objects.update_or_create(
             user=request.user,
-            email=data["phone_number"], # Store phone number in identifier field
+            phone_number_id=phone_number_id,
             defaults={
-                "display_name": data.get("display_name") or f"WhatsApp ({data['phone_number']})",
+                "email": display_phone,
+                "display_name": verified_name or f"WhatsApp ({display_phone})",
                 "provider": "WHATSAPP_CLOUD",
-                "connection_type": "API_KEY",
+                "connection_type": "OAUTH",
                 "status": "CONNECTED",
+                "waba_id": waba_id,
+                "quality_rating": quality_rating,
+                "verified_name": verified_name,
+                "code_verification_status": code_verification_status,
+                "account_review_status": account_review_status,
                 "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
             }
         )
+
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
 

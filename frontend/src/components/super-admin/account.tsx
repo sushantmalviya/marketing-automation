@@ -934,21 +934,48 @@ function ConnectSenderIDsPanel() {
                       <MessageSquare size={16} />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-semibold text-slate-900 dark:text-white">
                           {item.display_name ? `${item.display_name} (${item.email})` : item.email}
                         </span>
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            item.status === "CONNECTED"
+                              ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                              : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                          }`}
+                        >
                           {item.status}
                         </span>
+                        {item.quality_rating && item.quality_rating !== "UNKNOWN" && (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              item.quality_rating === "GREEN"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : item.quality_rating === "YELLOW"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-rose-100 text-rose-700"
+                            }`}
+                          >
+                            Quality: {item.quality_rating}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Provider: WhatsApp Cloud API • Identifier: {item.email}
+                        Provider: WhatsApp Cloud API
+                        {item.waba_id ? ` • WABA ID: ${item.waba_id}` : ""}
+                        {item.phone_number_id ? ` • Phone ID: ${item.phone_number_id}` : ""}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveModal("WHATSAPP")}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      Reconnect
+                    </button>
                     <button
                       disabled={deletingId === item.id || deleteMutation.isPending}
                       onClick={() => {

@@ -6,7 +6,7 @@ from apps.communications.views import (
 )
 from apps.communications.views_sender import (
     ConnectSMTPView,
-    ConnectWhatsAppView,
+    WhatsAppEmbeddedSignupCallbackView,
     ConnectSMSView,
     GoogleOAuthCallbackView,
     GoogleOAuthUrlView,
@@ -28,6 +28,10 @@ urlpatterns = [
         WhatsAppWebhookView.as_view(),
     ),
     path(
+        "whatsapp/embedded-signup/callback/",
+        WhatsAppEmbeddedSignupCallbackView.as_view(),
+    ),
+    path(
         "sender-identities/",
         SenderIdentityListView.as_view(),
     ),
@@ -42,10 +46,6 @@ urlpatterns = [
     path(
         "sender-identities/connect-smtp/",
         ConnectSMTPView.as_view(),
-    ),
-    path(
-        "sender-identities/connect-whatsapp/",
-        ConnectWhatsAppView.as_view(),
     ),
     path(
         "sender-identities/connect-sms/",
