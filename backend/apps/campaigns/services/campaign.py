@@ -1,7 +1,5 @@
 from rest_framework.exceptions import PermissionDenied
 
-from apps.tasks.models import TaskAssignment
-
 from apps.campaigns.models import (
     Campaign,
     CampaignAudience,
@@ -29,10 +27,32 @@ class CampaignService:
         if "description" in validated_data:
             campaign.description = validated_data["description"]
             
+        audience_updated = False
+        if "target_audience" in validated_data:
+            new_target_audience = validated_data["target_audience"]
+            if campaign.target_audience != new_target_audience:
+                campaign.target_audience = new_target_audience
+                audience_updated = True
+
         if was_rejected:
             cls.handle_rejected_to_draft(campaign)
             
-        campaign.save(update_fields=["name", "description", "updated_at"])
+        campaign.save(update_fields=["name", "description", "target_audience", "updated_at"])
+
+        if audience_updated:
+            CampaignAudience.objects.filter(campaign=campaign).delete()
+            if campaign.target_audience and campaign.target_audience.customer_upload:
+                customers = AudienceService.get_customers(
+                    customer_upload=campaign.target_audience.customer_upload,
+                    audience_definition=campaign.target_audience.definition or {},
+                )
+                CampaignAudience.objects.bulk_create(
+                    [
+                        CampaignAudience(campaign=campaign, customer=customer)
+                        for customer in customers
+                    ]
+                )
+
         return campaign
 
     @classmethod
@@ -50,17 +70,12 @@ class CampaignService:
 
     @classmethod
     def change_status(cls, campaign, new_status, **update_fields):
-        from apps.tasks.services import TaskStatusService
-        
         campaign.status = new_status
         for field, value in update_fields.items():
             setattr(campaign, field, value)
             
         fields_to_save = ["status"] + list(update_fields.keys())
         campaign.save(update_fields=fields_to_save)
-        
-        TaskStatusService.update_task_status(campaign.task)
-        
         return campaign
 
     @staticmethod
@@ -68,58 +83,41 @@ class CampaignService:
         validated_data,
         user,
     ):
-        task = validated_data["task"]
+        target_audience = validated_data.get("target_audience")
 
         ma_user = MAUser.objects.filter(
             user_id=user
         ).first()
 
-        if not ma_user or ma_user.role not in ["USER", "ADMIN"]:
+        if not ma_user:
             raise PermissionDenied(
-                "Only marketing users and admins can create campaigns."
-            )
-
-        user_can_create = ma_user.role == "USER" and TaskAssignment.objects.filter(task=task, user=user).exists()
-        admin_can_create = ma_user.role == "ADMIN" and task.created_by_id == user.id
-        if not user_can_create and not admin_can_create:
-            raise PermissionDenied(
-                "You can only create a campaign for an assigned or owned task."
+                "A valid account profile is required to create campaigns."
             )
 
         # Create campaign
         campaign = Campaign.objects.create(
-            task=task,
+            target_audience=target_audience,
             name=validated_data["name"],
             description=validated_data.get("description"),
             created_by=user,
+            status=Campaign.Status.DRAFT,
         )
 
-        # Freeze recipients
-        customers = AudienceService.get_customers(
-            customer_upload=task.audience.customer_upload,
-            audience_definition=task.audience.definition,
-        )
+        if target_audience and target_audience.customer_upload:
+            customers = AudienceService.get_customers(
+                customer_upload=target_audience.customer_upload,
+                audience_definition=target_audience.definition or {},
+            )
 
-        CampaignAudience.objects.bulk_create(
-            [
-                CampaignAudience(
-                    campaign=campaign,
-                    customer=customer,
-                )
-                for customer in customers
-            ]
-        )
-
-        # Copy task channels
-        CampaignChannel.objects.bulk_create(
-            [
-                CampaignChannel(
-                    campaign=campaign,
-                    channel=channel,
-                )
-                for channel in task.channels.all()
-            ]
-        )
+            CampaignAudience.objects.bulk_create(
+                [
+                    CampaignAudience(
+                        campaign=campaign,
+                        customer=customer,
+                    )
+                    for customer in customers
+                ]
+            )
 
         return campaign
 

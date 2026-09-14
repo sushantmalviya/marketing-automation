@@ -9,7 +9,7 @@ from apps.billing.models import Transaction, Wallet
 class BillingSummaryTests(APITestCase):
     def setUp(self):
         self.root = User.objects.create_user(email="billing-root@example.com", password="StrongPass123!")
-        MAUser.objects.create(user=self.root, role="SUPER_ADMIN")
+        MAUser.objects.create(user=self.root, role="ADMIN")
         self.user = User.objects.create_user(email="billing-user@example.com", password="StrongPass123!")
         MAUser.objects.create(user=self.user, role="USER")
         self.wallet = Wallet.objects.create(balance=700)

@@ -3,7 +3,6 @@ from rest_framework.permissions import BasePermission
 from .models import MAUser, User
 
 
-SUPER_ADMIN = "SUPER_ADMIN"
 ADMIN = "ADMIN"
 USER = "USER"
 
@@ -20,7 +19,7 @@ def get_request_role(user):
 
     # A Django superuser must never be downgraded by a stale MAUser row.
     if getattr(user, "is_superuser", False):
-        return SUPER_ADMIN
+        return ADMIN
 
     return (
         MAUser.objects.filter(user=user)
@@ -39,7 +38,7 @@ def _get_role_profile(user, role=None):
         return None
 
     return (
-        MAUser.objects.select_related("user", "managed_by")
+        MAUser.objects.select_related("user")
         .filter(user=user, role=expected_role)
         .first()
     )
@@ -55,27 +54,24 @@ def _get_target_profile(obj):
 
 
 class IsAdminOrSuperAdmin(BasePermission):
-    """Allow authenticated Admin and Super Admin users."""
+    """Allow authenticated Admin and User roles."""
 
-    message = "Admin or Super Admin access is required."
+    message = "Admin or User role access is required."
 
     def has_permission(self, request, view):
         return get_request_role(getattr(request, "user", None)) in {
             ADMIN,
-            SUPER_ADMIN,
+            USER,
         }
 
 
 class IsSuperAdminOrOwnManagedUser(BasePermission):
-    """Allow Super Admins to manage Admins and Admins to manage their Users."""
+    """Allow Admins to manage Users."""
 
     message = "You do not have permission to manage this account."
 
     def has_permission(self, request, view):
-        return get_request_role(getattr(request, "user", None)) in {
-            ADMIN,
-            SUPER_ADMIN,
-        }
+        return get_request_role(getattr(request, "user", None)) == ADMIN
 
     def has_object_permission(self, request, view, obj):
         request_user = getattr(request, "user", None)
@@ -85,17 +81,10 @@ class IsSuperAdminOrOwnManagedUser(BasePermission):
         if target_profile is None:
             return False
 
-        if request_role == SUPER_ADMIN:
-            return target_profile.role == ADMIN
+        if request_role == ADMIN:
+            return target_profile.role == USER
 
-        if request_role != ADMIN or target_profile.role != USER:
-            return False
-
-        admin_profile = _get_role_profile(request_user, ADMIN)
-        return bool(
-            admin_profile
-            and target_profile.managed_by_id == admin_profile.id
-        )
+        return False
 
 
 class IsContentStudioAuthorized(BasePermission):
@@ -106,31 +95,20 @@ class IsContentStudioAuthorized(BasePermission):
     def has_permission(self, request, view):
         request_user = getattr(request, "user", None)
         role = get_request_role(request_user)
-        if role not in {SUPER_ADMIN, ADMIN, USER}:
+        if role not in {ADMIN, USER}:
             return False
 
         profile = _get_role_profile(request_user, role)
-        if profile is None and role != SUPER_ADMIN:
+        if profile is None and role != ADMIN:
             return False
 
         # Content services consume these effective values during the request.
         request_user.role = role
-        request_user.requires_approval = (
-            profile.requires_approval if profile is not None else False
-        )
+        request_user.requires_approval = False
         return True
 
 
 class IsSuperAdmin(BasePermission):
-    """Allow only effective Super Admin users."""
-
-    message = "Super Admin access is required."
-
-    def has_permission(self, request, view):
-        return get_request_role(getattr(request, "user", None)) == SUPER_ADMIN
-
-
-class IsAdmin(BasePermission):
     """Allow only effective Admin users."""
 
     message = "Admin access is required."
@@ -139,26 +117,26 @@ class IsAdmin(BasePermission):
         return get_request_role(getattr(request, "user", None)) == ADMIN
 
 
-class IsMarketingUser(BasePermission):
-    """Allow only effective Marketing User accounts."""
+class IsAdmin(BasePermission):
+    """Allow only effective User role accounts."""
 
-    message = "Marketing User access is required."
+    message = "User role access is required."
 
     def has_permission(self, request, view):
-        return get_request_role(getattr(request, "user", None)) == USER
+        return get_request_role(getattr(request, "user", None)) in {ADMIN, USER}
 
 
 class CanBootstrapSuperAdmin(BasePermission):
-    """Allow one anonymous bootstrap, then require an existing Super Admin."""
+    """Allow one anonymous bootstrap, then require an existing Admin."""
 
-    message = "Super Admin creation is restricted to an existing Super Admin."
+    message = "Admin creation is restricted to an existing Admin."
 
     def has_permission(self, request, view):
-        super_admin_exists = (
-            MAUser.objects.filter(role=SUPER_ADMIN).exists()
+        admin_exists = (
+            MAUser.objects.filter(role=ADMIN).exists()
             or User.objects.filter(is_superuser=True).exists()
         )
-        if not super_admin_exists:
+        if not admin_exists:
             return True
 
-        return get_request_role(getattr(request, "user", None)) == SUPER_ADMIN
+        return get_request_role(getattr(request, "user", None)) == ADMIN

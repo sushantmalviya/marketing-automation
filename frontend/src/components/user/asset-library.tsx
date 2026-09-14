@@ -329,7 +329,7 @@ function AssetPreviewModal({ asset, onClose, onDelete }: { asset: Asset; onClose
             </div>
             <div className="mt-2 flex justify-end gap-2">
               <button className="secondary-button px-4 text-sm" onClick={() => setChoosingChannels(false)}>Cancel</button>
-              <button className="primary-button px-4 text-sm" disabled={selectedChannels.length === 0} onClick={() => router.push(`/user/content?assetId=${asset.id}&channels=${selectedChannels.join(',')}`)}>Proceed</button>
+              <button className="primary-button px-4 text-sm" disabled={selectedChannels.length === 0} onClick={() => router.push(`/user/channels?assetId=${asset.id}&channels=${selectedChannels.join(',')}`)}>Proceed</button>
             </div>
           </div>
         ) : (

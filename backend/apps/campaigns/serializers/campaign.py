@@ -1,15 +1,22 @@
 from rest_framework import serializers
-from ..models import CustomerUpload,Campaign
+from ..models import CustomerUpload, Campaign, Audience
 
 class CampaignCreateSerializer(serializers.ModelSerializer):
+    audience = serializers.PrimaryKeyRelatedField(
+        queryset=Audience.objects.all(),
+        source="target_audience",
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Campaign
         fields = [
-            "task",
             "name",
             "description",
+            "audience",
         ]
+
     def validate_name(self, value):
         value = value.strip()
 
@@ -42,11 +49,19 @@ class CampaignRetrieveUpdateSerializer(serializers.ModelSerializer):
     
 
 class CampaignUpdateSerializer(serializers.ModelSerializer):
+    audience = serializers.PrimaryKeyRelatedField(
+        queryset=Audience.objects.all(),
+        source="target_audience",
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Campaign
         fields = [
             "name",
             "description",
+            "audience",
         ]
         
     def validate_name(self, value):
@@ -158,9 +173,10 @@ class PendingApprovalSerializer(serializers.ModelSerializer):
 
 class MyCampaignListSerializer(serializers.ModelSerializer):
     campaign_name = serializers.CharField(source="name", read_only=True)
-    task_name = serializers.CharField(source="task.title", read_only=True)
-    audience_name = serializers.CharField(source="task.audience.name", read_only=True)
-    approved_by = serializers.CharField(source="approved_by.email", read_only=True)
+    task_id = serializers.SerializerMethodField()
+    task_name = serializers.SerializerMethodField()
+    audience_name = serializers.SerializerMethodField()
+    approved_by = serializers.SerializerMethodField()
     submitted_by_name = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
     available_actions = serializers.SerializerMethodField()
@@ -197,6 +213,34 @@ class MyCampaignListSerializer(serializers.ModelSerializer):
             "available_actions",
         ]
 
+    def get_task_id(self, obj):
+        return None
+
+    def get_task_name(self, obj):
+        return ""
+
+    def get_audience_name(self, obj):
+        if getattr(obj, "target_audience", None):
+            return obj.target_audience.name
+        aud_rel = getattr(obj, "campaign_audiences", None) or getattr(obj, "audience", None)
+        if aud_rel and hasattr(aud_rel, "first"):
+            first_aud = aud_rel.first()
+            if first_aud:
+                if hasattr(first_aud, "audience") and first_aud.audience:
+                    return first_aud.audience.name
+                if hasattr(first_aud, "name"):
+                    return first_aud.name
+                if hasattr(first_aud, "customer") and first_aud.customer and hasattr(first_aud.customer, "upload") and first_aud.customer.upload:
+                    from apps.campaigns.models import Audience
+                    aud = Audience.objects.filter(customer_upload=first_aud.customer.upload).first()
+                    if aud:
+                        return aud.name
+                    return first_aud.customer.upload.file_name
+        return ""
+
+    def get_approved_by(self, obj):
+        return obj.approved_by.email if obj.approved_by else ""
+
     def get_channels(self, obj):
         return [c.channel.name for c in obj.campaign_channels.all()]
 
@@ -208,17 +252,15 @@ class MyCampaignListSerializer(serializers.ModelSerializer):
         return full or user.email
 
     def get_available_actions(self, obj):
-        if obj.status == Campaign.Status.DRAFT:
-            return ["edit", "delete", "submit"]
+        if obj.status in [Campaign.Status.DRAFT, Campaign.Status.APPROVED]:
+            return ["edit", "delete", "send", "schedule", "submit"]
         elif obj.status == Campaign.Status.PENDING_APPROVAL:
-            return ["approve", "reject", "view"]
-        elif obj.status == Campaign.Status.APPROVED:
-            return ["view", "send", "schedule"]
+            return ["approve", "reject", "view", "send", "schedule"]
         elif obj.status == Campaign.Status.REJECTED:
             return ["edit", "submit"]
         elif obj.status == Campaign.Status.COMPLETED:
             return ["view"]
-        return []
+        return ["edit", "delete", "send", "schedule"]
 
 class DailySeriesSerializer(serializers.Serializer):
     date = serializers.CharField()

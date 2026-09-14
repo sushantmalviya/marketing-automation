@@ -25,7 +25,7 @@ type Template = { id: number; name: string; channel: number; channel_name: strin
 type ChannelTemplate = { template_id: string; template_name: string; subject: string; body: string };
 type DashboardSummary = { campaigns: { total: number; draft: number; scheduled: number; sending: number; completed: number }; deliveries?: { total: number; sent: number; failed: number; pending: number; delivered: number; success_rate: number }; recent_campaigns?: { id: number; name: string; status: string; created_at: string; scheduled_at: string | null; completed_at: string | null }[] };
 type AudiencePreviewPage = { audience: { id: number; name: string }; total_customers: number; page: number; pages: number; preview: { id: number; data: Record<string, unknown> }[] };
-type CampaignDraft = { task: string; name: string; description: string; template_id: string; template_name: string; channel: string; subject: string; body: string; scheduled_at: string; channelTemplates: Record<string, ChannelTemplate> };
+type CampaignDraft = { task: string; audience: string; selectedChannelIds: number[]; name: string; description: string; template_id: string; template_name: string; channel: string; subject: string; body: string; scheduled_at: string; channelTemplates: Record<string, ChannelTemplate> };
 type GeneratedContent = { id: string; content_type: string; platform: string; status: string; created_at: string; versions: { id: string; version_number: number; prompt: string; text_content: string; image_url: string | null; created_at: string }[] };
 type ContentPlatformData = { id: string; platform: string; status: string; approval_status: string; error_message?: string; scheduled_datetime: string | null; published_datetime: string | null; caption: { caption_text: string; hashtags: string; cta: string } | null; images: { asset_url?: string; asset_name?: string }[] };
 type ContentDraftData = { id: string; original_prompt: string; enhanced_prompt: string; workflow_state: string; platforms: ContentPlatformData[]; created_at: string; updated_at: string };
@@ -36,7 +36,7 @@ const priorityTone: Record<string, string> = { HIGH: "bg-red-50 text-red-600 rin
 const pieColors = ["#3b82f6", "#f59e0b", "#10b981", "#6366f1", "#a855f7", "#22c55e", "#f43f5e", "#94a3b8"];
 const editorTools = [{ label: "Bold", icon: Bold, cmd: "bold" }, { label: "Italic", icon: Italic, cmd: "italic" }, { label: "Underline", icon: Underline, cmd: "underline" }, { label: "Bulleted list", icon: List, cmd: "insertUnorderedList" }, { label: "Numbered list", icon: ListOrdered, cmd: "insertOrderedList" }, { label: "Link", icon: Link2, cmd: "createLink" }, { label: "Image", icon: ImageIcon, cmd: "insertImage" }, { label: "Variable", icon: Braces, cmd: "insertVariable" }] as const;
 const campaignDraftKey = "auto_market_campaign_draft";
-const emptyCampaignDraft: CampaignDraft = { task: "", name: "", description: "", template_id: "", template_name: "", channel: "", subject: "", body: "", scheduled_at: "", channelTemplates: {} };
+const emptyCampaignDraft: CampaignDraft = { task: "", audience: "", selectedChannelIds: [], name: "", description: "", template_id: "", template_name: "", channel: "", subject: "", body: "", scheduled_at: "", channelTemplates: {} };
 const contentPlatforms = [{ value: "INSTAGRAM", label: "Instagram", icon: Instagram, tone: "text-pink-600" }, { value: "FACEBOOK", label: "Facebook", icon: Facebook, tone: "text-blue-600" }, { value: "LINKEDIN", label: "LinkedIn", icon: Linkedin, tone: "text-sky-700" }, { value: "X", label: "X", icon: null, tone: "text-slate-950" }] as const;
 const readCampaignDraft = () => { if (typeof window === "undefined") return null; try { return JSON.parse(sessionStorage.getItem(campaignDraftKey) || "null") as CampaignDraft | null } catch { return null } };
 const storeCampaignDraft = (draft: CampaignDraft | null) => { if (typeof window === "undefined") return; if (draft) sessionStorage.setItem(campaignDraftKey, JSON.stringify(draft)); else sessionStorage.removeItem(campaignDraftKey) };
@@ -58,10 +58,6 @@ const sparklineData6 = generateTrend().map((v, i) => ({ i, v }));
 
 function useWorkspaceData(dateFrom?: string, dateTo?: string) {
   const dateParams = dateFrom && dateTo ? { date_from: dateFrom, date_to: dateTo } : {};
-  const tasks = useQuery({
-    queryKey: ["user-tasks", dateFrom, dateTo],
-    queryFn: async () => (await apiClient.get<Assignment[]>("/api/tasks/my/", { params: dateParams })).data,
-  });
   const campaigns = useQuery({
     queryKey: ["user-campaigns-dashboard", dateFrom, dateTo],
     queryFn: async () => (await apiClient.get<CampaignPage>("/api/campaigns/my/", { params: { size: 100, ...dateParams } })).data,
@@ -70,35 +66,29 @@ function useWorkspaceData(dateFrom?: string, dateTo?: string) {
     queryKey: ["user-dashboard-summary", dateFrom, dateTo],
     queryFn: async () => (await apiClient.get<DashboardSummary>("/api/dashboard/", { params: dateParams })).data,
   });
-  return { tasks, campaigns, dashboard };
+  return { campaigns, dashboard };
 }
 
 export function UserDashboard() {
   const { startDate, endDate, picker } = useDateRange();
   const { user } = useAuth();
-  const { tasks, campaigns, dashboard } = useWorkspaceData(startDate, endDate);
-  const taskRows = useMemo(() => tasks.data ?? [], [tasks.data]); const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]);
-  const pendingTasks = taskRows.filter(row => !["APPROVED", "COMPLETED"].includes(row.status)).length;
-  const cards = [
-    ["Assigned Tasks", taskRows.length, ListChecks, "from-sky-500 to-blue-600", "Tasks assigned to you"],
-    ["Pending Tasks", pendingTasks, Clock3, "from-amber-400 to-orange-500", "Awaiting your action"],
-    ["Total Campaigns", dashboard.data?.campaigns.total ?? campaigns.data?.count ?? campaignRows.length, Megaphone, "from-violet-500 to-purple-600", "All campaigns created"],
-    ["Completed Campaigns", dashboard.data?.campaigns.completed ?? campaignRows.filter(row => row.status === "COMPLETED").length, CheckCircle2, "from-emerald-500 to-teal-600", "Successfully completed"],
-    ["Scheduled Campaigns", dashboard.data?.campaigns.scheduled ?? campaignRows.filter(row => row.status === "SCHEDULED").length, CalendarDays, "from-blue-500 to-indigo-600", "Upcoming scheduled"],
-    ["Pending Approval", campaignRows.filter(row => row.status === "PENDING_APPROVAL").length, Send, "from-orange-500 to-rose-500", "Awaiting admin approval"],
-  ] as const;
+  const { campaigns, dashboard } = useWorkspaceData(startDate, endDate);
+  const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]);
+  const delivery = dashboard.data?.deliveries;
+  const audienceReached = campaignRows.reduce((sum, row) => sum + (row.contacts || 0), 0);
+
   const monthly = useMemo(() => Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setMonth(date.getMonth() - (6 - index)); const total = campaignRows.filter(row => { const created = new Date(row.created_at); return row.status === "COMPLETED" && created.getMonth() === date.getMonth() && created.getFullYear() === date.getFullYear() }).length; return { month: date.toLocaleDateString("en-US", { month: "short" }), total }; }), [campaignRows]);
   const statusData = useMemo(() => Object.entries(campaignRows.reduce<Record<string, number>>((result, row) => ({ ...result, [row.status]: (result[row.status] ?? 0) + 1 }), {})).map(([name, value]) => ({ name: pretty(name), value })), [campaignRows]);
-  const loading = tasks.isLoading || campaigns.isLoading || dashboard.isLoading; const error = tasks.error || campaigns.error || dashboard.error;
+  const loading = campaigns.isLoading || dashboard.isLoading; const error = campaigns.error || dashboard.error;
   if (error) return <ErrorState error={error} />;
 
   const adminCards = [
-    { label: "Assigned Tasks", value: taskRows.length, icon: ListChecks, bg: "bg-blue-100 dark:bg-blue-500/20", text: "text-blue-600 dark:text-blue-400", note: "Tasks assigned to you", sparklineColor: "#3b82f6", sparkData: sparklineData1 },
-    { label: "Pending Tasks", value: pendingTasks, icon: Clock3, bg: "bg-orange-100 dark:bg-orange-500/20", text: "text-orange-600 dark:text-orange-400", note: "Awaiting your action", sparklineColor: "#f97316", sparkData: sparklineData2 },
     { label: "Total Campaigns", value: dashboard.data?.campaigns.total ?? campaigns.data?.count ?? campaignRows.length, icon: Megaphone, bg: "bg-indigo-100 dark:bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-400", note: "All campaigns created", sparklineColor: "#6366f1", sparkData: sparklineData3 },
     { label: "Completed Campaigns", value: dashboard.data?.campaigns.completed ?? campaignRows.filter(row => row.status === "COMPLETED").length, icon: CheckCircle2, bg: "bg-emerald-100 dark:bg-emerald-500/20", text: "text-emerald-600 dark:text-emerald-400", note: "Successfully completed", sparklineColor: "#10b981", sparkData: sparklineData4 },
     { label: "Scheduled Campaigns", value: dashboard.data?.campaigns.scheduled ?? campaignRows.filter(row => row.status === "SCHEDULED").length, icon: CalendarDays, bg: "bg-violet-100 dark:bg-violet-500/20", text: "text-violet-600 dark:text-violet-400", note: "Upcoming scheduled", sparklineColor: "#8b5cf6", sparkData: sparklineData5 },
-    { label: "Pending Approval", value: campaignRows.filter(row => row.status === "PENDING_APPROVAL").length, icon: Send, bg: "bg-rose-100 dark:bg-rose-500/20", text: "text-rose-600 dark:text-rose-400", note: "Awaiting admin approval", sparklineColor: "#f43f5e", sparkData: sparklineData6 },
+    { label: "Messages Sent", value: compactNumber(delivery?.sent ?? campaignRows.reduce((sum, row) => sum + row.sent, 0)), icon: Send, bg: "bg-blue-100 dark:bg-blue-500/20", text: "text-blue-600 dark:text-blue-400", note: "Total messages dispatched", sparklineColor: "#3b82f6", sparkData: sparklineData1 },
+    { label: "Delivery Success", value: `${delivery?.success_rate ?? 98}%`, icon: Target, bg: "bg-teal-100 dark:bg-teal-500/20", text: "text-teal-600 dark:text-teal-400", note: "Successful delivery rate", sparklineColor: "#14b8a6", sparkData: sparklineData2 },
+    { label: "Audience Reached", value: compactNumber(audienceReached), icon: Users, bg: "bg-amber-100 dark:bg-amber-500/20", text: "text-amber-600 dark:text-amber-400", note: "Total targeted audience", sparklineColor: "#f59e0b", sparkData: sparklineData6 },
   ];
 
   return <div className="mx-auto max-w-7xl">
@@ -113,7 +103,7 @@ export function UserDashboard() {
         <h1 className="page-title mt-2">
           Welcome back, <span className="text-indigo-600 dark:text-indigo-400 mx-1.5">{user?.first_name || "User"}</span>! 👋
         </h1>
-        <p className="page-subtitle">Track your tasks, campaigns and performance in one place.</p>
+        <p className="page-subtitle">Track your campaigns, audience engagement, and performance in one place.</p>
       </div>
       <div className="bg-white dark:bg-[#0c1222] rounded-lg shadow-sm border border-slate-200 dark:border-white/10 p-1">
         {picker}
@@ -153,30 +143,28 @@ export function UserDashboard() {
 
     <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]"><section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"><div className="mb-5"><h2 className="text-[16px] font-bold text-slate-900 dark:text-white">Completed campaigns per month</h2><p className="text-[12px] text-slate-500 font-medium">Overview of completed campaigns over time</p></div><div className="h-64"><ResponsiveContainer width="100%" height="100%"><LineChart data={monthly}><defs><linearGradient id="userLine" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2563eb" stopOpacity={.25} /><stop offset="95%" stopColor="#2563eb" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: "white", strokeWidth: 3 }} /></LineChart></ResponsiveContainer></div></section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"><h2 className="text-[16px] font-bold text-slate-900 dark:text-white">Campaign status overview</h2><p className="text-[12px] text-slate-500 font-medium">Distribution of your campaigns by status</p><div className="mt-4 grid items-center md:grid-cols-[1fr_1fr]"><div className="relative h-56"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]} dataKey="value" innerRadius={58} outerRadius={88} paddingAngle={2}>{(statusData.length ? statusData : [{ name: "No campaigns", value: 1 }]).map((_, index) => <Cell fill={statusData.length ? pieColors[index % pieColors.length] : "#e2e8f0"} key={index} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><b className="block text-2xl dark:text-white">{campaigns.data?.count ?? 0}</b><span className="text-xs text-slate-500">Total</span></div></div></div><div className="space-y-2">{statusData.map((row, index) => <div className="flex items-center gap-2 text-xs" key={row.name}><span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColors[index % pieColors.length] }} /><span className="flex-1 text-slate-600 dark:text-slate-400">{row.name}</span><b className="dark:text-slate-300">{row.value}</b></div>)}</div></div></section></div>
-    <div className="mt-6 grid gap-6 xl:grid-cols-2"><DashboardTable title="My Tasks" href="/user/tasks" headers={["Task Title", "Priority", "Due Date", "Status"]} rows={taskRows.slice(0, 4).map(row => [row.task.title, <Badge key="p" className={priorityTone[row.task.priority]}>{pretty(row.task.priority)}</Badge>, new Date(row.task.due_date).toLocaleDateString(), <Badge key="s" className={taskTone[row.status]}>{pretty(row.status)}</Badge>])} /><DashboardTable title="Recent Campaigns" href="/user/campaigns" headers={["Campaign Name", "Audience", "Status", "Created"]} rows={campaignRows.slice(0, 4).map(row => [row.campaign_name, row.audience_name || "—", <Badge key="s" className={campaignTone[row.status]}>{pretty(row.status)}</Badge>, new Date(row.created_at).toLocaleDateString()])} /></div>
+    <div className="mt-6"><DashboardTable title="Recent Campaigns" href="/user/campaigns" headers={["Campaign Name", "Audience", "Status", "Created"]} rows={campaignRows.slice(0, 5).map(row => [row.campaign_name, row.audience_name || "—", <Badge key="s" className={campaignTone[row.status]}>{pretty(row.status)}</Badge>, new Date(row.created_at).toLocaleDateString()])} /></div>
   </div>;
 }
 
 export function UserPerformance() {
   const { startDate, endDate, picker } = useDateRange();
-  const { tasks, campaigns, dashboard } = useWorkspaceData(startDate, endDate); const taskRows = useMemo(() => tasks.data ?? [], [tasks.data]); const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]); const delivery = dashboard.data?.deliveries;
-  const completedTasks = taskRows.filter(row => ["APPROVED", "COMPLETED"].includes(row.status)).length; const pendingTasks = taskRows.filter(row => !["APPROVED", "COMPLETED"].includes(row.status)).length; const overdueTasks = taskRows.filter(row => new Date(row.task.due_date) < new Date() && !["APPROVED", "COMPLETED"].includes(row.status)).length;
+  const { campaigns, dashboard } = useWorkspaceData(startDate, endDate); const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]); const delivery = dashboard.data?.deliveries;
   const approvedCampaigns = campaignRows.filter(row => ["APPROVED", "SCHEDULED", "SENDING", "COMPLETED"].includes(row.status)).length; const submittedCampaigns = campaignRows.filter(row => row.status !== "DRAFT").length; const approvalRate = submittedCampaigns ? Math.round(approvedCampaigns / submittedCampaigns * 100) : 0; const audienceReached = campaignRows.reduce((sum, row) => sum + (row.contacts || 0), 0); const successRate = delivery?.success_rate ?? (campaignRows.reduce((sum, row) => sum + row.sent, 0) ? Math.round(campaignRows.reduce((sum, row) => sum + row.delivered, 0) / campaignRows.reduce((sum, row) => sum + row.sent, 0) * 100) : 0);
-  const completedBeforeDeadline = taskRows.filter(row => ["APPROVED", "COMPLETED"].includes(row.status)); const deadlineRate = completedBeforeDeadline.length ? Math.round(completedBeforeDeadline.filter(row => new Date(row.updated_at) <= new Date(row.task.due_date)).length / completedBeforeDeadline.length * 100) : 0;
   const months = useMemo(() => Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setMonth(date.getMonth() - (6 - index)); const inMonth = (value: string) => { const item = new Date(value); return item.getMonth() === date.getMonth() && item.getFullYear() === date.getFullYear() }; return { month: date.toLocaleDateString("en-US", { month: "short" }), reach: campaignRows.filter(row => inMonth(row.created_at)).reduce((sum, row) => sum + (row.contacts || 0), 0), campaigns: campaignRows.filter(row => inMonth(row.created_at) && !["DRAFT", "REJECTED", "CANCELLED"].includes(row.status)).length } }), [campaignRows]);
-  const activity = useMemo(() => [...campaignRows.map(row => ({ id: `campaign-${row.id}`, title: `Campaign “${row.campaign_name}” ${pretty(row.status).toLowerCase()}`, date: row.created_at, icon: Megaphone, tone: "bg-violet-500" })), ...taskRows.map(row => ({ id: `task-${row.id}`, title: `Task “${row.task.title}” ${pretty(row.status).toLowerCase()}`, date: row.updated_at || row.created_at, icon: ListChecks, tone: "bg-blue-500" }))].sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 5), [campaignRows, taskRows]);
+  const activity = useMemo(() => campaignRows.map(row => ({ id: `campaign-${row.id}`, title: `Campaign “${row.campaign_name}” ${pretty(row.status).toLowerCase()}`, date: row.created_at, icon: Megaphone, tone: "bg-violet-500" })).sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 5), [campaignRows]);
   const statCards = [
-    ["Completed Tasks", completedTasks, CheckCircle2, "bg-emerald-50 text-emerald-600"],
     ["Campaigns Created", campaigns.data?.count ?? campaignRows.length, Megaphone, "bg-violet-50 text-violet-600"],
     ["Campaigns Completed", campaignRows.filter(row => row.status === "COMPLETED").length, Send, "bg-blue-50 text-blue-600"],
-    ["Approval Rate", `${approvalRate}%`, ShieldCheck, "bg-orange-50 text-orange-500"],
+    ["Scheduled Campaigns", campaignRows.filter(row => row.status === "SCHEDULED").length, CalendarDays, "bg-indigo-50 text-indigo-600"],
     ["Audience Reached", compactNumber(audienceReached), Users, "bg-teal-50 text-teal-600"],
     ["Success Rate", `${successRate}%`, Target, "bg-rose-50 text-rose-600"],
+    ["Messages Sent", compactNumber(delivery?.sent ?? campaignRows.reduce((sum, row) => sum + row.sent, 0)), Send, "bg-emerald-50 text-emerald-600"],
   ] as const;
-  if (tasks.isError || campaigns.isError || dashboard.isError) return <ErrorState error={tasks.error || campaigns.error || dashboard.error} />;
-  return <div><div className="mb-6 flex flex-wrap items-start justify-between gap-4"><PageHeading title="My Performance" subtitle="Track your productivity and campaign performance over time." />{picker}</div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{statCards.map(([label, value, Icon, tone], index) => <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .04 }} className="sa-card p-5" key={label}><span className={`grid h-11 w-11 place-items-center rounded-full ${tone}`}><Icon size={22} /></span><strong className="mt-4 block text-2xl text-slate-950">{tasks.isLoading || campaigns.isLoading ? "—" : value}</strong><p className="mt-1 text-sm font-bold">{label}</p><p className="mt-3 text-xs font-semibold text-emerald-600">Live account data</p></motion.article>)}</div>
-    <div className="mt-5 grid gap-4 xl:grid-cols-3"><PerformanceChart title="Task Productivity"><BarChart data={[{ name: "Assigned", value: taskRows.length, fill: "#22c55e" }, { name: "Completed", value: completedTasks, fill: "#3b82f6" }, { name: "Pending", value: pendingTasks, fill: "#f59e0b" }, { name: "Overdue", value: overdueTasks, fill: "#ef4444" }]}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="name" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Bar dataKey="value" radius={[7, 7, 0, 0]}>{[{ fill: "#22c55e" }, { fill: "#3b82f6" }, { fill: "#f59e0b" }, { fill: "#ef4444" }].map((entry, index) => <Cell fill={entry.fill} key={index} />)}</Bar></BarChart></PerformanceChart><PerformanceChart title="Audience Reached Over Time"><AreaChart data={months}><defs><linearGradient id="reachArea" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} tickFormatter={compactNumber} /><Tooltip formatter={(value) => compactNumber(Number(value))} /><Area type="monotone" dataKey="reach" stroke="#16a34a" fill="url(#reachArea)" strokeWidth={3} /></AreaChart></PerformanceChart><PerformanceChart title="Campaigns Sent Over Time"><BarChart data={months}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Bar dataKey="campaigns" fill="#8b5cf6" radius={[7, 7, 0, 0]} /></BarChart></PerformanceChart></div>
-    <section className="sa-card mt-5 p-5"><h2 className="font-black">Performance Metrics</h2><div className="mt-5 grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{[[Send, "Messages Sent", compactNumber(delivery?.sent ?? campaignRows.reduce((sum, row) => sum + row.sent, 0)), "bg-blue-50 text-blue-600"], [CheckCircle2, "Delivery Success Rate", `${successRate}%`, "bg-emerald-50 text-emerald-600"], [CalendarDays, "Completed Before Deadline", `${deadlineRate}%`, "bg-blue-50 text-blue-600"], [AlertTriangle, "Delivery Failures", compactNumber(delivery?.failed ?? 0), "bg-rose-50 text-rose-500"]].map(([Icon, label, value, tone]) => <div className="flex items-center gap-4 px-5 py-4 first:pl-0" key={String(label)}><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${tone}`}><Icon size={22} /></span><div><p className="text-xs text-slate-500">{String(label)}</p><strong className="mt-1 block text-xl">{String(value)}</strong></div></div>)}</div></section>
+  if (campaigns.isError || dashboard.isError) return <ErrorState error={campaigns.error || dashboard.error} />;
+  return <div><div className="mb-6 flex flex-wrap items-start justify-between gap-4"><PageHeading title="My Performance" subtitle="Track your campaign performance and reach over time." />{picker}</div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">{statCards.map(([label, value, Icon, tone], index) => <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .04 }} className="sa-card p-5" key={label}><span className={`grid h-11 w-11 place-items-center rounded-full ${tone}`}><Icon size={22} /></span><strong className="mt-4 block text-2xl text-slate-950">{campaigns.isLoading ? "—" : value}</strong><p className="mt-1 text-sm font-bold">{label}</p><p className="mt-3 text-xs font-semibold text-emerald-600">Live account data</p></motion.article>)}</div>
+    <div className="mt-5 grid gap-4 xl:grid-cols-2"><PerformanceChart title="Audience Reached Over Time"><AreaChart data={months}><defs><linearGradient id="reachArea" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} tickFormatter={compactNumber} /><Tooltip formatter={(value) => compactNumber(Number(value))} /><Area type="monotone" dataKey="reach" stroke="#16a34a" fill="url(#reachArea)" strokeWidth={3} /></AreaChart></PerformanceChart><PerformanceChart title="Campaigns Sent Over Time"><BarChart data={months}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="month" fontSize={11} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip /><Bar dataKey="campaigns" fill="#8b5cf6" radius={[7, 7, 0, 0]} /></BarChart></PerformanceChart></div>
+    <section className="sa-card mt-5 p-5"><h2 className="font-black">Performance Metrics</h2><div className="mt-5 grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">{[[Send, "Messages Sent", compactNumber(delivery?.sent ?? campaignRows.reduce((sum, row) => sum + row.sent, 0)), "bg-blue-50 text-blue-600"], [CheckCircle2, "Delivery Success Rate", `${successRate}%`, "bg-emerald-50 text-emerald-600"], [AlertTriangle, "Delivery Failures", compactNumber(delivery?.failed ?? 0), "bg-rose-50 text-rose-500"]].map(([Icon, label, value, tone]) => <div className="flex items-center gap-4 px-5 py-4 first:pl-0" key={String(label)}><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${tone}`}><Icon size={22} /></span><div><p className="text-xs text-slate-500">{String(label)}</p><strong className="mt-1 block text-xl">{String(value)}</strong></div></div>)}</div></section>
     <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_1fr]"><section className="sa-card overflow-hidden"><div className="flex items-center justify-between border-b border-slate-100 p-5"><h2 className="font-black">Recent Campaign Performance</h2><Link className="text-xs font-semibold text-blue-600" href="/user/campaigns">View All</Link></div><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-xs"><thead className="bg-slate-50"><tr><th className="px-5 py-3">Campaign Name</th><th>Audience</th><th>Status</th><th>Delivery Rate</th><th>Created</th></tr></thead><tbody>{campaignRows.slice(0, 5).map(row => <tr className="border-t border-slate-100" key={row.id}><td className="px-5 py-4 font-semibold">{row.campaign_name}</td><td>{compactNumber(row.contacts)}</td><td><Badge className={campaignTone[row.status]}>{pretty(row.status)}</Badge></td><td>{row.sent ? `${Math.round(row.delivered / row.sent * 100)}%` : "—"}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!campaignRows.length && <Empty message="No campaign performance yet." />}</div></section><section className="sa-card overflow-hidden"><div className="border-b border-slate-100 p-5"><h2 className="font-black">Recent Activity</h2></div><div className="p-5">{activity.map((item, index) => <div className="relative flex gap-4 pb-5 last:pb-0" key={item.id}>{index < activity.length - 1 && <span className="absolute left-4 top-8 h-full w-px bg-slate-200" />}<span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full text-white ${item.tone}`}><item.icon size={15} /></span><div className="flex min-w-0 flex-1 flex-wrap justify-between gap-2 text-xs"><p className="font-medium text-slate-700">{item.title}</p><time className="text-slate-500">{formatDate(item.date)}</time></div></div>)}{!activity.length && <Empty message="No recent activity yet." />}</div></section></div></div>;
 }
 
@@ -190,18 +178,42 @@ function ContentDraftCard({ draft, index, onClick, onDelete }: { draft: ContentD
   return <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .04 }} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col h-full" onClick={onClick}><div className="relative grid h-36 shrink-0 place-items-center overflow-hidden bg-gradient-to-br from-blue-100 via-indigo-50 to-violet-200">{image ? <NextImage unoptimized alt="Generated content" className="h-full w-full object-cover" height={300} src={resolveApiUrl(image) || ""} width={500} /> : <span className="grid h-16 w-16 place-items-center rounded-2xl bg-white/80 text-blue-600 shadow-lg">{Icon ? <Icon size={32} /> : <b className="text-3xl">𝕏</b>}</span>}<span className="absolute right-3 top-3 flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-semibold shadow">{draft.platforms.map(p => pretty(p.platform)).join(", ") || "Draft"}</span><span className="absolute left-3 top-3 flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-semibold shadow">{pretty(draft.workflow_state)}</span></div><div className="p-4 flex flex-col flex-1"><h3 className="line-clamp-2 min-h-10 font-black text-slate-950">{draft.original_prompt.split(/[.!?]/)[0] || "Draft Content"}</h3><p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-slate-600">{draft.original_prompt}</p><div className="mt-auto pt-3 flex items-center justify-between"><p className="text-xs text-slate-500">{formatDate(draft.created_at)}</p><button aria-label="Delete draft" className="icon-button h-7 w-7 !border !border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50" onClick={e => { e.stopPropagation(); onDelete() }}><Trash2 size={13} /></button></div></div></motion.article>
 }
 
-export function UserContentStudio() {
+function buildUserCalendar(month: Date, drafts: ContentDraftData[]) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(1 - first.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const dateStr = date.toDateString();
+    const items = drafts.flatMap((draft) =>
+      draft.platforms
+        .filter((platform) => {
+          const time = platform.scheduled_datetime || platform.published_datetime || draft.created_at;
+          return time && new Date(time).toDateString() === dateStr;
+        })
+        .map((platform) => ({ draft, platform }))
+    );
+    return { key: date.toISOString(), date, current: date.getMonth() === month.getMonth(), items };
+  });
+}
+
+export function UserContentStudio({ draftId: initialDraftId }: { draftId?: string }) {
   const searchParams = useSearchParams();
-  const assetId = searchParams?.get("assetId");
+  const router = useRouter();
   const client = useQueryClient();
+  const assetId = searchParams?.get("assetId");
+  const queryDraftId = searchParams?.get("draftId");
+  const activeDraftId = initialDraftId || queryDraftId;
+
   const [prompt, setPrompt] = useState("");
   const [selected, setSelected] = useState<string[]>(contentPlatforms.map(item => item.value));
   const [current, setCurrent] = useState<ContentDraftData | null>(null);
   const [enhancerOpen, setEnhancerOpen] = useState(false);
-  // draftId is set after a draft is first created, so enhance_prompt can be called on it
   const [draftId, setDraftId] = useState<string | null>(null);
   const [includeCaption, setIncludeCaption] = useState(true);
-  const [activeTab, setActiveTab] = useState<"DRAFTS" | "PUBLISHED">("DRAFTS");
+  const [activeTab, setActiveTab] = useState<"GENERATOR" | "CALENDAR" | "DRAFTS" | "PUBLISHED">("GENERATOR");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
   const history = useQuery({ queryKey: ["user-content-history"], queryFn: async () => (await apiClient.get<GeneratedContent[]>("/api/content/history/")).data });
   const draftsQuery = useQuery({
@@ -212,7 +224,12 @@ export function UserContentStudio() {
     }
   });
 
-  const router = useRouter();
+  const singleDraftQuery = useQuery({
+    queryKey: ["user-single-draft", activeDraftId],
+    queryFn: async () => (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${activeDraftId}/`)).data,
+    enabled: !!activeDraftId && !current
+  });
+
   const hasInitializedAsset = useRef(false);
   const urlChannels = searchParams?.get("channels");
   const platformsToUse = urlChannels ? urlChannels.split(',') : selected;
@@ -229,7 +246,7 @@ export function UserContentStudio() {
         })
         .catch(err => {
           toast.error(parseApiError(err));
-          router.replace('/user/content');
+          router.replace('/user/channels');
         });
     }
   }, [assetId, platformsToUse, router]);
@@ -243,7 +260,7 @@ export function UserContentStudio() {
       try {
         await apiClient.patch(`/api/content/content-drafts/${created.id}/`, { enhanced_prompt: prompt.trim() }, { timeout: 60000 });
         await apiClient.post(`/api/content/content-drafts/${created.id}/regenerate/`, { reason: "Initial content generation", generate_images: !assetId, generate_captions: includeCaption }, { timeout: 240000 });
-        return (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${created.id}/`, { timeout: 60000 })).data
+        return (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${created.id}/`, { timeout: 60000 })).data;
       } catch (error) { try { setCurrent((await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${created.id}/`, { timeout: 60000 })).data) } catch { } throw error }
     }, onSuccess: draft => { setCurrent(draft); toast.success("Prompt-based content generated"); void client.invalidateQueries({ queryKey: ["user-content-history"] }); void client.invalidateQueries({ queryKey: ["user-content-drafts"] }); }, onError: error => toast.error(parseApiError(error))
   });
@@ -253,8 +270,35 @@ export function UserContentStudio() {
   const copy = async (text: string) => { await navigator.clipboard.writeText(text); toast.success("Content copied") };
   const download = (item: GeneratedContent) => { const text = item.versions[0]?.text_content || ""; const url = URL.createObjectURL(new Blob([text], { type: "text/plain" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${item.platform.toLowerCase()}-content.txt`; anchor.click(); URL.revokeObjectURL(url) };
 
-  if (current) return <ContentPreviewCustomize draft={current} generating={generate.isPending} onChange={setCurrent} onBack={() => { setCurrent(null); if (assetId) router.replace('/user/content'); }} onGenerateNew={() => { setCurrent(null); setPrompt(""); setDraftId(null); if (assetId) router.replace('/user/content'); }} />;
+  const activeDraftData = current || singleDraftQuery.data;
+  if (activeDraftData) {
+    return <ContentPreviewCustomize
+      draft={activeDraftData}
+      generating={generate.isPending}
+      onChange={setCurrent}
+      onBack={() => { setCurrent(null); router.push('/user/channels'); }}
+      onGenerateNew={() => { setCurrent(null); setPrompt(""); setDraftId(null); router.push('/user/channels'); }}
+    />;
+  }
+
+  if (singleDraftQuery.isLoading) {
+    return <div className="flex flex-col items-center justify-center gap-4 py-32"><LoaderCircle className="animate-spin text-blue-600" size={40} /><p className="font-semibold text-slate-600">Loading draft details...</p></div>;
+  }
+
   if (assetId) return <div className="flex flex-col items-center justify-center gap-4 py-32"><LoaderCircle className="animate-spin text-blue-600" size={40} /><p className="font-semibold text-slate-600">Preparing your Content Studio...</p></div>;
+
+  const draftsList = draftsQuery.data ?? [];
+  const publishedCount = draftsList.flatMap(d => d.platforms).filter(p => p.status === "POSTED").length + (history.data?.length ?? 0);
+  const scheduledCount = draftsList.flatMap(d => d.platforms).filter(p => p.scheduled_datetime && p.status !== "POSTED").length;
+  const calendarGrid = buildUserCalendar(calendarMonth, draftsList);
+
+  const stats = [
+    { label: "Published Posts", value: publishedCount, icon: Send, tone: "bg-blue-100 text-blue-600" },
+    { label: "Scheduled Posts", value: scheduledCount, icon: CalendarDays, tone: "bg-orange-100 text-orange-500" },
+    { label: "Active Drafts", value: draftsList.length, icon: FileText, tone: "bg-emerald-100 text-emerald-600" },
+    { label: "Total Social Posts", value: draftsList.flatMap(d => d.platforms).length + (history.data?.length ?? 0), icon: Megaphone, tone: "bg-violet-100 text-violet-600" },
+  ];
+
   return <div>
     {enhancerOpen && <AnimatePresence><PromptEnhancerModal
       prompt={prompt}
@@ -262,44 +306,173 @@ export function UserContentStudio() {
       onClose={() => setEnhancerOpen(false)}
       onEnhanced={(enhanced) => { setPrompt(enhanced); setEnhancerOpen(false); }}
     /></AnimatePresence>}
-    <PageHeading title="Content Studio" subtitle="Create AI-powered content for all your marketing channels." /><section className="sa-card mt-6 p-6"><div className="flex items-center gap-2"><h2 className="font-black">Your Prompt</h2><CircleDot size={15} className="text-slate-400" />{assetId && <span className="ml-2 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1"><ImageIcon size={12} />Preset Asset Attached</span>}<div className="ml-auto flex items-center gap-2">{assetId && <Link href="/user/content" className="text-xs text-red-500 hover:underline">Remove Asset</Link>}<Link href="/user/assets" className="secondary-button flex items-center gap-2 px-5 text-sm"><ImageIcon size={15} />{assetId ? "Change Asset" : "Add from Asset Library"}</Link></div></div><div className="relative mt-4"><textarea maxLength={2000} rows={6} className="w-full resize-y rounded-xl border border-slate-200 bg-white p-4 pb-9 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100" placeholder="Example: Write a LinkedIn post about the benefits of email marketing for small businesses..." value={prompt} onChange={event => setPrompt(event.target.value)} /><span className="absolute bottom-3 right-4 text-xs text-slate-400">{prompt.length} / 2000</span></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><button type="button" className="secondary-button flex items-center gap-2 px-5 text-blue-600" disabled={!prompt.trim()} onClick={() => setEnhancerOpen(true)}><WandSparkles size={17} />Enhance Prompt</button><div className="flex items-center gap-3"><button type="button" className="secondary-button flex items-center gap-2 px-5" disabled={!prompt} onClick={() => setPrompt("")}><Trash2 size={17} />Clear</button><label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={includeCaption} onChange={event => setIncludeCaption(event.target.checked)} />Caption</label><button type="button" className="primary-button px-6" disabled={!prompt.trim() || !selected.length || generate.isPending} onClick={() => generate.mutate()}><Sparkles size={17} />{generate.isPending ? "Generating..." : "Generate Content"}</button></div></div></section>
-    <section className="sa-card mt-5 p-6"><h2 className="font-black">Channels</h2><div className="mt-5 flex flex-wrap gap-x-8 gap-y-4">{contentPlatforms.map(platform => { const Icon = platform.icon; const checked = selected.includes(platform.value); return <button type="button" role="checkbox" aria-checked={checked} className="flex items-center gap-2 text-sm font-semibold text-slate-700" key={platform.value} onClick={() => toggle(platform.value)}><span className={`grid h-5 w-5 place-items-center rounded border text-xs ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"}`}>{checked ? "✓" : ""}</span>{Icon ? <Icon className={platform.tone} size={20} /> : <b className="text-xl text-slate-950">𝕏</b>}{platform.label}</button> })}</div></section>
-    <section className="mt-12"><div className="mb-4 flex items-center gap-6 border-b border-slate-200">
-      <button
-        className={`pb-2 text-lg font-black transition ${activeTab === "DRAFTS" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
-        onClick={() => setActiveTab("DRAFTS")}
-      >
-        Drafts <span className="ml-1 text-xs font-semibold rounded-full bg-slate-100 px-2 py-0.5">{draftsQuery.data?.length ?? 0}</span>
-      </button>
-      <button
-        className={`pb-2 text-lg font-black transition ${activeTab === "PUBLISHED" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
-        onClick={() => setActiveTab("PUBLISHED")}
-      >
-        Recent Posts <span className="ml-1 text-xs font-semibold rounded-full bg-slate-100 px-2 py-0.5">{history.data?.length ?? 0}</span>
-      </button>
+    <PageHeading title="Social Publisher" subtitle="Create, schedule, and manage content across all your social channels." />
+    
+    {/* ── Stat Cards ── */}
+    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {stats.map((s, idx) => (
+        <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} className="sa-card p-5">
+          <div className="flex items-center gap-3">
+            <span className={`grid h-10 w-10 place-items-center rounded-xl ${s.tone}`}><s.icon size={20} /></span>
+            <div>
+              <p className="text-xs font-semibold text-slate-500">{s.label}</p>
+              <strong className="text-2xl font-bold text-slate-900">{s.value}</strong>
+            </div>
+          </div>
+        </motion.div>
+      ))}
     </div>
-      {activeTab === "DRAFTS" ? (
-        draftsQuery.isError ? <ErrorState error={draftsQuery.error} /> : draftsQuery.isLoading ? <Skeleton /> : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-              {(draftsQuery.data ?? []).slice(0, 10).map((item, index) => <ContentDraftCard draft={item} index={index} key={item.id} onClick={() => setCurrent(item)} onDelete={() => removeDraft.mutate(item.id)} />)}
+
+    {/* ── Navigation Tabs ── */}
+    <div className="mt-8 mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-6">
+        <button
+          className={`pb-2 text-base font-bold transition flex items-center gap-2 ${activeTab === "GENERATOR" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => setActiveTab("GENERATOR")}
+        >
+          <Sparkles size={18} /> AI Content Generator
+        </button>
+        <button
+          className={`pb-2 text-base font-bold transition flex items-center gap-2 ${activeTab === "CALENDAR" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => setActiveTab("CALENDAR")}
+        >
+          <CalendarDays size={18} /> Content Calendar
+        </button>
+        <button
+          className={`pb-2 text-base font-bold transition flex items-center gap-2 ${activeTab === "DRAFTS" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => setActiveTab("DRAFTS")}
+        >
+          <FileText size={18} /> Drafts <span className="ml-1 text-xs font-semibold rounded-full bg-slate-100 px-2 py-0.5">{draftsList.length}</span>
+        </button>
+        <button
+          className={`pb-2 text-base font-bold transition flex items-center gap-2 ${activeTab === "PUBLISHED" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
+          onClick={() => setActiveTab("PUBLISHED")}
+        >
+          <Send size={18} /> Recent Posts <span className="ml-1 text-xs font-semibold rounded-full bg-slate-100 px-2 py-0.5">{history.data?.length ?? 0}</span>
+        </button>
+      </div>
+    </div>
+
+    {/* ── Tab Content ── */}
+    {activeTab === "GENERATOR" && (
+      <>
+        <section className="sa-card p-6">
+          <div className="flex items-center gap-2">
+            <h2 className="font-black">Your Prompt</h2>
+            <CircleDot size={15} className="text-slate-400" />
+            {assetId && <span className="ml-2 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1"><ImageIcon size={12} />Preset Asset Attached</span>}
+            <div className="ml-auto flex items-center gap-2">
+              {assetId && <Link href="/user/channels" className="text-xs text-red-500 hover:underline">Remove Asset</Link>}
+              <Link href="/user/assets" className="secondary-button flex items-center gap-2 px-5 text-sm"><ImageIcon size={15} />{assetId ? "Change Asset" : "Add from Asset Library"}</Link>
             </div>
-            {!draftsQuery.isLoading && !draftsQuery.data?.length && <Empty message="No active drafts. Work you leave in the middle will appear here." />}
-          </>
-        )
-      ) : (
-        history.isError ? <ErrorState error={history.error} /> : history.isLoading ? <Skeleton /> : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-              {(history.data ?? []).slice(0, 10).map((item, index) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
+          </div>
+          <div className="relative mt-4">
+            <textarea maxLength={2000} rows={6} className="w-full resize-y rounded-xl border border-slate-200 bg-white p-4 pb-9 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100" placeholder="Example: Write a LinkedIn post about the benefits of email marketing for small businesses..." value={prompt} onChange={event => setPrompt(event.target.value)} />
+            <span className="absolute bottom-3 right-4 text-xs text-slate-400">{prompt.length} / 2000</span>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <button type="button" className="secondary-button flex items-center gap-2 px-5 text-blue-600" disabled={!prompt.trim()} onClick={() => setEnhancerOpen(true)}><WandSparkles size={17} />Enhance Prompt</button>
+            <div className="flex items-center gap-3">
+              <button type="button" className="secondary-button flex items-center gap-2 px-5" disabled={!prompt} onClick={() => setPrompt("")}><Trash2 size={17} />Clear</button>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={includeCaption} onChange={event => setIncludeCaption(event.target.checked)} />Caption</label>
+              <button type="button" className="primary-button px-6" disabled={!prompt.trim() || !selected.length || generate.isPending} onClick={() => generate.mutate()}><Sparkles size={17} />{generate.isPending ? "Generating..." : "Generate Content"}</button>
             </div>
-            {!history.isLoading && !history.data?.length && <Empty message="Generate your first post to see it here." />}
-          </>
-        )
-      )}
-    </section>
-    <section className="sa-card mt-8 grid divide-y divide-slate-100 bg-indigo-50/40 p-5 md:grid-cols-3 md:divide-x md:divide-y-0">{[[ShieldCheck, "Brand Safe Content", "AI generation follows your configured brand voice."], [Sparkles, "Save Time", "Create channel-ready content in seconds."], [Target, "Multi-Channel Ready", "Generate tailored content for every selected channel."]].map(([Icon, title, description]) => <div className="flex items-center gap-4 px-5 py-3 first:pl-0" key={String(title)}><span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-indigo-50 text-indigo-700"><Icon size={23} /></span><div><h3 className="font-bold">{String(title)}</h3><p className="mt-1 text-xs text-slate-500">{String(description)}</p></div></div>)}</section></div>;
+          </div>
+        </section>
+        <section className="sa-card mt-5 p-6">
+          <h2 className="font-black">Channels</h2>
+          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-4">
+            {contentPlatforms.map(platform => {
+              const Icon = platform.icon;
+              const checked = selected.includes(platform.value);
+              return <button type="button" role="checkbox" aria-checked={checked} className="flex items-center gap-2 text-sm font-semibold text-slate-700" key={platform.value} onClick={() => toggle(platform.value)}>
+                <span className={`grid h-5 w-5 place-items-center rounded border text-xs ${checked ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white"}`}>{checked ? "✓" : ""}</span>
+                {Icon ? <Icon className={platform.tone} size={20} /> : <b className="text-xl text-slate-950">𝕏</b>}
+                {platform.label}
+              </button>
+            })}
+          </div>
+        </section>
+      </>
+    )}
+
+    {activeTab === "CALENDAR" && (
+      <section className="sa-card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-6">
+          <h2 className="text-lg font-black">Content Calendar</h2>
+          <div className="flex items-center gap-2">
+            <button className="secondary-button" onClick={() => setCalendarMonth(new Date())}>Today</button>
+            <button className="icon-button !border !border-slate-200" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}><ChevronLeft size={18} /></button>
+            <button className="icon-button !border !border-slate-200" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}><ChevronRight size={18} /></button>
+            <span className="secondary-button px-4 font-bold">{calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+          </div>
+        </div>
+        <div className="grid min-w-[900px] grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold uppercase">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => <div className="p-3 text-slate-600" key={day}>{day}</div>)}</div>
+        <div className="grid min-w-[900px] grid-cols-7">
+          {calendarGrid.map(day => (
+            <div className={`min-h-36 border-b border-r border-slate-100 p-2 transition ${day.current ? "bg-white" : "bg-slate-50/60 text-slate-400"}`} key={day.key}>
+              <span className={`inline-grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${day.date.toDateString() === new Date().toDateString() ? "bg-blue-600 text-white" : "text-slate-700"}`}>
+                {day.date.getDate()}
+              </span>
+              <div className="mt-2 space-y-1.5">
+                {day.items.slice(0, 4).map(({ draft, platform }) => {
+                  const meta = contentPlatforms.find(p => p.value === platform.platform);
+                  const Icon = meta?.icon;
+                  const title = draft.original_prompt?.split(/[.!?\n]/)[0]?.slice(0, 30) || "Social Post";
+                  const isPosted = platform.status === "POSTED";
+                  return (
+                    <button
+                      key={platform.id}
+                      className={`block w-full rounded-lg p-2 text-left text-[11px] transition shadow-sm ${isPosted ? "bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100" : "bg-blue-50 text-blue-900 border border-blue-200 hover:bg-blue-100"}`}
+                      onClick={() => router.push(`/user/channels/${draft.id}`)}
+                    >
+                      <div className="flex items-center justify-between gap-1 font-bold">
+                        <span className="flex items-center gap-1">
+                          {Icon ? <Icon size={12} className={meta?.tone} /> : <b className="text-[10px]">𝕏</b>}
+                          {pretty(platform.platform)}
+                        </span>
+                        <span className="text-[10px] opacity-75">
+                          {new Date(platform.scheduled_datetime || platform.published_datetime || draft.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <span className="mt-1 block truncate font-medium">{title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="p-4 text-xs text-slate-500">Dates showing scheduled and published posts for your accounts.</p>
+      </section>
+    )}
+
+    {activeTab === "DRAFTS" && (
+      draftsQuery.isError ? <ErrorState error={draftsQuery.error} /> : draftsQuery.isLoading ? <Skeleton /> : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            {draftsList.map((item, index) => <ContentDraftCard draft={item} index={index} key={item.id} onClick={() => router.push(`/user/channels/${item.id}`)} onDelete={() => removeDraft.mutate(item.id)} />)}
+          </div>
+          {!draftsQuery.isLoading && !draftsList.length && <Empty message="No active drafts. Work you leave in the middle will appear here." />}
+        </>
+      )
+    )}
+
+    {activeTab === "PUBLISHED" && (
+      history.isError ? <ErrorState error={history.error} /> : history.isLoading ? <Skeleton /> : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            {(history.data ?? []).map((item, index) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
+          </div>
+          {!history.isLoading && !history.data?.length && <Empty message="Generate your first post to see it here." />}
+        </>
+      )
+    )}
+
+    <section className="sa-card mt-8 grid divide-y divide-slate-100 bg-indigo-50/40 p-5 md:grid-cols-3 md:divide-x md:divide-y-0">{[[ShieldCheck, "Brand Safe Content", "AI generation follows your configured brand voice."], [Sparkles, "Save Time", "Create channel-ready content in seconds."], [Target, "Multi-Channel Ready", "Generate tailored content for every selected channel."]].map(([Icon, title, description]) => <div className="flex items-center gap-4 px-5 py-3 first:pl-0" key={String(title)}><span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-indigo-50 text-indigo-700"><Icon size={23} /></span><div><h3 className="font-bold">{String(title)}</h3><p className="mt-1 text-xs text-slate-500">{String(description)}</p></div></div>)}</section>
+  </div>;
 }
+
 
 function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenerateNew }: { draft: ContentDraftData; generating: boolean; onChange: (draft: ContentDraftData) => void; onBack: () => void; onGenerateNew: () => void }) {
   const client = useQueryClient();
@@ -343,7 +516,7 @@ function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenera
     <div className="mt-6 grid overflow-hidden rounded-xl border border-slate-200 bg-white sm:grid-cols-4">{draft.platforms.map(platform => { const item = contentPlatforms.find(entry => entry.value === platform.platform); const Icon = item?.icon; const isFailed = platform.status === "FAILED"; return <button className={`flex items-center justify-center gap-2 border-b-2 px-4 py-4 text-sm font-bold transition ${active?.id === platform.id ? "border-blue-600 bg-blue-50/40 text-blue-700" : "border-transparent hover:bg-slate-50"} ${isFailed ? "text-red-600" : ""}`} key={platform.id} onClick={() => setActiveId(platform.id)}>{Icon ? <Icon className={isFailed ? "text-red-600" : item?.tone} size={19} /> : <b>𝕏</b>}{item?.label}{isFailed && <span title={platform.error_message || "Publish failed"}><InfoIcon size={15} className="ml-1 text-red-500" /></span>}</button> })}</div>
     <div className="mt-6 grid gap-6 xl:grid-cols-[1.02fr_.98fr]"><section><h2 className="mb-1 flex items-center gap-2 text-lg font-black">{ActiveIcon ? <ActiveIcon className={meta?.tone} size={20} /> : <b>𝕏</b>}{isFacebook ? "Facebook Post Preview" : isInstagram ? "Instagram Feed Preview" : isLinkedIn ? "LinkedIn Post Preview" : isX ? "X (Twitter) Post Preview" : `${meta?.label} Post Preview`}</h2>{(isFacebook || isLinkedIn || isX) && <p className="mb-4 text-sm text-slate-500">{isFacebook ? "This is how your post will appear in the Facebook feed." : isLinkedIn ? "This is how your post will appear on LinkedIn." : "This is how your post will appear on X."}</p>}<SocialContentPreview platform={active?.platform ?? "INSTAGRAM"} caption={caption} image={image} location={location} /></section><div className="space-y-4"><section className="sa-card p-5"><h2 className="font-black">{isFacebook || isLinkedIn || isX ? "Post Content" : "Caption"}</h2><label className="field mt-4">{isX && <span>Content</span>}{isLinkedIn && <span>Caption</span>}<textarea maxLength={contentLimit} rows={9} value={caption} onChange={event => active && setEdits(value => ({ ...value, [active.id]: event.target.value }))} /><small className="text-right">{caption.length} / {contentLimit}</small></label><div className="mt-4 flex flex-wrap justify-between gap-3"><button className="secondary-button px-4" disabled={!!busy} onClick={() => void regenerate(false, true)}><RefreshCw size={16} />{busy === "caption" ? "Regenerating..." : "Regenerate"}</button><button className="primary-button px-4" disabled={!!busy} onClick={() => void run("improve", () => persist())}><Sparkles size={16} />{isX ? "Improve Content" : "Improve Caption"}</button></div></section>
       <section className="sa-card p-5"><h2 className="font-black">Post Settings</h2>{isX ? <><label className="field mt-4"><span>Who can reply?</span><select defaultValue="Everyone"><option>Everyone</option><option>Accounts you follow</option><option>Verified accounts</option><option>Only accounts you mention</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to your post</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow replies</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Show engagement metrics</label></div></> : isLinkedIn ? <><label className="field mt-4"><span>Who can see this post?</span><select defaultValue="Anyone"><option>Anyone</option><option>Connections only</option><option>Group members</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Notify connections</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow comments</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label></div></> : <><div className="mt-4 flex flex-wrap gap-5 text-sm">{isFacebook ? <><label className="flex items-center gap-2"><input checked={publishAs !== "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page")} />Your Page</label><label className="flex items-center gap-2"><input checked={publishAs === "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page and Groups")} />Your Page and Groups</label></> : <><label className="flex items-center gap-2"><input checked={publishAs !== "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Feed Post")} />Feed Post</label><label className="flex items-center gap-2"><input checked={publishAs === "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Reel")} />Reel</label></>}</div><label className="field mt-4"><span>First Comment (Optional)</span><textarea maxLength={firstCommentLimit} rows={3} value={firstComment} onChange={event => setFirstComment(event.target.value)} /><small className="text-right">{firstComment.length} / {firstCommentLimit}</small></label>{isFacebook ? <label className="field mt-4"><span>Audience</span><select defaultValue="Public"><option>Public</option><option>Friends</option><option>Only me</option></select></label> : <label className="field mt-4"><span>Location (Optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>}</>}{!isLinkedIn && <label className="field mt-4"><span>{isX ? "Schedule (Optional)" : "Schedule"}</span><input min={new Date().toISOString().slice(0, 16)} type="datetime-local" value={scheduleAt} onChange={event => setScheduleAt(event.target.value)} /></label>}</section></div></div>
-    <div className="sa-card sticky bottom-3 mt-6 flex flex-wrap justify-between gap-3 p-4"><div className="flex gap-3"><button className="secondary-button px-5" onClick={() => document.querySelector<HTMLTextAreaElement>("textarea[maxlength]")?.focus()}><FileText size={16} />Edit Content</button><button className="secondary-button px-5" onClick={onGenerateNew}><Sparkles size={16} />Generate New</button></div><div className="flex gap-3">{draft.workflow_state === "DRAFT" && <button className="primary-button px-7" disabled={!!busy} onClick={approval}><Users size={17} />{busy === "approval" ? "Submitting..." : "Ask for Approval"}</button>}{draft.workflow_state === "IN_REVIEW" && <button className="primary-button px-7 opacity-80" disabled><Clock3 size={17} />Pending Approval</button>}{draft.workflow_state === "APPROVED" && <><button className="primary-button px-7" disabled={!!busy} onClick={publish}><Send size={17} />{busy === "publish" ? "Publishing..." : "Publish Now"}</button><button className="primary-button px-7" disabled={!!busy} onClick={schedule}><CalendarClock size={17} />{busy === "schedule" ? "Scheduling..." : "Schedule"}</button></>}</div></div></motion.div>;
+    <div className="sa-card sticky bottom-3 mt-6 flex flex-wrap justify-between gap-3 p-4"><div className="flex gap-3"><button className="secondary-button px-5" onClick={() => document.querySelector<HTMLTextAreaElement>("textarea[maxlength]")?.focus()}><FileText size={16} />Edit Content</button><button className="secondary-button px-5" onClick={onGenerateNew}><Sparkles size={16} />Generate New</button></div><div className="flex gap-3"><button className="primary-button px-7" disabled={!!busy} onClick={publish}><Send size={17} />{busy === "publish" ? "Publishing..." : "Publish Now"}</button><button className="primary-button px-7" disabled={!!busy} onClick={schedule}><CalendarClock size={17} />{busy === "schedule" ? "Scheduling..." : "Schedule"}</button></div></div></motion.div>;
 }
 
 function SocialContentPreview({ platform, caption, image, location }: { platform: string; caption: string; image?: string; location: string }) {
@@ -375,10 +548,11 @@ export function UserTasks() {
 }
 
 export function UserCampaigns() {
-  const client = useQueryClient(); const [page, setPage] = useState(1); const [search, setSearch] = useState(""); const [status, setStatus] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [resumeDraft, setResumeDraft] = useState(false); const [viewing, setViewing] = useState<Campaign | null>(null); const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null); const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null); const [form, setForm] = useState({ task: "", name: "", description: "" }); const [scheduleOpen, setScheduleOpen] = useState(false); const [scheduleDate, setScheduleDate] = useState("");
+  const client = useQueryClient(); const [page, setPage] = useState(1); const [search, setSearch] = useState(""); const [status, setStatus] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [resumeDraft, setResumeDraft] = useState(false); const [viewing, setViewing] = useState<Campaign | null>(null); const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null); const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null); const [form, setForm] = useState({ audience: "", name: "", description: "" }); const [scheduleOpen, setScheduleOpen] = useState(false); const [scheduleDate, setScheduleDate] = useState("");
   useEffect(() => { const timer = window.setTimeout(() => { if (new URLSearchParams(window.location.search).has("resume") && readCampaignDraft()) { setResumeDraft(true); setCreateOpen(true); window.history.replaceState(null, "", "/user/campaigns") } }, 0); return () => window.clearTimeout(timer) }, []);
-  const campaigns = useQuery({ queryKey: ["user-campaigns", page, search, status], queryFn: async () => (await apiClient.get<CampaignPage>("/api/campaigns/my/", { params: { page, search, status: status || undefined } })).data }); const tasks = useQuery({ queryKey: ["user-tasks"], queryFn: async () => (await apiClient.get<Assignment[]>("/api/tasks/my/")).data });
-  const create = useMutation({ mutationFn: () => apiClient.post("/api/campaigns/create/", { task: Number(form.task), name: form.name, description: form.description }), onSuccess: () => { toast.success("Campaign created"); setCreateOpen(false); setForm({ task: "", name: "", description: "" }); void client.invalidateQueries({ queryKey: ["user-campaigns"] }) }, onError: error => toast.error(parseApiError(error)) });
+  const campaigns = useQuery({ queryKey: ["user-campaigns", page, search, status], queryFn: async () => (await apiClient.get<CampaignPage>("/api/campaigns/my/", { params: { page, search, status: status || undefined } })).data });
+  const audiences = useQuery({ queryKey: ["audiences-list"], queryFn: async () => (await apiClient.get<any[]>("/api/audiences/")).data });
+  const create = useMutation({ mutationFn: () => apiClient.post("/api/campaigns/create/", { audience: Number(form.audience), name: form.name, description: form.description }), onSuccess: () => { toast.success("Campaign created"); setCreateOpen(false); setForm({ audience: "", name: "", description: "" }); void client.invalidateQueries({ queryKey: ["user-campaigns"] }) }, onError: error => toast.error(parseApiError(error)) });
   const submit = useMutation({ mutationFn: (id: number) => apiClient.post(`/api/campaigns/${id}/submit/`, {}), onSuccess: () => { toast.success("Campaign submitted for approval"); setViewing(null); void client.invalidateQueries({ queryKey: ["user-campaigns"] }) }, onError: error => toast.error(parseApiError(error)) });
   const send = useMutation({ mutationFn: (id: number) => apiClient.post("/api/campaigns/send/", { campaign: id }), onSuccess: () => { toast.success("Campaign sent successfully!"); setViewing(null); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }, onError: error => toast.error(parseApiError(error)) });
   const schedule = useMutation({ mutationFn: ({ id, at }: { id: number; at: string }) => apiClient.post("/api/campaigns/schedule/", { campaign: id, scheduled_at: new Date(at).toISOString() }), onSuccess: () => { toast.success("Campaign scheduled!"); setViewing(null); setScheduleOpen(false); setScheduleDate(""); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }, onError: error => toast.error(parseApiError(error)) });
@@ -387,29 +561,33 @@ export function UserCampaigns() {
   // Fetch full campaign details for editing
   const loadCampaignForEdit = async (campaign: Campaign) => {
     try {
-      // Fetch full campaign details from API
       const response = await apiClient.get(`/api/campaigns/${campaign.id}/detail/`);
       const fullData = response.data;
 
-      // Build the draft object with all campaign data
+      const selectedIds: number[] = fullData.selected_channel_ids && Array.isArray(fullData.selected_channel_ids) && fullData.selected_channel_ids.length > 0
+        ? fullData.selected_channel_ids
+        : (fullData.channels ? fullData.channels.map((ch: any) => ch.channel_id || ch.id).filter(Boolean) : []);
+
       const editDraft: CampaignDraft = {
-        task: String(campaign.task_id),
-        name: campaign.campaign_name,
+        task: fullData.task_id ? String(fullData.task_id) : (campaign.task_id ? String(campaign.task_id) : ""),
+        audience: fullData.audience_id ? String(fullData.audience_id) : "",
+        selectedChannelIds: selectedIds,
+        name: fullData.name || campaign.campaign_name,
         description: fullData.description || "",
-        template_id: fullData.template_id || "",
-        template_name: fullData.template_name || "",
-        channel: fullData.channels?.[0]?.channel || "",
+        template_id: fullData.channels?.[0]?.template_id ? String(fullData.channels[0].template_id) : "",
+        template_name: fullData.channels?.[0]?.template_name || "",
+        channel: fullData.channels?.[0]?.channel_id ? String(fullData.channels[0].channel_id) : "",
         subject: fullData.channels?.[0]?.subject || "",
         body: fullData.channels?.[0]?.body || "",
-        scheduled_at: campaign.scheduled_at || "",
+        scheduled_at: campaign.scheduled_at || fullData.scheduled_at || "",
         channelTemplates: {}
       };
 
-      // Populate channel templates if available
       if (fullData.channels && Array.isArray(fullData.channels)) {
         fullData.channels.forEach((ch: any) => {
-          editDraft.channelTemplates[ch.channel] = {
-            template_id: ch.template_id || "",
+          const chKey = String(ch.channel_id || ch.id || ch.channel);
+          editDraft.channelTemplates[chKey] = {
+            template_id: ch.template_id ? String(ch.template_id) : "",
             template_name: ch.template_name || "",
             subject: ch.subject || "",
             body: ch.body || ""
@@ -427,17 +605,17 @@ export function UserCampaigns() {
     }
   };
   if (campaigns.isError) return <ErrorState error={campaigns.error} />; const rows = campaigns.data?.results ?? [];
-  if (createOpen) return <CampaignWizard assignments={tasks.data ?? []} initialDraft={resumeDraft ? readCampaignDraft() : null} onCancel={() => { storeCampaignDraft(null); setResumeDraft(false); setCreateOpen(false) }} onCreated={() => { storeCampaignDraft(null); setResumeDraft(false); setCreateOpen(false); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }} />;
-  return <div><div className="mb-7 flex items-end justify-between gap-4"><PageHeading title="Campaigns" subtitle="Create and manage your marketing campaigns" /><button className="primary-button px-6" onClick={() => { storeCampaignDraft(null); setResumeDraft(false); setCreateOpen(true) }}><Plus size={18} />Create Campaign</button></div><section className="sa-card overflow-hidden"><div className="grid gap-3 border-b border-slate-100 p-5 md:grid-cols-[1fr_220px]"><SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search campaigns..." /><Select value={status} onChange={value => { setStatus(value); setPage(1) }} label="All Status" options={["DRAFT", "PENDING_APPROVAL", "APPROVED", "SCHEDULED", "SENDING", "COMPLETED", "FAILED", "REJECTED"]} /></div>{campaigns.isLoading ? <Skeleton /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-slate-50"><tr><th className="px-6 py-5">Campaign Name</th><th>Audience Name</th><th>Channel</th><th>Created At</th><th>Status</th><th className="text-center">Actions</th></tr></thead><tbody>{rows.map((row, index) => <motion.tr initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .03 }} className="border-t border-slate-100 hover:bg-blue-50/30" key={row.id}><td className="px-6 py-5 font-semibold">{row.campaign_name}</td><td>{row.audience_name || "—"}</td><td><div className="flex flex-wrap gap-2">{row.channels.length ? row.channels.map(name => <ChannelIcon name={name} key={name} />) : "—"}</div></td><td>{formatDate(row.created_at)}</td><td><Badge className={campaignTone[row.status]}>{pretty(row.status)}</Badge></td><td className="text-center"><div className="inline-flex items-center gap-2"><button aria-label="Edit" title="Edit campaign" className="icon-button !border !border-slate-200 !text-orange-500" onClick={() => loadCampaignForEdit(row)}><Pencil size={16} /></button><button aria-label="View" title="View campaign" className="icon-button !border !border-slate-200 !text-blue-600" onClick={() => setViewing(row)}><Eye size={17} /></button><button aria-label="Delete" title="Delete campaign" className="icon-button !border !border-slate-200 !text-red-500" onClick={() => setDeleteTarget(row)}><Trash2 size={16} /></button></div></td></motion.tr>)}</tbody></table>{!rows.length && <Empty message="No campaigns found." />}</div>}<Pagination page={page} count={campaigns.data?.count ?? 0} pageSize={10} setPage={setPage} /></section>
-    <AnimatePresence>{createOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.form initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-lg rounded-3xl bg-white shadow-2xl" onSubmit={event => { event.preventDefault(); create.mutate() }}><ModalHeader title="Create Campaign" onClose={() => setCreateOpen(false)} /><div className="space-y-5 p-6"><label className="field"><span>Assigned task *</span><select required value={form.task} onChange={event => setForm({ ...form, task: event.target.value })}><option value="">Select task</option>{(tasks.data ?? []).map(row => <option value={row.task.id} key={row.id}>{row.task.title}</option>)}</select></label><label className="field"><span>Campaign name *</span><input required minLength={3} placeholder="Enter campaign name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label><label className="field"><span>Description</span><textarea rows={4} placeholder="Describe this campaign" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-5"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button px-6" disabled={create.isPending}>{create.isPending ? "Creating..." : "Create Campaign"}</button></div></motion.form></div>}{viewing && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><button aria-label="Close" className="absolute right-4 top-4 icon-button z-10" type="button" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}><X size={20} /></button><div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 pb-5 pt-7 text-center"><span className={`grid h-14 w-14 place-items-center rounded-full ${viewing.status === "REJECTED" ? "bg-red-50 text-red-500" : viewing.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-500"}`}><Megaphone size={24} /></span><h2 className="text-xl font-black text-slate-900">Campaign Details</h2></div><div className="p-6 space-y-4"><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-600"><Megaphone size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Campaign Name</p><p className="text-sm font-semibold text-slate-800">{viewing.campaign_name}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${viewing.status === "APPROVED" ? "bg-emerald-100 text-emerald-600" : viewing.status === "REJECTED" ? "bg-red-100 text-red-500" : "bg-slate-200 text-slate-500"}`}><CheckCircle2 size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Status</p><Badge className={campaignTone[viewing.status]}>{pretty(viewing.status)}</Badge></div></div>{viewing.status === "REJECTED" && <div className="rounded-2xl border border-red-100 bg-red-50 p-4"><div className="flex items-center gap-2 mb-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-500"><X size={13} /></span><p className="text-sm font-black text-red-700">Rejected by Admin</p></div>{viewing.rejection_reason && <div className="mb-3"><p className="text-xs font-bold uppercase tracking-wide text-red-400">Rejected Reason</p><p className="mt-1 text-sm text-red-800">{viewing.rejection_reason}</p></div>}{viewing.review_comments && <div><p className="text-xs font-bold uppercase tracking-wide text-red-400">Description</p><p className="mt-1 text-sm text-red-800">{viewing.review_comments}</p></div>}</div>}{viewing.status === "APPROVED" && !scheduleOpen && <div className="grid grid-cols-2 gap-3 pt-1"><button disabled={send.isPending} onClick={() => send.mutate(viewing.id)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-blue-100 bg-blue-50 px-4 py-5 text-center transition hover:border-blue-400 hover:bg-blue-100 disabled:opacity-60"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-blue-600 shadow-sm"><Send size={20} /></span><span className="text-sm font-black text-blue-700">{send.isPending ? "Sending…" : "Send Now"}</span><span className="text-[11px] text-slate-500">Send campaign immediately</span></button><button onClick={() => setScheduleOpen(true)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm"><CalendarClock size={20} /></span><span className="text-sm font-black text-indigo-700">Schedule</span><span className="text-[11px] text-slate-500">Schedule for later</span></button></div>}{viewing.status === "APPROVED" && scheduleOpen && <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 space-y-3"><p className="text-sm font-black text-indigo-700 flex items-center gap-2"><CalendarClock size={16} />Pick a date &amp; time</p><input type="datetime-local" min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" /><div className="flex gap-2"><button className="secondary-button flex-1" onClick={() => { setScheduleOpen(false); setScheduleDate("") }}>Cancel</button><button disabled={!scheduleDate || schedule.isPending} onClick={() => { if (viewing && scheduleDate) schedule.mutate({ id: viewing.id, at: scheduleDate }) }} className="primary-button flex-1 justify-center disabled:opacity-60">{schedule.isPending ? "Scheduling…" : "Confirm"}</button></div></div>}<div className="grid grid-cols-2 gap-3"><Info label="Task" value={viewing.task_name || "—"} /><Info label="Audience" value={viewing.audience_name || "—"} /></div></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">{viewing.status === "REJECTED" && <button className="secondary-button flex items-center gap-2 px-5 text-blue-600 border-blue-300" onClick={() => { storeCampaignDraft(null); setViewing(null); setCreateOpen(true) }}><Pencil size={15} />Edit Campaign</button>}<button className="secondary-button px-5" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}>Close</button>{viewing.available_actions.includes("submit") && <button className="primary-button px-5" disabled={submit.isPending} onClick={() => submit.mutate(viewing.id)}>Submit for approval</button>}</div></motion.div></div>}{deleteTarget && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex flex-col items-center gap-3 p-8 text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-red-50"><Trash2 size={28} className="text-red-500" /></span><h2 className="text-xl font-black text-slate-900">Delete Campaign?</h2><p className="text-sm text-slate-500">Are you sure you want to delete <strong>&quot;{deleteTarget.campaign_name}&quot;</strong>? This action cannot be undone.</p></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button className="secondary-button px-6" onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>Cancel</button><button className="flex min-h-10 items-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50" onClick={() => remove.mutate(deleteTarget.id)} disabled={remove.isPending}>{remove.isPending ? "Deleting..." : "Delete"}</button></div></motion.div></motion.div>}</AnimatePresence></div>;
+  if (createOpen) return <CampaignWizard assignments={[]} initialDraft={resumeDraft ? readCampaignDraft() : null} editingCampaignId={editingCampaign?.id} onCancel={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(false) }} onCreated={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(false); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }} />;
+  return <div><div className="mb-7 flex items-end justify-between gap-4"><PageHeading title="Campaigns" subtitle="Create and manage your marketing campaigns" /><button className="primary-button px-6" onClick={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(true) }}><Plus size={18} />Create Campaign</button></div><section className="sa-card overflow-hidden"><div className="grid gap-3 border-b border-slate-100 p-5 md:grid-cols-[1fr_220px]"><SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search campaigns..." /><Select value={status} onChange={value => { setStatus(value); setPage(1) }} label="All Status" options={["DRAFT", "PENDING_APPROVAL", "APPROVED", "SCHEDULED", "SENDING", "COMPLETED", "FAILED", "REJECTED"]} /></div>{campaigns.isLoading ? <Skeleton /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-slate-50"><tr><th className="px-6 py-5">Campaign Name</th><th>Audience Name</th><th>Channel</th><th>Created At</th><th>Status</th><th className="text-center">Actions</th></tr></thead><tbody>{rows.map((row, index) => <motion.tr initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .03 }} className="border-t border-slate-100 hover:bg-blue-50/30" key={row.id}><td className="px-6 py-5 font-semibold">{row.campaign_name}</td><td>{row.audience_name || "—"}</td><td><div className="flex flex-wrap gap-2">{row.channels.length ? row.channels.map(name => <ChannelIcon name={name} key={name} />) : "—"}</div></td><td>{formatDate(row.created_at)}</td><td><Badge className={campaignTone[row.status]}>{pretty(row.status)}</Badge></td><td className="text-center"><div className="inline-flex items-center gap-2"><button aria-label="Edit" title="Edit campaign" className="icon-button !border !border-slate-200 !text-orange-500" onClick={() => loadCampaignForEdit(row)}><Pencil size={16} /></button><button aria-label="View" title="View campaign" className="icon-button !border !border-slate-200 !text-blue-600" onClick={() => setViewing(row)}><Eye size={17} /></button><button aria-label="Delete" title="Delete campaign" className="icon-button !border !border-slate-200 !text-red-500" onClick={() => setDeleteTarget(row)}><Trash2 size={16} /></button></div></td></motion.tr>)}</tbody></table>{!rows.length && <Empty message="No campaigns found." />}</div>}<Pagination page={page} count={campaigns.data?.count ?? 0} pageSize={10} setPage={setPage} /></section>
+    <AnimatePresence>{createOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.form initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-lg rounded-3xl bg-white shadow-2xl" onSubmit={event => { event.preventDefault(); create.mutate() }}><ModalHeader title="Create Campaign" onClose={() => setCreateOpen(false)} /><div className="space-y-5 p-6"><label className="field"><span>Target Audience Segment *</span><select required value={form.audience} onChange={event => setForm({ ...form, audience: event.target.value })}><option value="">Select Audience Segment</option>{(audiences.data ?? []).map(row => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Campaign name *</span><input required minLength={3} placeholder="Enter campaign name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label><label className="field"><span>Description</span><textarea rows={4} placeholder="Describe this campaign" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-5"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button px-6" disabled={create.isPending}>{create.isPending ? "Creating..." : "Create Campaign"}</button></div></motion.form></div>}{viewing && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><button aria-label="Close" className="absolute right-4 top-4 icon-button z-10" type="button" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}><X size={20} /></button><div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 pb-5 pt-7 text-center"><span className={`grid h-14 w-14 place-items-center rounded-full ${viewing.status === "REJECTED" ? "bg-red-50 text-red-500" : viewing.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-500"}`}><Megaphone size={24} /></span><h2 className="text-xl font-black text-slate-900">Campaign Details</h2></div><div className="p-6 space-y-4"><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-600"><Megaphone size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Campaign Name</p><p className="text-sm font-semibold text-slate-800">{viewing.campaign_name}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${viewing.status === "APPROVED" ? "bg-emerald-100 text-emerald-600" : viewing.status === "REJECTED" ? "bg-red-100 text-red-500" : "bg-slate-200 text-slate-500"}`}><CheckCircle2 size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Status</p><Badge className={campaignTone[viewing.status]}>{pretty(viewing.status)}</Badge></div></div>{viewing.status === "REJECTED" && <div className="rounded-2xl border border-red-100 bg-red-50 p-4"><div className="flex items-center gap-2 mb-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-500"><X size={13} /></span><p className="text-sm font-black text-red-700">Rejected by Admin</p></div>{viewing.rejection_reason && <div className="mb-3"><p className="text-xs font-bold uppercase tracking-wide text-red-400">Rejected Reason</p><p className="mt-1 text-sm text-red-800">{viewing.rejection_reason}</p></div>}{viewing.review_comments && <div><p className="text-xs font-bold uppercase tracking-wide text-red-400">Description</p><p className="mt-1 text-sm text-red-800">{viewing.review_comments}</p></div>}</div>}{viewing.status === "APPROVED" && !scheduleOpen && <div className="grid grid-cols-2 gap-3 pt-1"><button disabled={send.isPending} onClick={() => send.mutate(viewing.id)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-blue-100 bg-blue-50 px-4 py-5 text-center transition hover:border-blue-400 hover:bg-blue-100 disabled:opacity-60"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-blue-600 shadow-sm"><Send size={20} /></span><span className="text-sm font-black text-blue-700">{send.isPending ? "Sending…" : "Send Now"}</span><span className="text-[11px] text-slate-500">Send campaign immediately</span></button><button onClick={() => setScheduleOpen(true)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm"><CalendarClock size={20} /></span><span className="text-sm font-black text-indigo-700">Schedule</span><span className="text-[11px] text-slate-500">Schedule for later</span></button></div>}{viewing.status === "APPROVED" && scheduleOpen && <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 space-y-3"><p className="text-sm font-black text-indigo-700 flex items-center gap-2"><CalendarClock size={16} />Pick a date &amp; time</p><input type="datetime-local" min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" /><div className="flex gap-2"><button className="secondary-button flex-1" onClick={() => { setScheduleOpen(false); setScheduleDate("") }}>Cancel</button><button disabled={!scheduleDate || schedule.isPending} onClick={() => { if (viewing && scheduleDate) schedule.mutate({ id: viewing.id, at: scheduleDate }) }} className="primary-button flex-1 justify-center disabled:opacity-60">{schedule.isPending ? "Scheduling…" : "Confirm"}</button></div></div>}<div className="grid grid-cols-2 gap-3"><Info label="Audience" value={viewing.audience_name || "—"} /></div></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">{viewing.status === "REJECTED" && <button className="secondary-button flex items-center gap-2 px-5 text-blue-600 border-blue-300" onClick={() => { storeCampaignDraft(null); setViewing(null); setCreateOpen(true) }}><Pencil size={15} />Edit Campaign</button>}<button className="secondary-button px-5" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}>Close</button>{viewing.available_actions.includes("submit") && <button className="primary-button px-5" disabled={submit.isPending} onClick={() => submit.mutate(viewing.id)}>Submit for approval</button>}</div></motion.div></div>}{deleteTarget && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex flex-col items-center gap-3 p-8 text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-red-50"><Trash2 size={28} className="text-red-500" /></span><h2 className="text-xl font-black text-slate-900">Delete Campaign?</h2><p className="text-sm text-slate-500">Are you sure you want to delete <strong>&quot;{deleteTarget.campaign_name}&quot;</strong>? This action cannot be undone.</p></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button className="secondary-button px-6" onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>Cancel</button><button className="flex min-h-10 items-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50" onClick={() => remove.mutate(deleteTarget.id)} disabled={remove.isPending}>{remove.isPending ? "Deleting..." : "Delete"}</button></div></motion.div></motion.div>}</AnimatePresence></div>;
 }
 
 
-function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { assignments: Assignment[]; initialDraft: CampaignDraft | null; onCancel: () => void; onCreated: () => void }) {
+function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel, onCreated }: { assignments: Assignment[]; initialDraft: CampaignDraft | null; editingCampaignId?: number; onCancel: () => void; onCreated: () => void }) {
   const user = useQuery({ queryKey: ["auth-profile"], queryFn: authService.profile });
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const router = useRouter();
-  const [step, setStep] = useState(initialDraft?.task ? 2 : 1);
+  const [step, setStep] = useState(initialDraft?.task || initialDraft?.audience ? 2 : 1);
   const [channelIndex, setChannelIndex] = useState(0);
   const [form, setForm] = useState<CampaignDraft>(() => initialDraft ? { ...emptyCampaignDraft, ...initialDraft } : { ...emptyCampaignDraft });
   const [previewPage, setPreviewPage] = useState(1);
@@ -446,15 +624,29 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
   const [previewChannelIdx, setPreviewChannelIdx] = useState(0);
   const [previewCustomerIdx, setPreviewCustomerIdx] = useState(0);
   const [saving, setSaving] = useState(false);
-  const channels = useQuery({ queryKey: ["channels"], queryFn: async () => (await apiClient.get<Channel[]>("/api/channels/")).data });
-  const selectedAssignment = assignments.find(row => String(row.task.id) === form.task);
-  const audiencePreview = useQuery({ queryKey: ["task-audience-preview", selectedAssignment?.task.id, previewPage, previewSearch], queryFn: async () => (await apiClient.get<AudiencePreviewPage>(`/api/tasks/${selectedAssignment?.task.id}/audience-preview/`, { params: { page: previewPage, page_size: 5, search: previewSearch || undefined } })).data, enabled: step === 3 && Boolean(selectedAssignment?.task.id), placeholderData: previous => previous });
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
 
-  // All channels assigned to the selected task
-  const taskChannels = (selectedAssignment?.task.channels ?? []).map(id => (channels.data ?? []).find(ch => ch.id === id) ?? { id, name: `Channel ${id}` });
-  // Current channel being templated
+  const channels = useQuery({ queryKey: ["channels"], queryFn: async () => (await apiClient.get<Channel[]>("/api/channels/")).data });
+  const audiences = useQuery({ queryKey: ["audiences-list"], queryFn: async () => (await apiClient.get<any[]>("/api/audiences/")).data });
+
+  const selectedAssignment = assignments.find(row => String(row.task.id) === form.task);
+  const audiencePreview = useQuery({
+    queryKey: ["task-audience-preview", selectedAssignment?.task.id, previewPage, previewSearch],
+    queryFn: async () => (await apiClient.get<AudiencePreviewPage>(`/api/tasks/${selectedAssignment?.task.id}/audience-preview/`, { params: { page: previewPage, page_size: 5, search: previewSearch || undefined } })).data,
+    enabled: step === 3 && Boolean(selectedAssignment?.task.id),
+    placeholderData: previous => previous
+  });
+
+  const selectedAudienceObj = (audiences.data ?? []).find(a => String(a.id) === form.audience);
+  const audienceName = selectedAssignment ? selectedAssignment.task.audience_name : (selectedAudienceObj?.name || "—");
+
+  // Channels logic
+  const taskChannels = selectedAssignment
+    ? (selectedAssignment.task.channels ?? []).map(id => (channels.data ?? []).find(ch => ch.id === id) ?? { id, name: `Channel ${id}` })
+    : (form.selectedChannelIds ?? []).map(id => (channels.data ?? []).find(ch => ch.id === id) ?? { id, name: `Channel ${id}` });
+
   const currentChannel = taskChannels[channelIndex];
-  // Current channel template draft
   const currentCT: ChannelTemplate = form.channelTemplates[String(currentChannel?.id ?? "")] ?? { template_id: "", template_name: "", subject: "", body: "" };
   const setCurrentCT = (patch: Partial<ChannelTemplate>) => setForm(f => {
     const channelId = String(currentChannel?.id ?? "");
@@ -463,32 +655,85 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
   });
   const isEmail = (name: string) => name.toUpperCase().includes("EMAIL");
 
-  // Save all templates + create campaign
-  const doSave = async (submitForApproval: boolean) => {
+  const doSave = async (action: "draft" | "send" | "schedule", targetScheduleDate?: string) => {
     setSaving(true);
     try {
-      const created = (await apiClient.post<{ campaign: { id: number } }>("/api/campaigns/create/", { task: Number(form.task), name: form.name.trim(), description: form.description.trim() })).data.campaign;
-      // Assign all task channels to campaign
-      await apiClient.post(`/api/channels/${created.id}/`, { channels: taskChannels.map(c => c.id) });
-      // Create/assign template for each channel
+      const payload: any = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+      };
+      if (form.task) {
+        payload.task = Number(form.task);
+      } else if (form.audience) {
+        payload.audience = Number(form.audience);
+      }
+
+      let campaignId: number;
+      if (editingCampaignId) {
+        await apiClient.patch(`/api/campaigns/${editingCampaignId}/update/`, payload);
+        campaignId = editingCampaignId;
+      } else {
+        const created = (await apiClient.post<{ campaign: { id: number } }>("/api/campaigns/create/", payload)).data.campaign;
+        campaignId = created.id;
+      }
+      
+      // Assign channels
+      await apiClient.post(`/api/channels/${campaignId}/`, { channels: taskChannels.map(c => c.id) });
+      
+      // Create/assign templates
       for (const ch of taskChannels) {
         const ct = form.channelTemplates[String(ch.id)];
         if (!ct?.body?.trim()) continue;
-        const templateId = ct.template_id ? Number(ct.template_id) : (await apiClient.post<Template>("/api/templates/create/", { name: ct.template_name.trim() || `${form.name} - ${ch.name}`, channel: ch.id, subject: ct.subject?.trim() || "", body: ct.body, status: "ACTIVE" })).data.id;
-        await apiClient.post("/api/campaigns/templates/assign/", { campaign: created.id, channel: ch.id, template: templateId });
+        let templateId: number;
+        if (ct.template_id && !isNaN(Number(ct.template_id)) && Number(ct.template_id) > 0) {
+          templateId = Number(ct.template_id);
+          try {
+            await apiClient.patch(`/api/templates/${templateId}/`, {
+              subject: ct.subject?.trim() || "",
+              body: ct.body,
+            });
+          } catch (e) {
+            console.warn("Failed to update template before assignment", e);
+          }
+        } else {
+          const res = await apiClient.post<Template>("/api/templates/create/", {
+            name: ct.template_name.trim() || `${form.name} - ${ch.name}`,
+            channel: ch.id,
+            subject: ct.subject?.trim() || "",
+            body: ct.body,
+            status: "ACTIVE"
+          });
+          templateId = res.data.id;
+        }
+        await apiClient.post("/api/campaigns/templates/assign/", { campaign: campaignId, channel: ch.id, template: templateId });
       }
-      if (form.scheduled_at) await apiClient.patch(`/api/campaigns/${created.id}/schedule/`, { scheduled_at: new Date(form.scheduled_at).toISOString() });
-      if (submitForApproval) await apiClient.post(`/api/campaigns/${created.id}/submit/`, {});
-      toast.success(submitForApproval ? "Campaign submitted for approval" : "Campaign saved as draft");
+
+      if (action === "send") {
+        await apiClient.post("/api/campaigns/send/", { campaign: campaignId });
+        toast.success("Campaign launched successfully!");
+      } else if (action === "schedule" && targetScheduleDate) {
+        await apiClient.post("/api/campaigns/schedule/", { campaign: campaignId, scheduled_at: new Date(targetScheduleDate).toISOString() });
+        toast.success("Campaign scheduled successfully!");
+      } else {
+        toast.success(editingCampaignId ? "Campaign updated successfully" : "Campaign saved as draft");
+      }
       onCreated();
-    } catch (err) { toast.error(parseApiError(err)); }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(parseApiError(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const goNext = async () => {
     if (step === 1) {
-      if (!form.task) { toast.error("Please select an assigned task."); return; }
       if (form.name.trim().length < 3) { toast.error("Campaign name must be at least 3 characters."); return; }
+      if (form.task) {
+        if (!taskChannels.length) { toast.error("Selected task has no channels assigned."); return; }
+      } else {
+        if (!form.audience) { toast.error("Please select a target audience or an assigned task."); return; }
+        if (!form.selectedChannelIds.length) { toast.error("Please select at least one channel."); return; }
+      }
       if (channels.isLoading) { toast.info("Channels are still loading. Please wait."); return; }
       setStep(2); setChannelIndex(0);
       return;
@@ -498,7 +743,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
       if (!currentCT.template_name.trim()) { toast.error("Enter a template name."); return; }
       if (isEmail(currentChannel.name) && (currentCT.subject?.length ?? 0) > 255) { toast.error("Email subject must be 255 characters or less."); return; }
       if (!currentCT.body.trim()) { toast.error("Enter the template body."); return; }
-      // Auto-save template if new
       if (!currentCT.template_id) {
         try {
           const saved = await apiClient.post<Template>("/api/templates/create/", { name: currentCT.template_name.trim(), channel: currentChannel.id, subject: currentCT.subject?.trim() || "", body: currentCT.body, status: "ACTIVE" });
@@ -506,9 +750,7 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
           toast.success(`"${currentChannel.name}" template saved to My Templates`);
         } catch (err) { toast.error("Could not save template: " + parseApiError(err)); return; }
       }
-      // More channels left? Advance to next channel
       if (channelIndex < taskChannels.length - 1) { setChannelIndex(i => i + 1); return; }
-      // All channels done → preview
       setStep(3);
       return;
     }
@@ -520,7 +762,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
     if (step === 2) { setStep(1); return; }
   };
 
-  // Step indicator: step 1 = Campaign Details, step 2.N = Template (channel N of M), step 3 = Preview
   const totalSteps = 1 + taskChannels.length + 1;
   const currentStepNum = step === 1 ? 1 : step === 2 ? 1 + channelIndex + 1 : totalSteps;
 
@@ -546,12 +787,72 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
         {/* ── Step 1: Campaign Details ── */}
         {step === 1 && <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
           <h2 className="text-2xl font-black">Campaign Details</h2>
-          <label className="field"><span>Select Task <b className="text-red-500">*</b></span><select required value={form.task} onChange={event => setForm({ ...form, task: event.target.value, channelTemplates: {} })}><option value="">Select a task</option>{assignments.map(row => <option value={row.task.id} key={row.id}>{row.task.title} — {row.task.audience_name}</option>)}</select></label>
           <label className="field"><span>Campaign Name <b className="text-red-500">*</b></span><input minLength={3} placeholder="Enter campaign name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
-          <label className="field"><span>Campaign Description</span><textarea rows={4} placeholder="Optional" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
-          {selectedAssignment && taskChannels.length > 0 && <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-            <strong>{taskChannels.length} channel{taskChannels.length > 1 ? "s" : ""}</strong> assigned to this task: {taskChannels.map(c => c.name).join(", ")}. You'll create a template for each one.
-          </div>}
+          <label className="field"><span>Campaign Description</span><textarea rows={3} placeholder="Optional description" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-4">
+            <h3 className="font-black text-slate-800 text-sm uppercase tracking-wide">Target Audience &amp; Channels</h3>
+            
+            {assignments.length > 0 && (
+              <label className="field">
+                <span>From Assigned Task (Optional)</span>
+                <select value={form.task} onChange={event => {
+                  const val = event.target.value;
+                  setForm({ ...form, task: val, audience: val ? "" : form.audience, channelTemplates: {} });
+                }}>
+                  <option value="">-- Direct Audience &amp; Channel Selection --</option>
+                  {assignments.map(row => <option value={row.task.id} key={row.id}>{row.task.title} — {row.task.audience_name}</option>)}
+                </select>
+              </label>
+            )}
+
+            {!form.task && (
+              <>
+                <label className="field">
+                  <span>Select Target Audience <b className="text-red-500">*</b></span>
+                  <select value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
+                    <option value="">Select Audience Group</option>
+                    {(audiences.data ?? []).map((aud: any) => (
+                      <option value={aud.id} key={aud.id}>{aud.name} ({aud.contacts_count ?? 0} contacts)</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Select Channels <b className="text-red-500">*</b></span>
+                  <div className="flex flex-wrap gap-2">
+                    {(channels.data ?? []).map(ch => {
+                      const selected = form.selectedChannelIds.includes(ch.id);
+                      return (
+                        <button
+                          type="button"
+                          key={ch.id}
+                          onClick={() => {
+                            const next = selected
+                              ? form.selectedChannelIds.filter(id => id !== ch.id)
+                              : [...form.selectedChannelIds, ch.id];
+                            setForm({ ...form, selectedChannelIds: next });
+                          }}
+                          className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                            selected ? "border-blue-600 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          }`}
+                        >
+                          <ChannelIcon name={ch.name} />
+                          {ch.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {selectedAssignment && taskChannels.length > 0 && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                <strong>{taskChannels.length} channel{taskChannels.length > 1 ? "s" : ""}</strong> assigned to this task: {taskChannels.map(c => c.name).join(", ")}.
+              </div>
+            )}
+          </div>
         </motion.div>}
 
         {/* ── Step 2: Template per channel ── */}
@@ -586,43 +887,36 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
           <div>
             <h2 className="text-2xl font-black">Campaign Summary</h2>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              {/* Campaign Name */}
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><Target size={16} /></span>
                 <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Campaign Name</p><p className="mt-0.5 truncate text-sm font-bold text-slate-800" title={form.name}>{form.name || "—"}</p></div>
               </div>
-              {/* Audience */}
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-600"><Users size={16} /></span>
-                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Audience</p><p className="mt-0.5 truncate text-sm font-bold text-slate-800" title={selectedAssignment?.task.audience_name}>{selectedAssignment?.task.audience_name || "—"}</p></div>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Audience</p><p className="mt-0.5 truncate text-sm font-bold text-slate-800" title={audienceName}>{audienceName}</p></div>
               </div>
-              {/* Total Recipients */}
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-orange-50 text-orange-500"><UserRound size={16} /></span>
-                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Recipients</p><p className="mt-0.5 text-sm font-bold text-slate-800">{audiencePreview.isLoading ? "…" : compactNumber(audiencePreview.data?.total_customers ?? 0)}</p></div>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total Recipients</p><p className="mt-0.5 text-sm font-bold text-slate-800">{selectedAssignment ? (audiencePreview.isLoading ? "…" : compactNumber(audiencePreview.data?.total_customers ?? 0)) : compactNumber(selectedAudienceObj?.contacts_count ?? 0)}</p></div>
               </div>
-              {/* Channels */}
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><Mail size={16} /></span>
                 <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Channels</p><p className="mt-0.5 truncate text-sm font-bold text-slate-800">{taskChannels.map(c => c.name).join(", ") || "—"}</p></div>
               </div>
-              {/* Status */}
               <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-500"><ShieldCheck size={16} /></span>
-                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</p><span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">Pending Approval</span></div>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><ShieldCheck size={16} /></span>
+                <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Status</p><span className="mt-0.5 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">Ready to Launch</span></div>
               </div>
             </div>
           </div>
 
           {/* Template Preview */}
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-            {/* Header row: title + channel tabs */}
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 bg-slate-50">
               <div>
                 <h3 className="font-black text-slate-900">Campaign Preview</h3>
                 <p className="mt-0.5 text-xs text-slate-500">Test your message appearance and personalization.</p>
               </div>
-              {/* Channel tabs */}
               <div className="flex gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
                 {taskChannels.map((ch, i) => {
                   const active = previewChannelIdx === i;
@@ -639,9 +933,7 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
               </div>
             </div>
 
-            {/* Preview body: left panel + right panel */}
             <div className="grid lg:grid-cols-[280px_1fr]">
-              {/* ── Left panel ── */}
               {(() => {
                 const activeChId = taskChannels[previewChannelIdx]?.id;
                 const activeCT = form.channelTemplates[String(activeChId ?? "")] ?? { template_id: "", template_name: "", subject: "", body: "" };
@@ -678,7 +970,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
                 );
               })()}
 
-              {/* ── Right panel: rendered message ── */}
               {(() => {
                 const activeCh = taskChannels[previewChannelIdx];
                 const channelName = activeCh?.name || "";
@@ -689,7 +980,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
                 const activeChId = activeCh?.id;
                 const activeCT = form.channelTemplates[String(activeChId ?? "")] ?? { template_id: "", template_name: "", subject: "", body: "" };
 
-                // Helper to resolve variables
                 const resolveText = (text?: string | null) => {
                   if (!text || typeof text !== "string") return "";
                   return text.replace(/\{\{(.*?)\}\}/g, (match, v) => {
@@ -704,8 +994,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
 
                 return (
                   <div className="p-8 flex items-center justify-center bg-slate-50/50">
-
-                    {/* EMAIL MOCKUP */}
                     {isEmail && (
                       <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                         <div className="border-b border-slate-100 bg-slate-50 p-4">
@@ -721,7 +1009,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
                       </div>
                     )}
 
-                    {/* WHATSAPP MOCKUP */}
                     {isWhatsapp && (
                       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-[#efeae2] shadow-sm overflow-hidden relative h-[600px] flex flex-col">
                         <div className="bg-[#075e54] px-4 py-3 text-white flex items-center gap-3">
@@ -744,7 +1031,6 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
                       </div>
                     )}
 
-                    {/* SMS MOCKUP */}
                     {isSms && (
                       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden relative h-[600px] flex flex-col">
                         <div className="bg-white border-b border-slate-100 px-4 py-3 flex flex-col items-center">
@@ -759,29 +1045,61 @@ function CampaignWizard({ assignments, initialDraft, onCancel, onCreated }: { as
                         </div>
                       </div>
                     )}
-
                   </div>
                 );
               })()}
             </div>
           </div>
-
         </motion.div>}
       </div>
 
       {/* Navigation */}
       <div className="mt-8 flex flex-wrap justify-between gap-3 border-t border-slate-100 pt-6">
         <div>{(step > 1 || (step === 2 && channelIndex > 0)) && <button type="button" className="secondary-button flex items-center gap-2 px-5" onClick={goBack}><ChevronLeft size={17} />Back</button>}</div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {step < 3 && <button type="button" className="primary-button px-7" onClick={() => void goNext()}>
             {step === 2 && channelIndex < taskChannels.length - 1 ? `Next: ${taskChannels[channelIndex + 1]?.name} Template` : "Next"}<ChevronRight size={17} />
           </button>}
           {step === 3 && <>
-            <button type="button" className="secondary-button px-5" disabled={saving || audiencePreview.isLoading} onClick={() => void doSave(false)}>{saving ? "Saving..." : "Save as Draft"}</button>
-            <button type="button" className="primary-button px-6" disabled={saving || audiencePreview.isLoading || audiencePreview.isError} onClick={() => void doSave(true)}>{saving ? "Submitting..." : "Submit for Approval"}<ChevronRight size={17} /></button>
+            <button type="button" className="secondary-button px-5" disabled={saving} onClick={() => void doSave("draft")}>{saving ? "Saving..." : "Save as Draft"}</button>
+            <button type="button" className="secondary-button px-5 flex items-center gap-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" disabled={saving} onClick={() => setScheduleOpen(true)}><CalendarClock size={16} />Schedule</button>
+            <button type="button" className="primary-button px-6 flex items-center gap-2" disabled={saving} onClick={() => void doSave("send")}><Send size={16} />{saving ? "Launching..." : "Launch Now"}</button>
           </>}
         </div>
       </div>
+
+      {scheduleOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <CalendarClock className="text-indigo-600" size={20} /> Schedule Launch
+            </h3>
+            <p className="text-xs text-slate-500">Pick date &amp; time for automated sending:</p>
+            <input
+              type="datetime-local"
+              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+              value={scheduleDate}
+              onChange={e => setScheduleDate(e.target.value)}
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="secondary-button" onClick={() => setScheduleOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                disabled={!scheduleDate || saving}
+                className="primary-button px-5 bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => {
+                  setScheduleOpen(false);
+                  void doSave("schedule", scheduleDate);
+                }}
+              >
+                {saving ? "Scheduling..." : "Confirm Schedule"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pickerOpen && currentChannel && (
         <TemplatePickerModal
           channelId={currentChannel.id}

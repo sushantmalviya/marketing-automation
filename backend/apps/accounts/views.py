@@ -29,7 +29,7 @@ class LoginView(generics.GenericAPIView):
         ma_user = MAUser.objects.filter(user_id=user).first()
         refresh = RefreshToken.for_user(user)
 
-        role = ma_user.role if ma_user else ("SUPER_ADMIN" if user.is_superuser else "USER")
+        role = ma_user.role if ma_user else ("ADMIN" if user.is_superuser else "USER")
 
         return Response(
             {
@@ -153,8 +153,8 @@ class CreateSuperAdminView(generics.CreateAPIView):
 
 class CreateAdminView(generics.CreateAPIView):
     """
-    Create a new Admin user.
-    Accessible only by Super Admin.
+    Create a new User account (managed by Admin).
+    Accessible only by Admin.
     """
 
     serializer_class = CreateAdminSerializer
@@ -168,38 +168,10 @@ class CreateAdminView(generics.CreateAPIView):
         return Response(
             {
                 "success": True,
-                "message": "Admin created successfully.",
+                "message": "User created successfully.",
                 "data": {
                     "id": admin.id,
                     "email": admin.email,
-                    "role": "ADMIN",
-                },
-            },
-            status=status.HTTP_201_CREATED,
-        )
-    
-class CreateUserView(generics.CreateAPIView):
-    """
-    Create a new User.
-    Accessible only by Admin.
-    """
-
-    serializer_class = CreateUserSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = serializer.save()
-
-        return Response(
-            {
-                "success": True,
-                "message": "User created successfully.",
-                "data": {
-                    "id": user.id,
-                    "email": user.email,
                     "role": "USER",
                 },
             },
@@ -208,56 +180,18 @@ class CreateUserView(generics.CreateAPIView):
 
 class DeleteAdminView(APIView):
     """
-    Deletes an Admin user.
-    Accessible only by Super Admin.
+    Deletes a User account.
+    Accessible only by Admin.
     """
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
     def delete(self, request, user_id):
         UserManagementService.delete_admin(request.user, user_id)
         return Response(
-            {"message": "Admin deleted successfully."},
-            status=status.HTTP_200_OK,
-        )
-
-class DeleteUserView(APIView):
-    """
-    Deletes a User.
-    Accessible by Admin or Super Admin.
-    """
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-    def get_object(self, user_id):
-        user = get_object_or_404(User.objects.prefetch_related("ma_users"), id=user_id)
-        ma_user = user.ma_users.first()
-        if not ma_user or ma_user.role != "USER":
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({"detail": "This endpoint only manages User accounts."})
-
-        from apps.common.ownership import is_managed_user
-        if not is_managed_user(self.request.user, user):
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("You do not have permission to access this user.")
-            
-        return user
-
-    def get(self, request, user_id):
-        return Response(UserListSerializer(self.get_object(user_id)).data)
-
-    def patch(self, request, user_id):
-        from .serializers import UserUpdateSerializer
-        user = self.get_object(user_id)
-        serializer = UserUpdateSerializer(user, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(UserListSerializer(user).data)
-
-    def delete(self, request, user_id):
-        UserManagementService.delete_user(request.user, user_id)
-        return Response(
             {"message": "User deleted successfully."},
             status=status.HTTP_200_OK,
         )
+
 
 class ListAdminsView(generics.ListAPIView):
     """
@@ -276,17 +210,17 @@ class ListAdminsView(generics.ListAPIView):
 
 class AdminDetailView(APIView):
     """
-    GET  /api/admins/<user_id>/  – retrieve admin details
-    PATCH /api/admins/<user_id>/ – toggle or update admin status (Super Admin only)
+    GET  /api/admins/<user_id>/  – retrieve user details
+    PATCH /api/admins/<user_id>/ – toggle or update user status (Admin only)
     """
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
     def _get_admin(self, user_id):
         user = get_object_or_404(User.objects.prefetch_related("ma_users"), id=user_id)
         ma_user = user.ma_users.first()
-        if not ma_user or ma_user.role != "ADMIN":
+        if not ma_user or ma_user.role not in ["ADMIN", "USER"]:
             from rest_framework.exceptions import ValidationError
-            raise ValidationError({"detail": "This endpoint only manages Admin accounts."})
+            raise ValidationError({"detail": "This endpoint only manages User/Admin accounts."})
         return user
 
     def get(self, request, user_id):

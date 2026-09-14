@@ -16,16 +16,16 @@ import { useTheme } from "@/providers/theme-provider";
 
 /* ── nav data ── */
 const labels: Record<ModuleKey, string> = {
-  dashboard:"Dashboard", admins:"Administrators", users:"Users",
+  dashboard:"Dashboard", admins:"Users", users:"Users",
   analytics:"Analytics", audiences:"Segmentation", automations:"Automations",
   campaigns:"Campaigns", channels:"Channels", communications:"Communications",
   content:"Content Studio", customers:"Customers", forms:"Forms",
-  tasks:"Tasks", templates:"Templates", assets:"Asset Library",
+  templates:"Templates", assets:"Asset Library",
 };
 
 const superNavigation = [
   {group:"Overview",   items:[{key:"dashboard",  label:"Dashboard",      icon:Gauge}]},
-  {group:"MANAGEMENT", items:[{key:"admins",      label:"Manage Admins",  icon:Users},
+  {group:"MANAGEMENT", items:[{key:"admins",      label:"Manage Users",   icon:Users},
                               {key:"billing",     label:"Billing & Usage",icon:CreditCard}]},
   {group:"INSIGHTS",   items:[{key:"analytics",   label:"Analytics",      icon:BarChart3},
                               {key:"ai-credits",  label:"AI Credits",     icon:Bot}]},
@@ -34,16 +34,14 @@ const superNavigation = [
 
 const adminNavigation = [
   {key:"dashboard",   label:"Dashboard",           icon:Gauge},
-  {key:"users",       label:"Team Management",     icon:Users},
   {key:"contacts",    label:"Contacts",            icon:ContactRound},
   {key:"audiences",   label:"Segmentation",        icon:Tags},
-  {key:"tasks",       label:"Task Management",     icon:ListChecks},
   {key:"forms",       label:"Forms",               icon:ListChecks},
   {key:"templates",   label:"Templates",           icon:FileText},
   {key:"campaigns",   label:"Campaigns",           icon:Megaphone},
+  {key:"channels",    label:"Social Publisher",    icon:Share2},
   {key:"ads",         label:"Ads",                 icon:Megaphone},
   {key:"automations", label:"Workflow Automation", icon:Workflow},
-  {key:"channels",    label:"Social Publisher",    icon:Share2},
   {key:"assets",      label:"Asset Library",       icon:FolderOpen},
   {key:"analytics",   label:"Analytics",           icon:BarChart3},
   {key:"account",     label:"Account",             icon:Settings},
@@ -51,10 +49,9 @@ const adminNavigation = [
 
 const userNavigation = [
   {key:"dashboard",   label:"Dashboard",      icon:Gauge},
-  {key:"tasks",       label:"My Tasks",       icon:ListChecks},
   {key:"templates",   label:"Templates",      icon:FileText},
   {key:"campaigns",   label:"Campaigns",      icon:Megaphone},
-  {key:"content",     label:"Content Studio", icon:SquarePen},
+  {key:"channels",    label:"Social Publisher", icon:Share2},
   {key:"assets",      label:"Asset Library",  icon:FolderOpen},
   {key:"performance", label:"My Performance", icon:TrendingUp},
   {key:"account",     label:"Account",        icon:Settings},
@@ -119,9 +116,9 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
     );
   };
 
-  const navGroups = rolePath === "super-admin" 
+  const navGroups = rolePath === "admin" 
     ? superNavigation 
-    : [{ group: "", items: rolePath === "admin" ? adminNavigation : userNavigation }];
+    : [{ group: "", items: rolePath === "user" ? adminNavigation : userNavigation }];
 
   /* ── sidebar JSX ── */
   const sidebar = (

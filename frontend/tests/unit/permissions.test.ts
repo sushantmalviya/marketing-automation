@@ -4,11 +4,10 @@ import { canAccessModule, canPerformAction, getDashboardPath } from "@/permissio
 
 describe("verified role permissions", () => {
   it("centralizes dashboard redirects", () => {
-    expect(getDashboardPath(ROLES.SUPER_ADMIN)).toBe("/super-admin/dashboard");
     expect(getDashboardPath(ROLES.ADMIN)).toBe("/admin/dashboard");
     expect(getDashboardPath(ROLES.USER)).toBe("/user/dashboard");
   });
-  it("does not allow users to manage admins", () => {
+  it("does not allow standard users to access admin management", () => {
     expect(canAccessModule(ROLES.USER, "admins")).toBe(false);
     expect(canPerformAction(ROLES.USER, "admins", "delete")).toBe(false);
   });

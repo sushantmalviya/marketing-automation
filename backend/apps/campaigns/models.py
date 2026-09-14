@@ -1,6 +1,5 @@
 from django.db import models
 from django.conf import settings
-from apps.tasks.models import Task
 
 class CustomerUpload(models.Model):
     class Status(models.TextChoices):
@@ -49,6 +48,7 @@ class CustomerRecord(models.Model):
         related_name="records",
     )
     data = models.JSONField()
+    routing_logs = models.JSONField(blank=True, default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -70,10 +70,12 @@ class Campaign(models.Model):
         CANCELLED = "CANCELLED", "Cancelled"
         FAILED = "FAILED", "Failed"
 
-    task = models.ForeignKey(
-        Task,
-        on_delete=models.CASCADE,
-        related_name="campaigns",
+    target_audience = models.ForeignKey(
+        "campaigns.Audience",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="direct_campaigns",
     )
 
     name = models.CharField(

@@ -93,9 +93,6 @@ urlpatterns = [
     path("api/admins/<int:user_id>/", AdminDetailView.as_view(), name="admin-detail"),
     path("api/users/", ListUsersView.as_view(), name="list-users"),
 
-
-    path("api/tasks/", include("apps.tasks.urls")),
-
     path(
         "api/customers/",
         include("apps.campaigns.urls.customers"),

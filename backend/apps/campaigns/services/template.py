@@ -1,6 +1,5 @@
 from rest_framework.exceptions import ValidationError
 from apps.accounts.models import MAUser
-from apps.tasks.models import TaskAssignment
 from apps.campaigns.models import (
     Template,
     CampaignChannel,
@@ -31,7 +30,7 @@ class TemplateService:
             channel=validated_data["channel"],
             subject=validated_data.get("subject"),
             body=validated_data["body"],
-            status=validated_data["status"],
+            status=validated_data.get("status", Template.Status.ACTIVE),
             created_by=user,
         )
 
@@ -138,14 +137,15 @@ class CampaignTemplateService:
         channel = validated_data["channel"]
         template = validated_data["template"]
 
-        # Rule 1
-        if not TaskAssignment.objects.filter(
-            task=campaign.task,
-            user=user,
-        ).exists():
-            raise ValidationError(
-                "You are not assigned to this task."
-            )
+        # Rule 1: Campaign access check (supports direct campaigns without tasks)
+        from apps.common.ownership import filter_campaigns_for_admin, filter_templates_for_admin
+        from apps.campaigns.models import Campaign
+        has_access = (
+            campaign.created_by_id == user.id or
+            filter_campaigns_for_admin(Campaign.objects.filter(id=campaign.id), user).exists()
+        )
+        if not has_access:
+            raise ValidationError("You do not have permission to modify this campaign.")
 
         # Rule 2
         if not CampaignChannel.objects.filter(
@@ -156,10 +156,14 @@ class CampaignTemplateService:
                 "This channel is not assigned to the campaign."
             )
         
-        # Rule 3: Template must belong to the logged-in user
-        if template.created_by != user:
+        # Rule 3: Template access check (own template or organization template)
+        has_template_access = (
+            template.created_by_id == user.id or
+            filter_templates_for_admin(Template.objects.filter(id=template.id), user).exists()
+        )
+        if not has_template_access:
             raise ValidationError(
-                "You can only assign your own templates."
+                "You can only assign your own or organization templates."
             )
         
         # Rule 4: Template channel must match selected channel
@@ -168,8 +172,11 @@ class CampaignTemplateService:
                 "Template channel does not match the selected channel."
             )
         
-        # Rule 5: Template must be ACTIVE
-        if template.status != Template.Status.ACTIVE:
+        # Rule 5: Template status handling (auto-activate DRAFT templates when assigned to a campaign)
+        if template.status == Template.Status.DRAFT:
+            template.status = Template.Status.ACTIVE
+            template.save(update_fields=["status"])
+        elif template.status != Template.Status.ACTIVE:
             raise ValidationError(
                 "Only active templates can be assigned."
             )

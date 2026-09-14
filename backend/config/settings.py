@@ -77,7 +77,6 @@ INSTALLED_APPS = [
     "apps.content_studio",
     "apps.asset_library",
     "apps.accounts",
-    "apps.tasks",
     "apps.forms",
     'apps.automation',
     "apps.events",

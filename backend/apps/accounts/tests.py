@@ -75,7 +75,7 @@ class AuthenticationAPITests(APITestCase):
     def test_existing_super_admin_can_create_another_super_admin(self):
         root = self.create_role_user(
             "existing-root@example.com",
-            "SUPER_ADMIN",
+            "ADMIN",
             is_staff=True,
             is_superuser=True,
         )
@@ -92,7 +92,7 @@ class AuthenticationAPITests(APITestCase):
         self.client.force_authenticate(user)
         response = self.client.patch(
             reverse("profile"),
-            {"first_name": "Ada", "last_name": "Lovelace", "role": "SUPER_ADMIN"},
+            {"first_name": "Ada", "last_name": "Lovelace", "role": "ADMIN"},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -120,7 +120,7 @@ class AuthenticationAPITests(APITestCase):
         self.assertTrue(
             MAUser.objects.filter(
                 user__email="created-admin@example.com",
-                role="ADMIN",
+                role="USER",
             ).exists()
         )
 
@@ -128,7 +128,7 @@ class AuthenticationAPITests(APITestCase):
 class AccountPermissionTests(APITestCase):
     password = "StrongPass123!"
 
-    def create_role_user(self, email, role, managed_by=None, **extra):
+    def create_role_user(self, email, role, **extra):
         user = User.objects.create_user(
             email=email,
             password=self.password,
@@ -137,7 +137,6 @@ class AccountPermissionTests(APITestCase):
         profile = MAUser.objects.create(
             user=user,
             role=role,
-            managed_by=managed_by,
         )
         return user, profile
 
@@ -148,7 +147,7 @@ class AccountPermissionTests(APITestCase):
         )
         MAUser.objects.create(user=root, role="USER")
 
-        self.assertEqual(get_request_role(root), "SUPER_ADMIN")
+        self.assertEqual(get_request_role(root), "ADMIN")
         self.assertTrue(
             IsAdminOrSuperAdmin().has_permission(PermissionRequest(root), None)
         )
@@ -161,21 +160,16 @@ class AccountPermissionTests(APITestCase):
         request = PermissionRequest(root)
 
         self.assertTrue(IsContentStudioAuthorized().has_permission(request, None))
-        self.assertEqual(root.role, "SUPER_ADMIN")
+        self.assertEqual(root.role, "ADMIN")
         self.assertFalse(root.requires_approval)
 
-    def test_admin_can_manage_only_directly_managed_marketing_users(self):
+    def test_admin_can_manage_marketing_users(self):
         admin, admin_profile = self.create_role_user(
             "owner-admin@example.com",
             "ADMIN",
         )
         managed_user, managed_profile = self.create_role_user(
             "managed@example.com",
-            "USER",
-            managed_by=admin_profile,
-        )
-        other_user, _ = self.create_role_user(
-            "unmanaged@example.com",
             "USER",
         )
         permission = IsSuperAdminOrOwnManagedUser()
@@ -184,7 +178,6 @@ class AccountPermissionTests(APITestCase):
         self.assertTrue(permission.has_permission(request, None))
         self.assertTrue(permission.has_object_permission(request, None, managed_user))
         self.assertTrue(permission.has_object_permission(request, None, managed_profile))
-        self.assertFalse(permission.has_object_permission(request, None, other_user))
 
     def test_anonymous_bootstrap_is_closed_when_django_superuser_exists(self):
         User.objects.create_superuser(

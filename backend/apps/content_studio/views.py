@@ -255,8 +255,8 @@ class ContentDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        if request.user.role not in ['ADMIN', 'SUPER_ADMIN']:
-            return Response({"error": "Only Admins can approve contents."}, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role not in ['ADMIN', 'USER']:
+            return Response({"error": "Only Admins and Users can approve contents."}, status=status.HTTP_403_FORBIDDEN)
             
         draft = self.get_object()
         notes = request.data.get('notes', '')
@@ -268,8 +268,8 @@ class ContentDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        if request.user.role not in ['ADMIN', 'SUPER_ADMIN']:
-            return Response({"error": "Only Admins can reject contents."}, status=status.HTTP_403_FORBIDDEN)
+        if request.user.role not in ['ADMIN', 'USER']:
+            return Response({"error": "Only Admins and Users can reject contents."}, status=status.HTTP_403_FORBIDDEN)
             
         draft = self.get_object()
         notes = request.data.get('notes', '')

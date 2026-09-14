@@ -14,7 +14,6 @@ export const moduleDefinitions: Record<string, ModuleDefinition> = {
   content: { title: "Content Studio", endpoint: "/api/content/content-drafts/", description: "Content drafts and approvals" },
   customers: { title: "Customers", endpoint: "/api/customers/", description: "Imported database-backed customer records" },
   forms: { title: "Forms", endpoint: "/api/forms/", description: "Forms, publishing and responses" },
-  tasks: { title: "Tasks", endpoint: "/api/tasks/my/", description: "Assigned work" },
   templates: { title: "Templates", endpoint: "/api/templates/", description: "Campaign delivery templates" },
 };
 

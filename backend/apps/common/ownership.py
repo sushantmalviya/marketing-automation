@@ -23,120 +23,56 @@ def is_super_admin(user):
     if user.is_superuser:
         return True
     profile = get_admin_profile(user)
-    return profile is not None and profile.role == "SUPER_ADMIN"
+    return profile is not None and profile.role == "ADMIN"
 
 def get_tenant_owner_profile(user):
     """
-    Returns the MAUser profile representing the tenant owner for the given user.
-    - If user is SUPER_ADMIN or ADMIN, returns their MAUser profile.
-    - If user is USER, returns their managing ADMIN's MAUser profile.
+    Returns the MAUser profile for the given user.
     """
-    profile = get_admin_profile(user)
-    if not profile:
-        return None
-        
-    if profile.role == "USER" and profile.managed_by_id:
-        return profile.managed_by
-        
-    return profile
+    return get_admin_profile(user)
 
 def get_managed_users_queryset(admin_user):
     """
     Returns a queryset of User objects managed by this admin_user.
-    For SUPER_ADMIN, it returns all users with role 'USER'.
-    For ADMIN, it returns only their directly managed users.
+    For ADMIN, it returns all users with role 'USER'.
     """
     if is_super_admin(admin_user):
         return User.objects.filter(ma_users__role="USER", is_active=True).prefetch_related("ma_users")
     
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return User.objects.filter(
-            ma_users__role="USER", 
-            ma_users__managed_by=admin_profile,
-            is_active=True
-        ).prefetch_related("ma_users")
-    
     return User.objects.none()
 
 def get_managed_user_ids(admin_user):
-    """Returns a list of IDs of users managed by this admin."""
+    """Returns a list of IDs of users managed by this admin/user."""
     return list(get_managed_users_queryset(admin_user).values_list("id", flat=True))
 
 def is_managed_user(admin_user, target_user):
     """
     Checks if target_user is managed by admin_user.
-    SUPER_ADMIN manages everyone (with role='USER').
+    ADMIN manages everyone.
     """
     if not target_user or not target_user.is_authenticated:
         return False
     
-    target_profile = get_admin_profile(target_user)
-    if not target_profile or target_profile.role != "USER":
-        return False
-
-    if is_super_admin(admin_user):
-        return True
-    
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return target_profile.managed_by_id == admin_profile.id
-        
-    return False
+    return is_super_admin(admin_user)
 
 def filter_users_for_admin(queryset, admin_user):
-    """Filters a queryset of User objects based on admin ownership."""
+    """Filters a queryset of User objects based on ownership."""
     if is_super_admin(admin_user):
         return queryset
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return queryset.filter(
-            ma_users__role="USER",
-            ma_users__managed_by=admin_profile
-        )
     return queryset.none()
 
 def _filter_resource_for_admin(queryset, admin_user, user_field="created_by"):
     """
     Core filter:
-    SUPER_ADMIN -> all
-    ADMIN -> own resources OR resources of managed users
-    USER -> own resources OR resources created by their managing ADMIN
+    ADMIN -> all resources
+    USER -> own resources
     """
     if is_super_admin(admin_user):
         return queryset
-        
-    admin_profile = get_admin_profile(admin_user)
-    
-    if admin_profile and admin_profile.role == "ADMIN":
-        return queryset.filter(
-            Q(**{user_field: admin_user}) | 
-            Q(**{f"{user_field}__ma_users__managed_by": admin_profile})
-        ).distinct()
-        
-    elif admin_profile and admin_profile.role == "USER":
-        # A user can access their own resources
-        q = Q(**{user_field: admin_user})
-        # If they need to access resources from their admin (e.g. Audiences)
-        tenant_profile = get_tenant_owner_profile(admin_user)
-        if tenant_profile and tenant_profile != admin_profile:
-            q |= Q(**{f"{user_field}": tenant_profile.user})
-        return queryset.filter(q).distinct()
-        
-    return queryset.none()
-
+    return queryset.filter(**{user_field: admin_user})
 
 def filter_by_tenant(queryset, user, user_field="created_by"):
-    """Compatibility entry point for tenant-aware queryset filtering.
-
-    Resource APIs historically imported this helper from ``apps.common.utils``.
-    Keep one implementation here so serializers, views, and services all apply
-    the same Super Admin/Admin/User ownership hierarchy.
-    """
     return _filter_resource_for_admin(queryset, user, user_field)
-
-def filter_tasks_for_admin(queryset, admin_user):
-    return _filter_resource_for_admin(queryset, admin_user, "created_by")
 
 def filter_campaigns_for_admin(queryset, admin_user):
     return _filter_resource_for_admin(queryset, admin_user, "created_by")
@@ -150,32 +86,15 @@ def filter_dashboard_queryset(queryset, admin_user, user_field="created_by"):
 def filter_audiences_for_admin(queryset, admin_user):
     return _filter_resource_for_admin(queryset, admin_user, "created_by")
 
-def can_manage_user(admin_user, target_user):
-    return is_managed_user(admin_user, target_user)
-
-def can_manage_task(admin_user, task):
-    if is_super_admin(admin_user):
-        return True
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return task.created_by == admin_user or is_managed_user(admin_user, task.created_by)
-    return False
-
 def can_manage_campaign(admin_user, campaign):
     if is_super_admin(admin_user):
         return True
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return campaign.created_by == admin_user or is_managed_user(admin_user, campaign.created_by)
-    return False
+    return campaign.created_by_id == admin_user.id
 
 def can_manage_template(admin_user, template):
     if is_super_admin(admin_user):
         return True
-    admin_profile = get_admin_profile(admin_user)
-    if admin_profile and admin_profile.role == "ADMIN":
-        return template.created_by == admin_user or is_managed_user(admin_user, template.created_by)
-    return False
+    return template.created_by_id == admin_user.id
 
 def filter_customer_records_for_admin(queryset, admin_user):
     """For CustomerRecord which has upload__uploaded_by"""

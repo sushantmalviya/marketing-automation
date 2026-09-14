@@ -68,7 +68,7 @@ export function SuperAdminAccount() {
 
   if (!user) return null;
 
-  const isAdminOrAbove = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+  const isAdminOrAbove = user.role === "USER" || user.role === "ADMIN";
 
   const tabs = [
     { id: "profile", label: "Profile", icon: UserRound },

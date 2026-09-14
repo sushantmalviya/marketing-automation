@@ -39,7 +39,6 @@ class User(AbstractUser):
 class MAUser(models.Model):
 
     ROLE_CHOICES = [
-        ("SUPER_ADMIN", "Super Admin"),
         ("ADMIN", "Admin"),
         ("USER", "User"),
     ]
@@ -65,14 +64,6 @@ class MAUser(models.Model):
     requires_approval = models.BooleanField(
         default=True,
         help_text="If True, the user's content must be approved before publishing."
-    )
-
-    managed_by = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="managed_users",
     )
 
     def __str__(self):

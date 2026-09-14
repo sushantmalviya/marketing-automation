@@ -20,7 +20,7 @@ class PublishingServiceTests(TestCase):
         from apps.accounts.models import MAUser
         from apps.integrations.models import SocialConnection
         self.admin_ma = MAUser.objects.create(user=self.admin, role="ADMIN")
-        self.user_ma = MAUser.objects.create(user=self.user, role="USER", managed_by=self.admin_ma)
+        self.user_ma = MAUser.objects.create(user=self.user, role="USER")
         
         conn1 = SocialConnection.objects.create(user=self.admin_ma, platform=ContentPlatform.PlatformChoices.FACEBOOK)
         conn1.set_tokens(access_token="test")
@@ -29,6 +29,14 @@ class PublishingServiceTests(TestCase):
         conn2 = SocialConnection.objects.create(user=self.admin_ma, platform=ContentPlatform.PlatformChoices.INSTAGRAM)
         conn2.set_tokens(access_token="test")
         conn2.save()
+
+        conn3 = SocialConnection.objects.create(user=self.user_ma, platform=ContentPlatform.PlatformChoices.FACEBOOK)
+        conn3.set_tokens(access_token="test")
+        conn3.save()
+        
+        conn4 = SocialConnection.objects.create(user=self.user_ma, platform=ContentPlatform.PlatformChoices.INSTAGRAM)
+        conn4.set_tokens(access_token="test")
+        conn4.save()
         
         self.draft = ContentDraft.objects.create(
             owner=self.user,
@@ -81,12 +89,17 @@ class PublishingServiceTests(TestCase):
         self.platform2.refresh_from_db()
         self.assertEqual(self.platform2.status, ContentPlatform.PlatformStatus.POSTED)
 
-    def test_unauthorized_user_cannot_publish_unapproved(self):
+    @patch('apps.integrations.providers.factory.ProviderFactory.get_provider')
+    def test_user_can_publish_draft_directly(self, mock_get_provider):
+        mock_provider = MagicMock()
+        mock_provider.publish_post.return_value = {"success": True, "platform_post_id": "123"}
+        mock_get_provider.return_value = mock_provider
         self.draft.workflow_state = ContentDraft.WorkflowState.DRAFT
         self.draft.save()
         
-        with self.assertRaises(ValueError):
-            PublishingService.publish_content(self.draft, self.user)
+        updated_draft = PublishingService.publish_content(self.draft, self.user)
+        updated_draft.refresh_from_db()
+        self.assertEqual(updated_draft.workflow_state, ContentDraft.WorkflowState.PUBLISHED)
             
     @patch('apps.integrations.providers.factory.ProviderFactory.get_provider')
     def test_admin_can_bypass_approval(self, mock_get_provider):
