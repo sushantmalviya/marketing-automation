@@ -507,8 +507,8 @@ function BrandIdentityTab() {
                       type="button"
                       onClick={() => toggleTone(t)}
                       className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${selectedTones.includes(t)
-                          ? "border-purple-500 bg-purple-600 text-white shadow-sm"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                        ? "border-purple-500 bg-purple-600 text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-purple-300 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
                         }`}
                     >
                       {t}
@@ -742,10 +742,18 @@ function ConnectSenderIDsPanel() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const qc = useQueryClient();
 
-  const { data: senderIdentities = [], isLoading } = useQuery({
+  const { data: senderIdentities = [] } = useQuery({
     queryKey: ["sender-identities"],
     queryFn: async () => {
       const res = await apiClient.get<any[]>("/api/communications/sender-identities/");
+      return Array.isArray(res.data) ? res.data : [];
+    },
+  });
+
+  const { data: senderDomains = [] } = useQuery({
+    queryKey: ["sender-domains"],
+    queryFn: async () => {
+      const res = await apiClient.get<any[]>("/api/communications/sender-domains/");
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -755,6 +763,7 @@ function ConnectSenderIDsPanel() {
     onSuccess: () => {
       toast.success("Sender ID disconnected successfully");
       void qc.invalidateQueries({ queryKey: ["sender-identities"] });
+      void qc.invalidateQueries({ queryKey: ["sender-domains"] });
       setDeletingId(null);
     },
     onError: (err) => {
@@ -799,7 +808,7 @@ function ConnectSenderIDsPanel() {
       </div>
 
       <div className="space-y-6">
-        {/* Card 1: Sender Email */}
+        {/* Card 1: Sender Email & Verified Domains */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
@@ -807,9 +816,9 @@ function ConnectSenderIDsPanel() {
                 <Mail size={24} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Sender Email</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Sender Email & Domain ID</h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Connect your email account to send marketing emails and automated messages
+                  Verify ownership of your company domain (@company.com) & connect email accounts
                 </p>
               </div>
             </div>
@@ -821,15 +830,43 @@ function ConnectSenderIDsPanel() {
               >
                 Connect Email <ChevronRight size={14} />
               </button>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); setActiveModal("EMAIL"); }}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Learn more <ExternalLink size={10} />
-              </a>
             </div>
           </div>
+
+          {/* Verified Domains Sub-list */}
+          {senderDomains.length > 0 && (
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Verified Domains</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {senderDomains.map((d: any) => (
+                  <div
+                    key={d.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-800/40"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Globe2 size={16} className="text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{d.domain}</span>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Record: {d.dns_record_type} @ {d.dns_record_name}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        d.status === "VERIFIED"
+                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                          : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                      }`}
+                    >
+                      {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
+                      {d.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Connected Email Identities List */}
           {emailIdentities.length > 0 && (
@@ -855,6 +892,7 @@ function ConnectSenderIDsPanel() {
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         Provider: {item.provider} • Connection: {item.connection_type}
+                        {item.domain ? ` • Domain: ${item.domain}` : ""}
                       </p>
                     </div>
                   </div>
@@ -939,23 +977,21 @@ function ConnectSenderIDsPanel() {
                           {item.display_name ? `${item.display_name} (${item.email})` : item.email}
                         </span>
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            item.status === "CONNECTED"
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${item.status === "CONNECTED"
                               ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                               : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
-                          }`}
+                            }`}
                         >
                           {item.status}
                         </span>
                         {item.quality_rating && item.quality_rating !== "UNKNOWN" && (
                           <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              item.quality_rating === "GREEN"
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${item.quality_rating === "GREEN"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : item.quality_rating === "YELLOW"
-                                ? "bg-amber-100 text-amber-700"
-                                : "bg-rose-100 text-rose-700"
-                            }`}
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-rose-100 text-rose-700"
+                              }`}
                           >
                             Quality: {item.quality_rating}
                           </span>

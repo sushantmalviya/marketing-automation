@@ -4,10 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { apiClient, parseApiError } from "@/services/api-client";
+import { useAuth } from "@/providers/auth-provider";
 
 export default function GoogleOAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const accountPath = `/${user?.role?.toLowerCase() || "user"}/account`;
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const processed = useRef(false);
@@ -36,14 +39,14 @@ export default function GoogleOAuthCallbackPage() {
       .then(() => {
         setStatus("success");
         setTimeout(() => {
-          router.push("/admin/account");
+          router.push(accountPath);
         }, 2000);
       })
       .catch((err) => {
         setStatus("error");
         setErrorMsg(parseApiError(err));
       });
-  }, [searchParams, router]);
+  }, [searchParams, router, accountPath]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 dark:bg-slate-950">
@@ -70,7 +73,7 @@ export default function GoogleOAuthCallbackPage() {
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Connection Failed</h2>
             <p className="text-sm text-rose-600 dark:text-rose-400">{errorMsg}</p>
             <button
-              onClick={() => router.push("/admin/account")}
+              onClick={() => router.push(accountPath)}
               className="mt-4 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
             >
               Return to Account Settings

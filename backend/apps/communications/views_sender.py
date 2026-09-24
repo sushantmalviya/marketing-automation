@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import secrets
 import urllib.parse
 import urllib.request
 from django.conf import settings
@@ -10,21 +11,127 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.communications.models import SenderIdentity
+from apps.communications.models import DomainAuthentication, SenderIdentity
 from apps.communications.providers.sender_abstraction import (
     SMTPEmailSender,
     get_sender_provider,
 )
 from apps.communications.serializers_sender import (
+    AddDomainSerializer,
     ConnectSMTPSerializer,
+    DomainAuthenticationSerializer,
     WhatsAppEmbeddedSignupSerializer,
     ConnectSMSSerializer,
     SenderIdentitySerializer,
 )
+from apps.communications.services.dns_verifier import verify_domain_dns
 from apps.communications.services.meta_api import MetaAPIService
 from apps.integrations.utils.crypto import encrypt_token
 
 logger = logging.getLogger(__name__)
+
+
+def validate_user_domain_verified(user, email):
+    if not email or "@" not in email:
+        return None, "Invalid email address format."
+    domain = email.split("@")[-1].strip().lower()
+    domain_auth = DomainAuthentication.objects.filter(
+        user=user,
+        domain__iexact=domain,
+        status="VERIFIED"
+    ).first()
+    if not domain_auth:
+        return None, f"Domain '{domain}' is not verified. Please verify ownership of '{domain}' via DNS before connecting '{email}'."
+    return domain_auth, None
+
+
+class DomainAuthenticationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        domains = DomainAuthentication.objects.filter(user=request.user)
+        serializer = DomainAuthenticationSerializer(domains, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = AddDomainSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        domain_name = serializer.validated_data["domain"]
+
+        # Prevent hijacking domains verified by another user
+        existing_other = DomainAuthentication.objects.filter(
+            domain__iexact=domain_name, status="VERIFIED"
+        ).exclude(user=request.user).first()
+        if existing_other:
+            return Response(
+                {"detail": f"Domain '{domain_name}' is already verified by another account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check existing domain for this user
+        existing_domain = DomainAuthentication.objects.filter(
+            user=request.user, domain__iexact=domain_name
+        ).first()
+
+        if existing_domain:
+            return Response(DomainAuthenticationSerializer(existing_domain).data, status=status.HTTP_200_OK)
+
+        # Create new token
+        token_suffix = secrets.token_hex(8)
+        verification_value = f"automarket-verify={token_suffix}"
+
+        domain_auth = DomainAuthentication.objects.create(
+            user=request.user,
+            domain=domain_name,
+            verification_token=token_suffix,
+            dns_record_type="TXT",
+            dns_record_name="@",
+            dns_record_value=verification_value,
+            status="PENDING",
+        )
+        return Response(DomainAuthenticationSerializer(domain_auth).data, status=status.HTTP_201_CREATED)
+
+
+class DomainAuthenticationVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+        except DomainAuthentication.DoesNotExist:
+            return Response({"detail": "Domain authentication record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_verified, msg, found_records = verify_domain_dns(domain_auth.domain, domain_auth.verification_token)
+        if is_verified:
+            domain_auth.status = "VERIFIED"
+            domain_auth.verified_at = timezone.now()
+            domain_auth.save(update_fields=["status", "verified_at"])
+            return Response({
+                "success": True,
+                "message": msg,
+                "domain": DomainAuthenticationSerializer(domain_auth).data
+            })
+        else:
+            domain_auth.status = "FAILED"
+            domain_auth.save(update_fields=["status"])
+            return Response({
+                "success": False,
+                "detail": msg,
+                "found_records": found_records,
+                "domain": DomainAuthenticationSerializer(domain_auth).data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DomainAuthenticationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+            domain_auth.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except DomainAuthentication.DoesNotExist:
+            return Response({"detail": "Domain record not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
 class SenderIdentityListView(APIView):
@@ -85,6 +192,10 @@ class ConnectSMTPView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        domain_auth, error_msg = validate_user_domain_verified(request.user, data["email"])
+        if not domain_auth:
+            return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
         encrypted_pwd = encrypt_token(data["password"])
         credentials = {
             "host": data["host"],
@@ -97,6 +208,7 @@ class ConnectSMTPView(APIView):
         # Test first
         temp_identity = SenderIdentity(
             user=request.user,
+            domain_auth=domain_auth,
             email=data["email"],
             display_name=data.get("display_name", ""),
             provider=data["provider"],
@@ -113,6 +225,7 @@ class ConnectSMTPView(APIView):
             user=request.user,
             email=data["email"],
             defaults={
+                "domain_auth": domain_auth,
                 "display_name": data.get("display_name", ""),
                 "provider": data["provider"],
                 "connection_type": "SMTP",
@@ -198,6 +311,10 @@ class GoogleOAuthCallbackView(APIView):
         if not email:
             return Response({"detail": "Could not retrieve email address from Google."}, status=status.HTTP_400_BAD_REQUEST)
 
+        domain_auth, error_msg = validate_user_domain_verified(request.user, email)
+        if not domain_auth:
+            return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
         credentials = {}
         if refresh_token:
             credentials["refresh_token"] = encrypt_token(refresh_token)
@@ -206,6 +323,7 @@ class GoogleOAuthCallbackView(APIView):
             user=request.user,
             email=email,
             defaults={
+                "domain_auth": domain_auth,
                 "display_name": display_name,
                 "provider": "GMAIL",
                 "connection_type": "OAUTH",
@@ -289,6 +407,10 @@ class MicrosoftOAuthCallbackView(APIView):
         if not email:
             return Response({"detail": "Could not retrieve email from Microsoft account."}, status=status.HTTP_400_BAD_REQUEST)
 
+        domain_auth, error_msg = validate_user_domain_verified(request.user, email)
+        if not domain_auth:
+            return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
         credentials = {}
         if refresh_token:
             credentials["refresh_token"] = encrypt_token(refresh_token)
@@ -297,6 +419,7 @@ class MicrosoftOAuthCallbackView(APIView):
             user=request.user,
             email=email,
             defaults={
+                "domain_auth": domain_auth,
                 "display_name": display_name,
                 "provider": "MICROSOFT",
                 "connection_type": "OAUTH",

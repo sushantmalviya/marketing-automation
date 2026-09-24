@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
 import { Plus, FileText, Search } from "lucide-react";
@@ -14,6 +14,8 @@ const TEMPLATES = [
 
 export function AdminForms() {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/admin") ? "/admin/forms" : "/user/forms";
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data, isLoading, isError } = useQuery({
@@ -40,7 +42,7 @@ export function AdminForms() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
           <button 
-            onClick={() => router.push("/admin/forms/new")}
+            onClick={() => router.push(`${basePath}/new`)}
             className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-300 rounded-xl bg-blue-50/50 hover:bg-blue-50 hover:border-blue-400 transition-all text-blue-600 min-h-[160px] group"
           >
             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -52,7 +54,7 @@ export function AdminForms() {
           {TEMPLATES.map(tmpl => (
             <button 
               key={tmpl.id}
-              onClick={() => router.push(`/admin/forms/${tmpl.id}`)}
+              onClick={() => router.push(`${basePath}/${tmpl.id}`)}
               className="flex flex-col items-start p-6 border border-slate-200 rounded-xl bg-white hover:border-slate-300 hover:shadow-md transition-all min-h-[160px] text-left"
             >
               <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center mb-4 text-slate-500">
@@ -113,7 +115,7 @@ export function AdminForms() {
                 filteredForms.map((form: any) => (
                   <tr 
                     key={form.id} 
-                    onClick={() => router.push(`/admin/forms/${form.id}`)}
+                    onClick={() => router.push(`${basePath}/${form.id}`)}
                     className="group cursor-pointer hover:bg-blue-50/50 hover:shadow-[inset_4px_0_0_0_#2563eb] transition-all duration-200 ease-in-out"
                   >
                     <td className="px-6 py-4 font-medium text-slate-800 group-hover:text-blue-700 transition-colors">
