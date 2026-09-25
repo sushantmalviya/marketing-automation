@@ -13,6 +13,7 @@ from .marketing import (
     NotContainsCondition,
     NotEqualsCondition,
     OrCondition,
+    CommunicationEventCondition,
 )
 
 
@@ -51,4 +52,9 @@ CONDITION_REGISTRY = {
     "NOT":
         NotCondition(),
 
+    "ConditionSplit":
+        CommunicationEventCondition(),
+
+    "CONDITION_SPLIT":
+        CommunicationEventCondition(),
 }

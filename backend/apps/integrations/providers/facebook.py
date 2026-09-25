@@ -47,7 +47,7 @@ class FacebookProvider(BaseSocialProvider):
         # Fetch user profile
         me_resp = requests.get(self.ME_URL, params={
             "access_token": access_token,
-            "fields": "id,name,accounts{id,name,instagram_business_account}"
+            "fields": "id,name,accounts{id,name,access_token,instagram_business_account}"
         })
         me_resp.raise_for_status()
         me_data = me_resp.json()
@@ -94,11 +94,17 @@ class FacebookProvider(BaseSocialProvider):
 
     def publish_post(self, connection, content: str, image_url: str = None) -> dict:
         """Publishes to Facebook Page or Instagram Business Account."""
-        access_token = connection.get_access_token()
-        if not access_token:
-            return {"success": False, "error": "No access token available."}
+        pages = connection.metadata.get("pages", [])
+        if not pages:
+            return {"success": False, "error": "No Facebook Pages found. You must create a Facebook Page to publish."}
             
-        page_id = connection.platform_account_id
+        page = pages[0]
+        page_id = page.get("id")
+        access_token = page.get("access_token")
+        
+        if not access_token:
+            return {"success": False, "error": "Missing Page Access Token. Please re-connect your Facebook account."}
+            
         is_instagram = connection.platform == "INSTAGRAM"
         
         try:

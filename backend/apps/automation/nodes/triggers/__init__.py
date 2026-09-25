@@ -49,6 +49,12 @@ TRIGGER_REGISTRY = {
 
     "WEBHOOK_RECEIVED":
         WebhookTrigger(),
+
+    "CONTACT_ADDED":
+        GenericEventTrigger(),
+
+    "NEW_CONTACT_ADDED":
+        GenericEventTrigger(),
 }
 
 TRIGGER_REGISTRY.update({

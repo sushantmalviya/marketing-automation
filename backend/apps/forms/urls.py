@@ -7,6 +7,7 @@ from .views import (
     PublicFormView,
     SubmitFormView,
     FormResponsesView,
+    FormResponseDetailView,
 )
 
 urlpatterns = [
@@ -29,6 +30,12 @@ urlpatterns = [
     path(
         "<int:pk>/responses/",
         FormResponsesView.as_view(),
+    ),
+
+    path(
+        "responses/<int:pk>/",
+        FormResponseDetailView.as_view(),
+        name="form-response-detail",
     ),
 
     path(

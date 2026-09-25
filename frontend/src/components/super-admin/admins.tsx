@@ -59,7 +59,7 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
     mutationFn: () =>
       kind === "admins" ? accountService.createAdmin(form) : accountService.createUser(form),
     onSuccess: () => {
-      toast.success(`${kind === "admins" ? "Admin" : "User"} created successfully`);
+      toast.success("User created successfully");
       setOpen(false);
       setShowPassword(false);
       setForm(emptyForm);
@@ -82,7 +82,7 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) =>
       superAdminService.toggleAdminStatus(id, is_active),
     onSuccess: (updated) => {
-      toast.success(`Admin ${updated.is_active ? "activated" : "deactivated"} successfully`);
+      toast.success(`User ${updated.is_active ? "activated" : "deactivated"} successfully`);
       void client.invalidateQueries({ queryKey: ["sa-accounts", kind] });
     },
     onError: (e) => toast.error(parseApiError(e)),
@@ -90,7 +90,7 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
 
   const data = query.data as { count?: number; results?: Row[] } | undefined;
   const rows = data?.results ?? [];
-  const personLabel = kind === "admins" ? "Admin" : "User";
+  const personLabel = "User";
 
   function getDisplayName(row: Row) {
     return (
@@ -104,7 +104,7 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
     <div>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          {kind !== "users" && <h1 className="sa-title">MANAGE {kind.toUpperCase()}</h1>}
+          {kind !== "users" && <h1 className="sa-title">MANAGE USERS</h1>}
           <p className={kind === "users" ? "text-sm text-slate-500" : "sa-subtitle"}>
             {data?.count ?? 0} database-backed accounts
           </p>

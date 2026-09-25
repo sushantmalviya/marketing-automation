@@ -2,13 +2,18 @@ import logging
 from django.conf import settings
 from apps.communications.models import CommunicationEvent, WhatsAppConnection
 from apps.communications.providers.whatsapp import MetaWhatsAppProvider
+from apps.integrations.utils.crypto import decrypt_token
+from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
 
+
 def get_whatsapp_connection(organization=None, connection=None):
     """
-    Resolves the WhatsAppConnection for an organization or returns the explicit connection.
     """
     if connection:
         return connection
@@ -42,6 +47,46 @@ def get_whatsapp_provider(organization=None, connection=None):
     if not raw_token:
         raise ValueError("WhatsApp connection access token could not be decrypted or is empty.")
 
+def get_whatsapp_identity(user=None, identity_id=None):
+    """
+    Find active SenderIdentity for WHATSAPP_CLOUD with multi-tenant scoping."""
+def get_whatsapp_credentials(identity):
+    """
+    Safely extract decrypted access_token, phone_number_id, and waba_id from SenderIdentity.
+    """
+    if not identity:
+        raise ValueError("No active WhatsApp provider configured")
+
+    creds = identity.encrypted_credentials or {}
+    raw_token = creds.get("access_token", "")
+    
+    # Try decrypting token; fallback to raw if not encrypted
+    access_token = ""
+    if raw_token:
+        try:
+            access_token = decrypt_token(raw_token)
+        except Exception:
+            access_token = raw_token
+
+    phone_number_id = identity.phone_number_id or creds.get("phone_number_id", "")
+    waba_id = identity.waba_id or creds.get("waba_id", "")
+
+    if not access_token or not phone_number_id:
+        raise ValueError("Incomplete WhatsApp Cloud API credentials")
+
+    return {
+        "access_token": access_token,
+        "phone_number_id": phone_number_id,
+        "waba_id": waba_id,
+    }
+
+
+def get_whatsapp_provider(user=None, identity_id=None):
+    identity = get_whatsapp_identity(user=user, identity_id=identity_id)
+    if not identity:
+        raise ValueError("No active WhatsApp provider configured for this user/tenant")
+    
+    creds = get_whatsapp_credentials(identity)
     return MetaWhatsAppProvider(
         access_token=raw_token,
         phone_number_id=whatsapp_conn.phone_number_id,
@@ -102,7 +147,6 @@ def submit_whatsapp_template(template, organization=None, connection=None):
     if not organization and hasattr(template, "created_by") and template.created_by:
         organization = template.created_by
 
-    whatsapp_conn = get_whatsapp_connection(organization=organization, connection=connection)
     if not whatsapp_conn:
         raise ValueError("No active WhatsApp connection configured to submit template.")
 
@@ -117,17 +161,17 @@ def submit_whatsapp_template(template, organization=None, connection=None):
 
     version = getattr(settings, "META_GRAPH_API_VERSION", "v19.0").lstrip("/")
     url = f"https://graph.facebook.com/{version}/{waba_id}/message_templates"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
 
-    components = [
-        {
-            "type": "BODY",
-            "text": template.body,
-        }
-    ]
+def submit_whatsapp_template(template, user=None, identity_id=None):
+    import requests
+
+    identity = get_whatsapp_identity(user=user, identity_id=identity_id)
+    if not identity:
+        raise ValueError("No active WhatsApp provider configured")
+
+    creds = get_whatsapp_credentials(identity)
+    waba_id = creds.get("waba_id")
+    access_token = creds.get("access_token")
 
     payload = {
         "name": template.name.lower().replace(" ", "_").replace("-", "_")[:512],
@@ -142,6 +186,9 @@ def submit_whatsapp_template(template, organization=None, connection=None):
         raise RuntimeError(f"Failed to submit WhatsApp Template to Meta: {response.text}")
 
     data = response.json()
+    if not isinstance(template.provider_data, dict):
+        template.provider_data = {}
+
     template.provider_data["meta_template_id"] = data.get("id")
     template.provider_data["meta_status"] = data.get("status", "PENDING")
     template.save()

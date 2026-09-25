@@ -34,7 +34,7 @@ class CampaignCreateAPIView(APIView):
                 "message": "Campaign created successfully.",
                 "campaign": {
                     "id": campaign.id,
-                    "task": campaign.task.id,
+                    "task": None,
                     "name": campaign.name,
                     "description": campaign.description,
                     "status": campaign.status,
@@ -48,12 +48,12 @@ class CampaignDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, campaign_id):
-        campaign = get_object_or_404(
-            Campaign,
-            id=campaign_id,
-            created_by=request.user,
-            is_deleted=False,
+        from apps.common.ownership import filter_campaigns_for_admin
+        queryset = filter_campaigns_for_admin(
+            Campaign.objects.filter(is_deleted=False),
+            request.user,
         )
+        campaign = get_object_or_404(queryset, id=campaign_id)
         campaign.is_deleted = True
         campaign.is_active = False
         campaign.save(update_fields=["is_deleted", "is_active"])
@@ -84,7 +84,7 @@ class CampaignUpdateAPIView(APIView):
                 "message": "Campaign updated successfully.",
                 "campaign": {
                     "id": campaign.id,
-                    "task": campaign.task.id,
+                    "task": campaign.task.id if campaign.task else None,
                     "name": campaign.name,
                     "description": campaign.description,
                     "status": campaign.status,
@@ -176,10 +176,8 @@ class PendingApprovalAPIView(APIView):
         campaigns = filter_campaigns_for_admin(Campaign.objects.filter(
             status=Campaign.Status.PENDING_APPROVAL
         ), request.user).select_related(
-            "task",
             "created_by",
             "submitted_by",
-            "task__audience",
         ).prefetch_related(
             "campaign_channels__channel"
         ).order_by("submitted_at")
@@ -194,7 +192,7 @@ class MyCampaignsAPIView(generics.ListAPIView):
     serializer_class = MyCampaignListSerializer
     pagination_class = AccountsPagination
     filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ["name", "task__title"]
+    search_fields = ["name"]
     ordering_fields = ["created_at", "updated_at", "name", "status"]
     ordering = ["-created_at"]
 
@@ -204,8 +202,7 @@ class MyCampaignsAPIView(generics.ListAPIView):
             is_active=True,
             is_deleted=False
         ), user, "created_by").select_related(
-            "task",
-            "task__audience",
+            "target_audience",
             "created_by",
             "submitted_by",
             "approved_by",
@@ -263,14 +260,15 @@ class CampaignWorkspaceSummaryAPIView(APIView):
 
 
 class CampaignDetailAPIView(APIView):
-    """Return campaign info + per-channel template bodies for the detail modal."""
+    """Return campaign info + per-channel template details for preview and editing."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, campaign_id):
         campaign = get_object_or_404(
             Campaign.objects.select_related(
-                "task", "task__audience", "submitted_by", "created_by",
+                "task", "task__audience", "target_audience", "submitted_by", "created_by",
             ).prefetch_related(
+                "campaign_channels__channel",
                 "campaign_templates__channel",
                 "campaign_templates__template",
                 "audience",
@@ -288,22 +286,56 @@ class CampaignDetailAPIView(APIView):
             assigned_to = ""
 
         # Count contacts via CampaignAudience rows
-        from apps.campaigns.models import CampaignAudience
+        from apps.campaigns.models import CampaignAudience, Audience
         contacts = CampaignAudience.objects.filter(campaign=campaign).count()
 
+        # Resolve audience_id & audience_name
+        audience_id = None
+        audience_name = ""
+        if campaign.target_audience:
+            audience_id = campaign.target_audience.id
+            audience_name = campaign.target_audience.name
+        else:
+            first_ca = CampaignAudience.objects.filter(campaign=campaign).select_related("customer__upload").first()
+            if first_ca and first_ca.customer and first_ca.customer.upload:
+                aud = Audience.objects.filter(customer_upload=first_ca.customer.upload).first()
+                if aud:
+                    audience_id = aud.id
+                    audience_name = aud.name
+
+        # Map channel templates by channel_id
+        templates_by_channel = {
+            ct.channel_id: ct for ct in campaign.campaign_templates.all()
+        }
+
         channels_data = []
-        for ct in campaign.campaign_templates.all():
+        selected_channel_ids = []
+        for cc in campaign.campaign_channels.all():
+            selected_channel_ids.append(cc.channel.id)
+            ct = templates_by_channel.get(cc.channel.id)
             channels_data.append({
-                "channel": ct.channel.name,
-                "subject": ct.template.subject or "",
-                "body": ct.template.body or "",
+                "channel_id": cc.channel.id,
+                "channel_name": cc.channel.name,
+                "channel": cc.channel.name,
+                "template_id": ct.template.id if ct else None,
+                "template_name": ct.template.name if ct else "",
+                "subject": (ct.template.subject or "") if ct else "",
+                "body": (ct.template.body or "") if ct else "",
             })
 
         return Response({
             "id": campaign.id,
             "campaign_name": campaign.name,
+            "name": campaign.name,
+            "description": campaign.description or "",
+            "task_id": None,
+            "task": None,
+            "audience_id": audience_id,
+            "audience_name": audience_name,
+            "selected_channel_ids": selected_channel_ids,
             "status": campaign.status,
             "contacts": contacts,
+            "scheduled_at": str(campaign.scheduled_at) if campaign.scheduled_at else None,
             "start_date": str(campaign.scheduled_at or campaign.submitted_at or campaign.created_at),
             "assigned_to": assigned_to,
             "channels": channels_data,

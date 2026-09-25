@@ -151,8 +151,8 @@ export function AdminCampaigns() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="sa-title normal-case">Campaigns</h1>
-        <p className="sa-subtitle">Campaign workflow and approvals</p>
+        <h1 className="page-title mt-2">Campaigns</h1>
+        <p className="page-subtitle">Run marketing campaigns</p>
       </div>
 
       {/* Stat cards */}

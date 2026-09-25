@@ -119,6 +119,39 @@ class CustomerRecordListAPIView(APIView):
         return Response(CustomerRecordSerializer(customer).data, status=status.HTTP_201_CREATED)
 
 
+def _sync_delete_form_submission_for_customer(customer):
+    try:
+        data = customer.data or {}
+        sub_id = data.get("__submission_id__")
+        from apps.forms.models import FormSubmission
+        
+        if sub_id:
+            FormSubmission.objects.filter(pk=sub_id).delete()
+            return
+            
+        is_form = data.get("_source") == "form" or data.get("__source__") == "form" or (customer.upload and customer.upload.file_name == "Form Submissions")
+        if not is_form:
+            return
+            
+        email = str(data.get("Email") or data.get("email") or "").strip().lower()
+        name = str(data.get("Name") or data.get("name") or "").strip()
+        
+        if email:
+            for sub in FormSubmission.objects.all():
+                ans_str = str(sub.answers).lower()
+                if email in ans_str:
+                    if name:
+                        first_name = name.split()[0].lower()
+                        if first_name in ans_str:
+                            sub.delete()
+                            break
+                    else:
+                        sub.delete()
+                        break
+    except Exception:
+        pass
+
+
 class CustomerRecordDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -135,10 +168,12 @@ class CustomerRecordDetailAPIView(APIView):
     def delete(self, request, pk):
         customer = self.get_object(request, pk)
         upload = customer.upload
+        _sync_delete_form_submission_for_customer(customer)
         customer.delete()
-        upload.total_records = upload.records.count()
-        upload.imported_records = upload.total_records
-        upload.save(update_fields=["total_records", "imported_records"])
+        if upload:
+            upload.total_records = upload.records.count()
+            upload.imported_records = upload.total_records
+            upload.save(update_fields=["total_records", "imported_records"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -148,7 +183,8 @@ def _validated_contact(payload):
     if not name or not email:
         from rest_framework.exceptions import ValidationError
         raise ValidationError({"detail": "Name and email are required."})
-    return {
+    result = dict(payload)
+    result.update({
         "name": name,
         "email": email,
         "phone_no": str(payload.get("phone_no", payload.get("phone", ""))).strip(),
@@ -157,7 +193,8 @@ def _validated_contact(payload):
         "score": max(0, min(100, int(payload.get("score", 0) or 0))),
         "status": str(payload.get("status", "Active")),
         "activity": str(payload.get("activity", "Just added")),
-    }
+    })
+    return result
 
 class CustomerBulkDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -170,6 +207,8 @@ class CustomerBulkDeleteAPIView(APIView):
         """
         if request.data.get("all"):
             qs = filter_customer_records_for_admin(CustomerRecord.objects.all(), request.user)
+            for c in qs:
+                _sync_delete_form_submission_for_customer(c)
             count, _ = qs.delete()
             return Response({"deleted": count})
 
@@ -177,6 +216,8 @@ class CustomerBulkDeleteAPIView(APIView):
         if not isinstance(ids, list) or not ids:
             return Response({"detail": "Provide a list of ids."}, status=status.HTTP_400_BAD_REQUEST)
         qs = filter_customer_records_for_admin(CustomerRecord.objects.filter(pk__in=ids), request.user)
+        for c in qs:
+            _sync_delete_form_submission_for_customer(c)
         count, _ = qs.delete()
         return Response({"deleted": count})
 

@@ -9,6 +9,9 @@ CELERY_BEAT_SCHEDULE = {
 
         "schedule": 60,
 
+    },
+    "poll-bounces-and-replies": {
+        "task": "apps.communications.tasks.poll_inbox_task",
+        "schedule": 300, # Every 5 minutes
     }
-
 }

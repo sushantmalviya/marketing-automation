@@ -278,11 +278,8 @@ export function AdminAnalytics() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-emerald-600 flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live data
-          </p>
-          <h1 className="sa-title mt-1 normal-case">Analytics</h1>
-          <p className="sa-subtitle">Real-time performance across all channels and social platforms.</p>
+          <h1 className="page-title mt-2">Analytics</h1>
+          <p className="page-subtitle">View marketing metrics</p>
         </div>
         <div className="flex items-center gap-2">
           {picker}

@@ -9,6 +9,22 @@ from apps.communications.views import (
 
 router = DefaultRouter()
 router.register(r"whatsapp/connections", WhatsAppConnectionViewSet, basename="whatsapp-connections")
+from apps.communications.views_sender import (
+    ConnectSMTPView,
+    WhatsAppEmbeddedSignupCallbackView,
+    ConnectSMSView,
+    DomainAuthenticationDetailView,
+    DomainAuthenticationListCreateView,
+    DomainAuthenticationVerifyView,
+    GoogleOAuthCallbackView,
+    GoogleOAuthUrlView,
+    MicrosoftOAuthCallbackView,
+    MicrosoftOAuthUrlView,
+    SendTestEmailView,
+    SenderIdentityDetailView,
+    SenderIdentityListView,
+    TestSMTPConnectionView,
+)
 
 urlpatterns = [
     path("", include(router.urls)),
@@ -21,6 +37,62 @@ urlpatterns = [
         "webhooks/whatsapp/",
         WhatsAppWebhookView.as_view(),
         name="whatsapp-webhook",
+    ),
+    path(
+        "whatsapp/embedded-signup/callback/",
+        WhatsAppEmbeddedSignupCallbackView.as_view(),
+    ),
+    path(
+        "sender-domains/",
+        DomainAuthenticationListCreateView.as_view(),
+    ),
+    path(
+        "sender-domains/<uuid:pk>/",
+        DomainAuthenticationDetailView.as_view(),
+    ),
+    path(
+        "sender-domains/<uuid:pk>/verify/",
+        DomainAuthenticationVerifyView.as_view(),
+    ),
+    path(
+        "sender-identities/",
+        SenderIdentityListView.as_view(),
+    ),
+    path(
+        "sender-identities/<uuid:pk>/",
+        SenderIdentityDetailView.as_view(),
+    ),
+    path(
+        "sender-identities/test-smtp/",
+        TestSMTPConnectionView.as_view(),
+    ),
+    path(
+        "sender-identities/connect-smtp/",
+        ConnectSMTPView.as_view(),
+    ),
+    path(
+        "sender-identities/connect-sms/",
+        ConnectSMSView.as_view(),
+    ),
+    path(
+        "sender-identities/oauth/google/url/",
+        GoogleOAuthUrlView.as_view(),
+    ),
+    path(
+        "sender-identities/oauth/google/callback/",
+        GoogleOAuthCallbackView.as_view(),
+    ),
+    path(
+        "sender-identities/oauth/microsoft/url/",
+        MicrosoftOAuthUrlView.as_view(),
+    ),
+    path(
+        "sender-identities/oauth/microsoft/callback/",
+        MicrosoftOAuthCallbackView.as_view(),
+    ),
+    path(
+        "sender-identities/<uuid:pk>/test-email/",
+        SendTestEmailView.as_view(),
     ),
 ]
 

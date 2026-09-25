@@ -1,7 +1,6 @@
 from .integration import (
-    HttpRequestAction,
+    SyncToCRMAction,
     InternalAPICallAction,
-    WebhookCallAction,
 )
 from .send_email import SendBulkEmailAction, SendEmailAction
 from .send_notification import SendNotificationAction
@@ -28,6 +27,9 @@ ACTION_REGISTRY = {
     "SEND_WHATSAPP":
         SendWhatsAppAction(),
 
+    "SEND_WHATS_APP":
+        SendWhatsAppAction(),
+
     "SEND_NOTIFICATION":
         SendNotificationAction(),
 
@@ -37,11 +39,14 @@ ACTION_REGISTRY = {
     "UPDATE_USER_PROPERTY":
         UpdateUserPropertyAction(),
 
-    "WEBHOOK_CALL":
-        WebhookCallAction(),
+    "UPDATE_CONTACT":
+        UpdateUserPropertyAction(),
 
-    "HTTP_REQUEST":
-        HttpRequestAction(),
+    "SendToCRM":
+        SyncToCRMAction(),
+
+    "SEND_TO_CRM":
+        SyncToCRMAction(),
 
     "INTERNAL_API_CALL":
         InternalAPICallAction(),

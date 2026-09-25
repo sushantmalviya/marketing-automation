@@ -46,9 +46,13 @@ class AudienceService:
             operator = str(condition.get("operator", "=")).lower()
             value = condition.get("value")
 
-            # Special field: source → maps to _source in data
+            # Special field: source → maps to _source or __source__ in data
             if field in ("source", "_source", "__source__"):
-                field = "_source"
+                lookup = OPERATOR_MAP.get(operator)
+                if lookup is None:
+                    raise ValueError(f"Unsupported operator: {operator}")
+                query_part = Q(**{f"data___source{lookup}": value}) | Q(**{f"data____source__{lookup}": value})
+                return ~query_part if operator in ("!=", "is_not") else query_part
 
             if operator == "between":
                 return (

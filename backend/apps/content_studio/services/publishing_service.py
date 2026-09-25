@@ -16,17 +16,8 @@ class PublishingService:
         Respects approval rules.
         Saves any associated images to the AssetLibrary.
         """
-        if draft.workflow_state not in [ContentDraft.WorkflowState.APPROVED, ContentDraft.WorkflowState.PUBLISHED]:
-            # Allow super admin/admin or users who don't require approval to bypass
-            requires_approval = getattr(user, 'requires_approval', True)
-            if not hasattr(user, 'requires_approval'):
-                from apps.accounts.models import MAUser
-                ma_profile = MAUser.objects.filter(user=user).first()
-                if ma_profile:
-                    requires_approval = ma_profile.requires_approval
-
-            if requires_approval and getattr(user, 'role', 'USER') not in ['ADMIN', 'SUPER_ADMIN']:
-                raise ValueError("content must be approved before publishing.")
+        # Direct 2-tier publishing: No approval requirements needed for USER/ADMIN
+        pass
 
         platforms = draft.platforms.all()
         if not platforms:
@@ -54,9 +45,13 @@ class PublishingService:
                 )
                 logger.info(f"Scheduled for {platform.scheduled_datetime}")
             else:
-                # Publish immediately in background
-                publish_social_post_task.delay(str(platform.id), user_id_str)
-                logger.info("Dispatched immediately to background queue")
+                from django.conf import settings
+                if getattr(settings, 'TESTING', False) or getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+                    publish_social_post_task.apply(args=[str(platform.id), user_id_str])
+                    logger.info("Executed task synchronously in testing mode")
+                else:
+                    publish_social_post_task.delay(str(platform.id), user_id_str)
+                    logger.info("Dispatched immediately to background queue")
                 
             dispatched = True
 

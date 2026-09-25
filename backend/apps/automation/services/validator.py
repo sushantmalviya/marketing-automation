@@ -1,6 +1,9 @@
 from apps.automation.models import (
     Automation,
 )
+from apps.automation.services.parser import (
+    WorkflowParser,
+)
 
 
 class WorkflowValidationError(Exception):
@@ -15,19 +18,16 @@ class WorkflowValidator:
     def __init__(self, automation: Automation):
 
         self.automation = automation
+        parser = WorkflowParser(automation)
+        self.parsed = parser.parse()
 
-        self.nodes = list(
-            automation.nodes.all()
+        self.nodes = self.parsed["nodes"]
+        self.raw_edges = (
+            automation.workflow_graph.get("edges", [])
+            if automation.workflow_graph and isinstance(automation.workflow_graph, dict)
+            else []
         )
-
-        self.edges = list(
-            automation.edges.all()
-        )
-
-        self.node_ids = {
-            node.id
-            for node in self.nodes
-        }
+        self.node_ids = set(self.nodes.keys())
 
     # =====================================================
     # PUBLIC
@@ -39,9 +39,7 @@ class WorkflowValidator:
 
         self.validate_not_empty()
 
-        self.validate_has_single_trigger()
-
-        self.validate_has_end()
+        self.validate_has_trigger()
 
         self.validate_edge_integrity()
 
@@ -64,7 +62,7 @@ class WorkflowValidator:
 
     def validate_not_empty(self):
 
-        if len(self.nodes) == 0:
+        if not self.nodes:
             raise WorkflowValidationError(
                 "Workflow contains no nodes."
             )
@@ -73,48 +71,17 @@ class WorkflowValidator:
     # TRIGGER
     # =====================================================
 
-    def validate_has_single_trigger(self):
+    def validate_has_trigger(self):
 
         triggers = [
-
             node
-
-            for node in self.nodes
-
-            if node.node_type == "TRIGGER"
+            for node in self.nodes.values()
+            if node.get("type") == "TRIGGER"
         ]
 
         if len(triggers) == 0:
-
             raise WorkflowValidationError(
-                "Workflow must contain a trigger."
-            )
-
-        if len(triggers) > 1:
-
-            raise WorkflowValidationError(
-                "Workflow can contain only one trigger."
-            )
-
-    # =====================================================
-    # END NODE
-    # =====================================================
-
-    def validate_has_end(self):
-
-        ends = [
-
-            node
-
-            for node in self.nodes
-
-            if node.action_name.upper() == "END"
-        ]
-
-        if len(ends) == 0:
-
-            raise WorkflowValidationError(
-                "Workflow must contain an END node."
+                "Workflow must contain at least one trigger."
             )
 
     # =====================================================
@@ -123,20 +90,18 @@ class WorkflowValidator:
 
     def validate_edge_integrity(self):
 
-        for edge in self.edges:
+        for edge in self.raw_edges:
+            source = edge.get("source")
+            target = edge.get("target")
 
-            if edge.source_node_id not in self.node_ids:
-
+            if not source or source not in self.node_ids:
                 raise WorkflowValidationError(
-                    f"Invalid source node: "
-                    f"{edge.source_node_id}"
+                    f"Invalid source node: {source}"
                 )
 
-            if edge.target_node_id not in self.node_ids:
-
+            if not target or target not in self.node_ids:
                 raise WorkflowValidationError(
-                    f"Invalid target node: "
-                    f"{edge.target_node_id}"
+                    f"Invalid target node: {target}"
                 )
 
     # =====================================================
@@ -147,50 +112,39 @@ class WorkflowValidator:
 
         graph = {}
 
-        for edge in self.edges:
+        for edge in self.raw_edges:
+            source = edge.get("source")
+            target = edge.get("target")
+            if source and target:
+                graph.setdefault(source, []).append(target)
 
-            graph.setdefault(
-                edge.source_node_id,
-                []
-            ).append(
-                edge.target_node_id
-            )
+        triggers = [
+            node for node in self.nodes.values() if node.get("type") == "TRIGGER"
+        ]
 
-        trigger = next(
-            node
-            for node in self.nodes
-            if node.node_type == "TRIGGER"
-        )
+        if not triggers:
+            return
 
         visited = set()
 
         def dfs(node_id):
-
             if node_id in visited:
                 return
-
             visited.add(node_id)
-
             for nxt in graph.get(node_id, []):
-
                 dfs(nxt)
 
-        dfs(trigger.id)
+        for trigger in triggers:
+            dfs(trigger["id"])
 
         if len(visited) != len(self.nodes):
-
             disconnected = [
-
-                str(node.id)
-
-                for node in self.nodes
-
-                if node.id not in visited
+                str(node_id)
+                for node_id in self.nodes
+                if node_id not in visited
             ]
-
             raise WorkflowValidationError(
-                "Disconnected nodes found: "
-                + ", ".join(disconnected)
+                "Disconnected nodes found: " + ", ".join(disconnected)
             )
 
     # =====================================================
@@ -201,47 +155,37 @@ class WorkflowValidator:
 
         graph = {}
 
-        for edge in self.edges:
-
-            graph.setdefault(
-                edge.source_node_id,
-                []
-            ).append(
-                edge.target_node_id
-            )
+        for edge in self.raw_edges:
+            source = edge.get("source")
+            target = edge.get("target")
+            if source and target:
+                graph.setdefault(source, []).append(target)
 
         visited = set()
-
         stack = set()
 
-        def dfs(node):
-
-            if node in stack:
+        def dfs(node_id):
+            if node_id in stack:
                 return True
-
-            if node in visited:
+            if node_id in visited:
                 return False
 
-            visited.add(node)
+            visited.add(node_id)
+            stack.add(node_id)
 
-            stack.add(node)
-
-            for nxt in graph.get(node, []):
-
+            for nxt in graph.get(node_id, []):
                 if dfs(nxt):
                     return True
 
-            stack.remove(node)
-
+            stack.remove(node_id)
             return False
 
-        for node in graph:
-
-            if dfs(node):
-
-                raise WorkflowValidationError(
-                    "Circular dependency detected."
-                )
+        for node_id in self.node_ids:
+            if node_id not in visited:
+                if dfs(node_id):
+                    raise WorkflowValidationError(
+                        "Circular dependency detected."
+                    )
 
 
 # =========================================================

@@ -23,18 +23,52 @@ function val(data: Record<string, unknown>, keys: string[], fallback = "") {
   for (const k of keys) { const v = data[k]; if (v !== undefined && v !== null && String(v).trim()) return String(v); }
   return fallback;
 }
+
+function getFieldValue(data: Record<string, unknown>, col: string): string {
+  if (!data) return "";
+  // 1. Exact match
+  if (data[col] !== undefined && data[col] !== null && String(data[col]).trim() !== "") {
+    return String(data[col]);
+  }
+
+  const colLower = col.toLowerCase().trim();
+
+  // 2. Case-insensitive match
+  for (const key of Object.keys(data)) {
+    if (key.toLowerCase().trim() === colLower) {
+      const v = data[key];
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        return String(v);
+      }
+    }
+  }
+
+  // 3. Known aliases for standard contact columns
+  if (["name", "full_name", "full name"].includes(colLower)) {
+    return val(data, ["name", "Name", "full_name", "Full Name", "first_name"], "");
+  }
+  if (["email", "email_address", "email address"].includes(colLower)) {
+    return val(data, ["email", "Email", "email_address", "Email Address"], "");
+  }
+  if (["phone_no", "phone no", "phone", "number", "mobile", "mobile_no"].includes(colLower)) {
+    return val(data, ["phone_no", "Phone No", "phone", "Phone", "number", "Number", "mobile", "mobile_no"], "");
+  }
+
+  return "";
+}
+
 function normalize(row: RecordRow): Contact {
   const rawTags = row.data.tags;
-  const src = row.data.__source__;
+  const src = (row.data.__source__ || row.data._source) as string | undefined;
   return {
     name:     val(row.data, ["name","full_name","Name","Full Name"], "Unnamed contact"),
     email:    val(row.data, ["email","Email","email_address"]),
-    phone_no: val(row.data, ["phone_no","phone","Phone","mobile_no","mobile","Phone No"]),
+    phone_no: val(row.data, ["phone_no","phone","Phone","mobile_no","mobile","Phone No","Number","number"]),
     tags:     Array.isArray(rawTags) ? rawTags.map(String) : val(row.data, ["tags","Tags"]).split(",").map(t => t.trim()).filter(Boolean),
     list:     val(row.data, ["list","List","segment"], "General"),
     score:    Number(val(row.data, ["score","Score"], "0")) || 0,
     status:   val(row.data, ["status","Status"], "Active"),
-    activity: src === "created" ? "Created" : src === "imported" ? "Imported" : val(row.data, ["activity","Activity"], "Imported contact"),
+    activity: src === "created" ? "Created" : src === "imported" ? "Imported" : src === "form" ? "Form Submission" : src === "meta" || src === "meta_sync" ? "Meta Lead" : val(row.data, ["activity","Activity"], "Imported contact"),
   };
 }
 
@@ -85,18 +119,22 @@ export function AdminContacts() {
     if (!rows.length) return [];
     // Use __col_order__ from first row that has it
     const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
+    let cols: string[] = [];
     if (orderRow) {
-      return (orderRow.data.__col_order__ as string[]).filter(k => k !== "__col_order__");
-    }
-    // Fallback: union of all keys preserving first-seen order
-    const seen = new Set<string>();
-    const cols: string[] = [];
-    for (const row of rows) {
-      for (const key of Object.keys(row.data)) {
-        if (key !== "__col_order__" && !seen.has(key)) { seen.add(key); cols.push(key); }
+      cols = (orderRow.data.__col_order__ as string[]);
+    } else {
+      // Fallback: union of all keys preserving first-seen order
+      const seen = new Set<string>();
+      for (const row of rows) {
+        for (const key of Object.keys(row.data)) {
+          if (!seen.has(key)) { seen.add(key); cols.push(key); }
+        }
       }
     }
-    return cols;
+    return cols.filter(col => {
+      const k = col.toLowerCase().trim();
+      return k !== "__col_order__" && k !== "tags" && !k.startsWith("_") && !k.startsWith("__");
+    });
   }, [rows]);
 
   const contacts = useMemo(() => {
@@ -129,12 +167,13 @@ export function AdminContacts() {
   // ── mutations ─────────────────────────────────────────────────────────────────
   const save = useMutation({
     mutationFn: async () => {
+      const originalRow = editing ? rows.find(r => r.id === editing) : null;
+      const payload = originalRow ? { ...originalRow.data, ...form } : form;
       if (editing) {
-        const res = await apiClient.patch(`/api/customers/${editing}/`, form);
-        return res.data;
+        return apiClient.patch(`/api/customers/${editing}/`, payload as any);
+      } else {
+        return apiClient.post("/api/customers/", { ...payload, audience_id: selectedAudience || undefined } as any);
       }
-      const res = await apiClient.post("/api/customers/", { ...form, audience_id: selectedAudience || undefined });
-      return res.data;
     },
     onSuccess: () => {
       toast.success(editing ? "Contact updated" : "Contact added");
@@ -221,9 +260,8 @@ export function AdminContacts() {
       {/* ── Header ── */}
       <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-[.24em] text-blue-600">Audience workspace</p>
-          <h1 className="sa-title mt-4">CONTACTS</h1>
-          <p className="sa-subtitle">{rows.length} contacts{someSelected ? ` · ${selected.size} selected` : ""}</p>
+          <h1 className="page-title mt-2">Contacts</h1>
+          <p className="page-subtitle">Manage your contacts{someSelected ? ` · ${selected.size} selected` : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <input ref={fileRef} className="hidden" type="file" accept=".csv,.xlsx,.xls" onChange={e => void importFile(e.target.files?.[0])} />
@@ -353,24 +391,20 @@ export function AdminContacts() {
                         className="h-4 w-4 cursor-pointer accent-blue-600"
                       />
                     </td>
-                    {dynamicColumns.filter(col => col !== "__col_order__").map(col => {
-                      const raw = row.data[col];
-                      const isTags = col.toLowerCase() === "tags";
-                      const tags = isTags
-                        ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
-                        : [];
+                    {dynamicColumns.map(col => {
+                      const raw = getFieldValue(row.data, col);
+                      const isName = ["name", "full_name", "full name"].includes(col.toLowerCase());
                       return (
                         <td key={col} className="px-4 py-3.5 max-w-[220px]">
-                          {isTags ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {tags.length
-                                ? tags.map(tag => <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700" key={tag}>{tag}</span>)
-                                : <span className="text-slate-400">—</span>}
+                          <span className="block truncate text-slate-700" title={raw}>
+                            {raw ? raw : "—"}
+                          </span>
+                          {isName && contact.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {contact.tags.map(tag => (
+                                <span className="rounded bg-blue-50/80 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-100/50" key={tag}>{tag}</span>
+                              ))}
                             </div>
-                          ) : (
-                            <span className="block truncate text-slate-700" title={String(raw ?? "")}>
-                              {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
-                            </span>
                           )}
                         </td>
                       );

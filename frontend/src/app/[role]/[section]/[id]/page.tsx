@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { FormEditor } from "@/components/admin/forms/editor";
 import { AutomationBuilder } from "@/components/admin/automations/builder";
-// import { CampaignEditor } from "@/components/admin/campaigns/editor"; // To be created
-// import { ContentEditor } from "@/components/user/workspace/content-editor"; // To be created
+import dynamic from "next/dynamic";
+
+const UserContentStudio = dynamic(() => import("@/components/user/workspace").then(m => m.UserContentStudio));
 
 export default async function FeatureEditorPage({ 
   params 
@@ -11,17 +12,18 @@ export default async function FeatureEditorPage({
 }) { 
   const { role, section, id } = await params;
 
-  if (role === "admin" && section === "forms") {
-    // In the future, pass a server action or API call to fetch initial data if needed
-    // For now, the FormEditor handles it client-side or we pass the ID
+  if ((role === "admin" || role === "user") && section === "forms") {
     return <FormEditor formId={id} />;
   }
 
-  if (role === "admin" && section === "automations") {
+  if ((role === "admin" || role === "user") && section === "automations") {
     return <AutomationBuilder automationId={id} />;
   }
 
-  // TODO: Add campaigns and content studio routing here as we refactor them
+  if ((role === "admin" || role === "user") && (section === "channels" || section === "content")) {
+    return <UserContentStudio draftId={id} />;
+  }
 
   notFound();
 }
+

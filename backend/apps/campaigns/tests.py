@@ -6,7 +6,6 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import MAUser, User
-from apps.tasks.models import Task
 from apps.campaigns.models import Audience, Campaign, CustomerRecord, CustomerUpload
 
 
@@ -30,18 +29,12 @@ class AdminCampaignWorkspaceTests(APITestCase):
         )
         CustomerRecord.objects.create(upload=self.upload, data={"email": "one@example.com"})
         CustomerRecord.objects.create(upload=self.upload, data={"email": "two@example.com"})
-        self.task = Task.objects.create(
-            title="Admin campaign task",
-            audience=self.audience,
-            due_date=timezone.now() + timedelta(days=3),
-            created_by=self.admin,
-        )
         self.client.force_authenticate(self.admin)
 
     def test_admin_can_create_and_list_owned_campaign(self):
         response = self.client.post(
             reverse("campaign-create"),
-            {"task": self.task.id, "name": "Admin launch", "description": "Test"},
+            {"audience": self.audience.id, "name": "Admin launch", "description": "Test"},
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)

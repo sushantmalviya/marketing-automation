@@ -126,7 +126,10 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
         platform_record.error_message = str(e)
         platform_record.save(update_fields=['status', 'error_message'])
         
-        # Optionally retry
+        # Optionally retry (skip when running unit tests)
+        from django.conf import settings
+        if getattr(settings, 'TESTING', False):
+            return
         raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries)) # Exponential backoff
         
     finally:

@@ -63,7 +63,14 @@ class MetaAdsService:
             Dict containing 'auth_url' and 'csrf_state'.
         """
         app_id = getattr(settings, 'META_APP_ID', '123456789012345')
-        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:8000/api/v1/integrations/meta/callback/')
+        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:3000/admin/ads')
+        
+        if getattr(settings, 'META_MOCK_MODE', False):
+            return {
+                "auth_url": f"{redirect_uri}?code=mock_code_123&state=abc123xyz",
+                "csrf_state": "abc123xyz",
+            }
+            
         return {
             "auth_url": (
                 f"https://www.facebook.com/{MetaAdsService.GRAPH_API_VERSION}/dialog/oauth?"
@@ -79,7 +86,10 @@ class MetaAdsService:
     def exchange_code_for_token(code: str) -> str:
         app_id = getattr(settings, 'META_APP_ID', '123456789012345')
         app_secret = getattr(settings, 'META_APP_SECRET', 'secret')
-        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:8000/api/v1/integrations/meta/callback/')
+        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:3000/admin/ads')
+        
+        if getattr(settings, 'META_MOCK_MODE', False) or code.startswith("mock_"):
+            return "mock_access_token_" + code
         
         response = requests.get(
             f"{MetaAdsService.BASE_URL}/oauth/access_token",
@@ -236,7 +246,7 @@ class MetaAdsService:
         """
         if not account_id.startswith('act_'):
             account_id = f"act_{account_id}"
-        if access_token and access_token.startswith("mock_"):
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
             return {
                 "status": "success", 
                 "campaign_id": "mock_camp_12345", 
@@ -542,7 +552,7 @@ class MetaAdsService:
         if not account_id.startswith('act_'):
             account_id = f"act_{account_id}"
             
-        if access_token and access_token.startswith("mock_"):
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
             return {
                 "image_hash" if media_type == 'image' else "video_id": f"mock_media_hash_{int(time.time())}"
             }

@@ -83,10 +83,10 @@ export function AutomationSidebar() {
             </div>
             <div 
               className="flex items-center gap-3 p-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg cursor-grab hover:bg-amber-100 transition text-sm font-semibold"
-              onDragStart={(event) => onDragStart(event, "utilityNode", "Webhook", "Send Webhook")}
+              onDragStart={(event) => onDragStart(event, "utilityNode", "SendToCRM", "Send to CRM")}
               draggable
             >
-              <Globe size={16} /> Webhook
+              <Globe size={16} /> Send to CRM
             </div>
           </div>
         </div>
@@ -97,7 +97,7 @@ export function AutomationSidebar() {
           <div className="space-y-2">
             <div 
               className="flex items-center gap-3 p-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg cursor-grab hover:bg-blue-100 transition text-sm font-semibold"
-              onDragStart={(event) => onDragStart(event, "conditionNode", "EmailOpened", "Email Opened?")}
+              onDragStart={(event) => onDragStart(event, "conditionNode", "ConditionSplit", "Condition Split")}
               draggable
             >
               <PlayCircle size={16} /> Condition Split

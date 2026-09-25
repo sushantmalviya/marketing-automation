@@ -8,9 +8,9 @@ from apps.accounts.models import MAUser
 def visible_events(user, date_from=None, date_to=None):
     role = MAUser.objects.filter(user=user).values_list("role", flat=True).first()
     events = CommunicationEvent.objects.all()
-    if user.is_superuser or role == "SUPER_ADMIN":
+    if user.is_superuser or role == "ADMIN":
         pass
-    elif role == "ADMIN" and user.department_id:
+    elif role == "USER" and user.department_id:
         events = events.filter(
             Q(campaign__created_by__department_id=user.department_id)
             | Q(execution__automation__owner__department_id=user.department_id)
@@ -31,9 +31,9 @@ def visible_events(user, date_from=None, date_to=None):
 def visible_executions(user, date_from=None, date_to=None):
     role = MAUser.objects.filter(user=user).values_list("role", flat=True).first()
     executions = AutomationExecution.objects.all()
-    if user.is_superuser or role == "SUPER_ADMIN":
+    if user.is_superuser or role == "ADMIN":
         pass
-    elif role == "ADMIN" and user.department_id:
+    elif role == "USER" and user.department_id:
         executions = executions.filter(automation__owner__department_id=user.department_id)
     else:
         executions = executions.filter(automation__owner=user)

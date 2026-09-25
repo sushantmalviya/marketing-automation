@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, CheckCircle2, Facebook, Funnel, Megaphone, Plus, RefreshCw, Search, Trash2, X, FolderOpen, Info, Pencil, AlertTriangle, Copy, Check } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -24,6 +24,7 @@ const benefits = [
 ];
 
 export function MetaAdsDashboard() {
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const code = searchParams.get("code") ?? undefined;
 
@@ -119,11 +120,25 @@ export function MetaAdsDashboard() {
     toast.success(`${account.name} is now the active ad account`);
   };
 
+  const disconnectMutation = useMutation({
+    mutationFn: () => metaAdsService.disconnectAccount(),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["meta-ad-accounts"] });
+      queryClient.removeQueries({ queryKey: ["meta-campaigns"] });
+      setActiveAccount(null);
+      setIsDisconnected(true);
+      setDisconnectOpen(false);
+      localStorage.removeItem("metaActiveAccountId");
+      sessionStorage.removeItem("metaActiveAccountId");
+      toast.success("Meta ad account disconnected");
+    },
+    onError: (error) => {
+      toast.error(parseApiError(error));
+    }
+  });
+
   const disconnect = () => {
-    setActiveAccount(null);
-    setIsDisconnected(true);
-    setDisconnectOpen(false);
-    toast.success("Meta ad account disconnected");
+    disconnectMutation.mutate();
   };
 
   if (connected) {
@@ -166,7 +181,7 @@ export function MetaAdsDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-8">
+    <div className="w-full max-w-full pb-8">
       <nav aria-label="Breadcrumb" className="mb-9 flex items-center gap-2 text-sm text-slate-500">
         <span>Settings</span>
         <span className="text-slate-300">/</span>
@@ -631,15 +646,18 @@ function AdsPerformanceDashboard({
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-7xl pb-8">
+    <div className="w-full max-w-full pb-8">
       {/* Header section */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-black text-slate-950">
-          {currentView === 'dashboard' && 'Insights'}
-          {currentView === 'campaigns' && 'Campaign List'}
-          {currentView === 'leads' && 'Lead Sync Manager'}
-          {currentView === 'pixel' && 'Meta Pixel & Events'}
-        </h1>
+        <div>
+          <h1 className="page-title mt-2">
+            {currentView === 'dashboard' && 'Insights'}
+            {currentView === 'campaigns' && 'Campaign List'}
+            {currentView === 'leads' && 'Lead Sync Manager'}
+            {currentView === 'pixel' && 'Meta Pixel & Events'}
+          </h1>
+          <p className="page-subtitle">Manage your ads</p>
+        </div>
         <div className="flex items-center gap-2">
           {/* Working Calendar Dropdown */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -1236,7 +1254,7 @@ function LeadSyncTab() {
             <div>
               <span className="block text-slate-500 font-semibold mb-1">Webhook URL</span>
               <code className="block rounded bg-slate-50 border border-slate-100 p-2 text-slate-700 font-mono text-[10px] select-all">
-                http://localhost:8000/api/ads/meta/webhook/
+                http://localhost:8000/api/meta-ads/meta/webhook/
               </code>
             </div>
             <div className="grid grid-cols-2 gap-4">

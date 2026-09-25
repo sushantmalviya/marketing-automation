@@ -29,7 +29,7 @@ class LoginView(generics.GenericAPIView):
         ma_user = MAUser.objects.filter(user_id=user).first()
         refresh = RefreshToken.for_user(user)
 
-        role = ma_user.role if ma_user else ("SUPER_ADMIN" if user.is_superuser else "USER")
+        role = ma_user.role if ma_user else ("ADMIN" if user.is_superuser else "USER")
 
         return Response(
             {
@@ -319,9 +319,9 @@ class ListUsersView(generics.ListAPIView):
 class BrandIdentityView(APIView):
     """
     GET  /api/accounts/brand-identity/  — fetch current brand identity settings
-    PUT  /api/accounts/brand-identity/  — update brand identity settings (Admin/Super Admin only)
+    PUT  /api/accounts/brand-identity/  — update brand identity settings
     """
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from apps.content_studio.models import BrandVoice

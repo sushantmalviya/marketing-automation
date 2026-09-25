@@ -78,7 +78,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         ma_user = obj.ma_users.first()
-        return ma_user.role if ma_user else ("SUPER_ADMIN" if obj.is_superuser else "USER")
+        return ma_user.role if ma_user else ("ADMIN" if obj.is_superuser else "USER")
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -220,11 +220,12 @@ class CreateSuperAdminSerializer(serializers.Serializer):
 
         MAUser.objects.create(
             user=user,
-            role="SUPER_ADMIN",
+            role="ADMIN",
         )
 
         return user
     
+
 
 class CreateAdminSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
@@ -263,7 +264,7 @@ class CreateAdminSerializer(serializers.ModelSerializer):
 
         MAUser.objects.create(
             user=user,
-            role="ADMIN",
+            role="USER",
         )
 
         return user
@@ -305,16 +306,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
             **validated_data,
         )
 
-        admin_profile = None
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            from apps.common.ownership import get_admin_profile
-            admin_profile = get_admin_profile(request.user)
-
         MAUser.objects.create(
             user=user,
             role="USER",   
-            managed_by=admin_profile,
         )
 
         return user

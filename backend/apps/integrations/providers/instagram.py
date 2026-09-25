@@ -121,6 +121,13 @@ class InstagramProvider(BaseSocialProvider):
             if not image_url:
                 return {"success": False, "error": "Instagram requires a media URL to post."}
 
+            if image_url and not any(image_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.mp4', '.mov']):
+                image_url = f"{image_url}.jpg"
+                
+            if image_url and 'res.cloudinary.com' in image_url and '/upload/' in image_url:
+                # Force 1:1 aspect ratio with padding to avoid Instagram aspect ratio errors
+                image_url = image_url.replace('/upload/', '/upload/c_pad,w_1080,h_1080,b_auto/')
+
             is_video = image_url.lower().endswith(('.mp4', '.mov'))
             media_type = 'REELS' if is_video else 'IMAGE'
 
@@ -140,16 +147,15 @@ class InstagramProvider(BaseSocialProvider):
             container_resp.raise_for_status()
             creation_id = container_resp.json().get("id")
             
-            if media_type == 'REELS':
-                import time
-                max_retries = 20
-                for _ in range(max_retries):
-                    status = self.check_media_status(creation_id, access_token)
-                    if status == "FINISHED":
-                        break
-                    elif status == "ERROR":
-                        return {"success": False, "error": "Instagram video processing failed."}
-                    time.sleep(3)
+            import time
+            max_retries = 20
+            for _ in range(max_retries):
+                status = self.check_media_status(creation_id, access_token)
+                if status == "FINISHED":
+                    break
+                elif status == "ERROR":
+                    return {"success": False, "error": "Instagram media processing failed."}
+                time.sleep(3)
             
             # 2. Publish Container
             publish_url = f"{self.GRAPH_URL}/{ig_user_id}/media_publish"

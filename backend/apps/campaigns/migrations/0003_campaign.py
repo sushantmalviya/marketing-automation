@@ -9,7 +9,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("campaigns", "0002_customerupload_failed_records_and_more"),
-        ("tasks", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -60,9 +59,11 @@ class Migration(migrations.Migration):
                 (
                     "task",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="campaigns",
-                        to="tasks.task",
+                        null=True,
+                        blank=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="legacy_tasks",
+                        to=settings.AUTH_USER_MODEL,
                     ),
                 ),
             ],

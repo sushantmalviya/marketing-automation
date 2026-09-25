@@ -5,6 +5,7 @@ class SystemEvent(models.Model):
     class EventType(models.TextChoices):
         WEBSITE = "WEBSITE", "Website"
         WEBHOOK = "WEBHOOK", "Webhook"
+        COMMUNICATION = "COMMUNICATION", "Communication"
         SYSTEM = "SYSTEM", "System"
 
     SUPPORTED_EVENTS = [
@@ -15,6 +16,24 @@ class SystemEvent(models.Model):
         ("CART_ABANDONED", "Cart Abandoned"),
         ("CHECKOUT_STARTED", "Checkout Started"),
         ("CHECKOUT_COMPLETED", "Checkout Completed"),
+        
+        # Communication Events
+        ("EMAIL_DELIVERED", "Email Delivered"),
+        ("EMAIL_OPENED", "Email Opened"),
+        ("EMAIL_CLICKED", "Email Clicked"),
+        ("EMAIL_REPLIED", "Email Replied"),
+        ("EMAIL_BOUNCED", "Email Bounced"),
+        
+        ("SMS_DELIVERED", "SMS Delivered"),
+        ("SMS_CLICKED", "SMS Clicked"),
+        ("SMS_REPLIED", "SMS Replied"),
+        ("SMS_FAILED", "SMS Failed"),
+        
+        ("WHATSAPP_SENT", "WhatsApp Sent"),
+        ("WHATSAPP_DELIVERED", "WhatsApp Delivered"),
+        ("WHATSAPP_READ", "WhatsApp Read"),
+        ("WHATSAPP_REPLIED", "WhatsApp Replied"),
+        ("WHATSAPP_CLICKED", "WhatsApp Clicked"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

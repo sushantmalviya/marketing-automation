@@ -104,7 +104,7 @@ export function AdminSocialPublisher() {
 
   const calendar = useMemo(() => buildCalendar(month, activeDrafts, active), [month, activeDrafts, active]);
   if (draftsQuery.isError) return <div className="sa-card p-10 text-red-600">{parseApiError(draftsQuery.error)}</div>;
-  return <div><div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><h1 className="sa-title normal-case">Social Publisher</h1><p className="sa-subtitle">Manage and publish content across all your social media channels.</p></div><div className="flex gap-3">
+  return <div><div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><h1 className="page-title mt-2">Social Publisher</h1><p className="page-subtitle">Manage social posts</p></div><div className="flex gap-3">
     {/* Date range picker */}
     <div className="relative" ref={rangeRef}>
       <button className="secondary-button flex min-h-12 items-center gap-2 px-5" onClick={() => setRangeOpen((v) => !v)}>

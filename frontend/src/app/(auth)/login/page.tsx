@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, Mail, MessageCircle, MessageSquareText, Settings2, Zap } from "lucide-react";
+import { BarChart3, Mail, MessageCircle, MessageSquareText, Settings2 } from "lucide-react";
 import { LoginForm } from "@/components/auth/login-form";
+import { useAuth } from "@/providers/auth-provider";
+import { getDashboardPath } from "@/permissions/permission-matrix";
 
 /* Particle positions: [left%, top%, scale] */
 const particles = [
@@ -32,6 +36,30 @@ const NODES = [
 ] as const;
 
 export default function LoginPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace(getDashboardPath(user.role));
+    }
+  }, [loading, user, router]);
+
+  if (loading || user) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-50 dark:bg-[#050d1f] text-slate-500">
+        <div className="flex items-center gap-3 text-sm">
+          <motion.span
+            className="h-2.5 w-2.5 rounded-full bg-blue-500"
+            animate={{ opacity: [1, 0.3, 1] }}
+            transition={{ duration: 1.2, repeat: Infinity }}
+          />
+          Verifying session…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="login-scene">
 
@@ -74,10 +102,12 @@ export default function LoginPage() {
         <section className="login-story">
 
           {/* Brand */}
-          <motion.div className="login-brand"
+          <motion.div className="login-brand flex items-center gap-3"
             initial={{opacity:0,x:-18}} animate={{opacity:1,x:0}} transition={{duration:.6}}>
-            <span><Zap size={22}/></span>
-            <strong>Auto-market</strong>
+            <div className="h-24 w-24 flex items-center justify-center drop-shadow-md">
+              <img src="/logo.png" alt="Logo" className="h-full w-full object-contain" />
+            </div>
+            <strong className="text-[32px]">MARKETING-AUTOMATION</strong>
           </motion.div>
 
           {/* Heading — own flex item, cannot overlap canvas */}

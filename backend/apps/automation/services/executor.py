@@ -57,39 +57,38 @@ class WorkflowExecutor:
     ):
 
         node_type = node.get("type")
-        action_name = node.get("action_name")
+        raw_action = str(node.get("action_name") or "")
+        action_name = raw_action.upper()
 
         if node_type == "TRIGGER":
-
-            handler = (
-                TRIGGER_REGISTRY[
-                action_name
-                ]
-            )
+            from apps.automation.nodes.triggers.generic import GenericEventTrigger
+            handler = TRIGGER_REGISTRY.get(action_name) or TRIGGER_REGISTRY.get(raw_action) or GenericEventTrigger()
 
         elif node_type == "CONDITION":
-
-            handler = (
-                CONDITION_REGISTRY[
-                    action_name
-                ]
-            )
+            from apps.automation.nodes.conditions.equals import EqualsCondition
+            handler = CONDITION_REGISTRY.get(action_name) or CONDITION_REGISTRY.get(raw_action) or EqualsCondition()
 
         elif node_type == "ACTION":
-
-            handler = (
-                ACTION_REGISTRY[
-                    action_name
-                ]
-            )
+            handler = ACTION_REGISTRY.get(action_name) or ACTION_REGISTRY.get(raw_action)
+            if not handler:
+                if "EMAIL" in action_name:
+                    handler = SendEmailAction()
+                elif "SMS" in action_name:
+                    handler = SendSMSAction()
+                elif "WHATSAPP" in action_name:
+                    handler = SendWhatsAppAction()
+                elif "CRM" in action_name:
+                    handler = SyncToCRMAction()
+                else:
+                    handler = UpdateUserPropertyAction()
 
         else:
-
-            handler = (
-                UTILITY_REGISTRY[
-                    action_name
-                ]
-            )
+            handler = UTILITY_REGISTRY.get(action_name) or UTILITY_REGISTRY.get(raw_action)
+            if not handler:
+                if "CRM" in action_name:
+                    handler = SyncToCRMAction()
+                else:
+                    handler = WaitNode()
 
         return handler.execute(
             self.execution,
@@ -127,12 +126,10 @@ class WorkflowExecutor:
             )
 
             for edge in edges:
+                edge_t = str(edge.get("type") or "").upper()
+                sh = str(edge.get("source_handle") or "").lower()
 
-                if (
-                    edge["type"]
-                    == label
-                ):
-
+                if edge_t == label or (result and sh in ("true", "yes", "success")) or (not result and sh in ("false", "no", "failed")):
                     return self.nodes[
                         edge["target"]
                     ]
