@@ -45,11 +45,21 @@ class Dispatcher:
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 
-                send_whatsapp(
+                result = send_whatsapp(
                     to=recipient,
                     message=delivery.rendered_message,
                     campaign=delivery.campaign,
+                    organization=getattr(delivery.campaign, "created_by", None),
                 )
+                if isinstance(result, str):
+                    provider_msg_id = result
+                else:
+                    provider_msg_id = ""
+                
+                return {
+                    "success": True,
+                    "provider_message_id": provider_msg_id,
+                }
             
             else:
                 raise ValueError(f"No dispatcher configured for channel {channel_code}")
@@ -58,6 +68,7 @@ class Dispatcher:
                 "success": True,
                 "provider_message_id": "",
             }
+
 
         except Exception as exc:
             logger.exception(

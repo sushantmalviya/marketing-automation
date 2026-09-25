@@ -95,6 +95,10 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False),
         ),
         migrations.RunPython(migrate_data),
+        migrations.AlterUniqueTogether(
+            name='contentversion',
+            unique_together=set(),
+        ),
         migrations.RemoveField(
             model_name='contentversion',
             name='generated_content',
@@ -113,3 +117,4 @@ class Migration(migrations.Migration):
             name='GeneratedContent',
         ),
     ]
+
