@@ -358,3 +358,5 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC' 
 from .celerybeat import CELERY_BEAT_SCHEDULE
+
+# Auto-reload trigger

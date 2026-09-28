@@ -220,6 +220,8 @@ class DirectCampaignSendWorkflowTests(APITestCase):
         campaign_id = res.data["campaign"]["id"]
         campaign = Campaign.objects.get(id=campaign_id)
         self.assertEqual(campaign.status, Campaign.Status.DRAFT)
+        self.assertEqual(campaign.audience.count(), 1)
+        self.assertEqual(campaign.audience.first().customer.id, self.customer.id)
 
         # 2. Assign channel & template
         from apps.campaigns.models import CampaignChannel, CampaignTemplate
@@ -235,6 +237,18 @@ class DirectCampaignSendWorkflowTests(APITestCase):
             )
             self.assertEqual(send_res.status_code, status.HTTP_200_OK)
             mock_task.assert_called_once_with(campaign.id)
+
+    def test_campaign_creation_materializes_selected_audience_recipients(self):
+        self.client.force_authenticate(self.user)
+        res = self.client.post(
+            reverse("campaign-create"),
+            {"audience": self.audience.id, "name": "Audience Materialization Test", "description": "Verifies recipient resolution"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        campaign = Campaign.objects.get(id=res.data["campaign"]["id"])
+        self.assertEqual(campaign.audience.count(), 1)
+        self.assertEqual(campaign.audience.first().customer.id, self.customer.id)
 
     def test_user_cannot_send_other_user_campaign(self):
         self.client.force_authenticate(self.other_user)

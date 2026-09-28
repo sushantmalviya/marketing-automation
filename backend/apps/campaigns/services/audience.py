@@ -67,6 +67,45 @@ class AudienceService:
                     query_part = Q(**{f"attributes__{field}{lookup}": value})
                 return ~query_part if operator in ("!=", "is_not") else query_part
 
+            if field in ("phone", "phone_no", "mobile", "contact"):
+                lookup = OPERATOR_MAP.get(operator)
+                if lookup is None:
+                    raise ValueError(f"Unsupported operator: {operator}")
+                query_part = (
+                    Q(**{f"data__phone{lookup}": value})
+                    | Q(**{f"data__phone_no{lookup}": value})
+                    | Q(**{f"data__mobile{lookup}": value})
+                    | Q(**{f"data__Phone{lookup}": value})
+                    | Q(**{f"data__Phone_No{lookup}": value})
+                    | Q(**{f"data__phone_number{lookup}": value})
+                )
+                return ~query_part if operator in ("!=", "is_not") else query_part
+
+            if field in ("name", "full_name", "customer_name", "first_name"):
+                lookup = OPERATOR_MAP.get(operator)
+                if lookup is None:
+                    raise ValueError(f"Unsupported operator: {operator}")
+                query_part = (
+                    Q(**{f"data__name{lookup}": value})
+                    | Q(**{f"data__full_name{lookup}": value})
+                    | Q(**{f"data__customer_name{lookup}": value})
+                    | Q(**{f"data__first_name{lookup}": value})
+                    | Q(**{f"data__Name{lookup}": value})
+                )
+                return ~query_part if operator in ("!=", "is_not") else query_part
+
+            if field in ("email", "email_address", "mail"):
+                lookup = OPERATOR_MAP.get(operator)
+                if lookup is None:
+                    raise ValueError(f"Unsupported operator: {operator}")
+                query_part = (
+                    Q(**{f"data__email{lookup}": value})
+                    | Q(**{f"data__email_address{lookup}": value})
+                    | Q(**{f"data__Email{lookup}": value})
+                    | Q(**{f"data__Email_Id{lookup}": value})
+                )
+                return ~query_part if operator in ("!=", "is_not") else query_part
+
             # Special field: source → maps to _source or __source__ in data
             if field in ("source", "_source", "__source__"):
                 lookup = OPERATOR_MAP.get(operator)
@@ -107,7 +146,11 @@ class AudienceService:
             for bg in base_groups:
                 bg_def = bg.definition or {}
                 if str(bg_def.get("type", "DYNAMIC")).upper() == "STATIC":
-                    combined_base_qs = combined_base_qs | queryset.model.objects.filter(id__in=bg_def.get("static_ids", []))
+                    static_ids = bg_def.get("static_ids", [])
+                    if static_ids:
+                        combined_base_qs = combined_base_qs | queryset.model.objects.filter(id__in=static_ids)
+                    else:
+                        combined_base_qs = combined_base_qs | AudienceService._apply_definition(queryset.model.objects.all(), bg_def)
                 else:
                     combined_base_qs = combined_base_qs | AudienceService._apply_definition(queryset.model.objects.all(), bg_def)
             queryset = queryset.filter(id__in=combined_base_qs.values("id"))
@@ -169,23 +212,11 @@ class AudienceService:
         """
         Return CustomerRecord queryset matching the audience definition.
         - DYNAMIC: re-evaluates conditions against all current contacts.
-        - STATIC: returns only the snapshotted IDs stored at creation.
+        - STATIC: returns only the snapshotted IDs stored at creation (with fallback).
         - Falls back to upload-scoped query if user not provided (legacy).
         """
         seg_type = str((audience_definition or {}).get("type", "DYNAMIC")).upper()
 
-        # STATIC: use snapshotted IDs
-        if seg_type == "STATIC":
-            static_ids = (audience_definition or {}).get("static_ids", [])
-            if user:
-                return AudienceService._base_queryset(user).filter(id__in=static_ids)
-            if customer_upload:
-                return CustomerRecord.objects.filter(
-                    upload=customer_upload, id__in=static_ids
-                )
-            return CustomerRecord.objects.filter(id__in=static_ids)
-
-        # DYNAMIC: apply conditions
         if user:
             base_qs = AudienceService._base_queryset(user)
         elif customer_upload:
@@ -193,6 +224,15 @@ class AudienceService:
         else:
             base_qs = CustomerRecord.objects.all()
 
+        # STATIC: use snapshotted IDs if available and valid for this user
+        if seg_type == "STATIC":
+            static_ids = (audience_definition or {}).get("static_ids", [])
+            if static_ids:
+                matched_qs = base_qs.filter(id__in=static_ids)
+                if matched_qs.exists():
+                    return matched_qs
+
+        # DYNAMIC or STATIC with empty/invalid snapshot: apply definition conditions
         return AudienceService._apply_definition(base_qs, audience_definition)
 
     @staticmethod

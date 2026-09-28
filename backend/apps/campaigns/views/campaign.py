@@ -84,7 +84,7 @@ class CampaignUpdateAPIView(APIView):
                 "message": "Campaign updated successfully.",
                 "campaign": {
                     "id": campaign.id,
-                    "task": campaign.task.id if campaign.task else None,
+                    "task": None,
                     "name": campaign.name,
                     "description": campaign.description,
                     "status": campaign.status,
