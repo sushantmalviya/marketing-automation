@@ -266,7 +266,7 @@ class CampaignDetailAPIView(APIView):
     def get(self, request, campaign_id):
         campaign = get_object_or_404(
             Campaign.objects.select_related(
-                "task", "task__audience", "target_audience", "submitted_by", "created_by",
+                "target_audience", "submitted_by", "created_by",
             ).prefetch_related(
                 "campaign_channels__channel",
                 "campaign_templates__channel",

@@ -529,26 +529,7 @@ function CampaignDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-100 px-7 py-4">
-          {data?.available_actions.includes("approve") ? (
-            <div className="flex gap-3">
-              <button
-                className="secondary-button px-4 text-red-600 border-red-200 hover:bg-red-50"
-                onClick={() => onReject(campaignId)}
-              >
-                Reject
-              </button>
-              <button
-                className="primary-button px-5"
-                disabled={approving}
-                onClick={() => onApprove(campaignId)}
-              >
-                <Check size={15} /> Approve
-              </button>
-            </div>
-          ) : (
-            <span />
-          )}
+        <div className="flex items-center justify-end border-t border-slate-100 px-7 py-4">
           <button className="secondary-button px-5" onClick={onClose}>
             Close
           </button>

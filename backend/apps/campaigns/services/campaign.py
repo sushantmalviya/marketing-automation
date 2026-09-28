@@ -41,8 +41,9 @@ class CampaignService:
 
         if audience_updated:
             CampaignAudience.objects.filter(campaign=campaign).delete()
-            if campaign.target_audience and campaign.target_audience.customer_upload:
+            if campaign.target_audience:
                 customers = AudienceService.get_customers(
+                    user=campaign.created_by,
                     customer_upload=campaign.target_audience.customer_upload,
                     audience_definition=campaign.target_audience.definition or {},
                 )
@@ -103,8 +104,9 @@ class CampaignService:
             status=Campaign.Status.DRAFT,
         )
 
-        if target_audience and target_audience.customer_upload:
+        if target_audience:
             customers = AudienceService.get_customers(
+                user=user,
                 customer_upload=target_audience.customer_upload,
                 audience_definition=target_audience.definition or {},
             )

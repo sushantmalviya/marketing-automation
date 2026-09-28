@@ -30,9 +30,13 @@ class CampaignScheduleService:
             )
 
         # Campaign status
-        if campaign.status != Campaign.Status.APPROVED:
+        if campaign.status not in (
+            Campaign.Status.DRAFT,
+            Campaign.Status.APPROVED,
+            Campaign.Status.SCHEDULED,
+        ):
             raise ValidationError(
-                "Only approved campaigns can be scheduled."
+                "Campaign cannot be scheduled."
             )
 
         # Future date
@@ -89,9 +93,9 @@ class CampaignScheduleService:
                 "You can only update your own campaign schedule."
             )
 
-        if campaign.status not in [Campaign.Status.DRAFT, Campaign.Status.REJECTED]:
+        if campaign.status not in [Campaign.Status.DRAFT, Campaign.Status.SCHEDULED, Campaign.Status.REJECTED]:
             raise ValidationError(
-                "Only draft or rejected campaigns can have their schedule updated."
+                "Only draft or scheduled campaigns can have their schedule updated."
             )
 
         if scheduled_at <= timezone.now():

@@ -23,7 +23,7 @@ from django.test.utils import get_runner
 
 TestRunner = get_runner(settings)
 test_runner = TestRunner(verbosity=2, interactive=False)
-failures = test_runner.run_tests(["apps.communications"])
+failures = test_runner.run_tests(["apps.campaigns.tests"])
 if failures:
     sys.exit(1)
 sys.exit(0)

@@ -17,8 +17,15 @@ class Dispatcher:
         recipient = None
 
         try:
+            cust_data = delivery.customer.data or {}
+
             if channel_code == "EMAIL":
-                recipient = delivery.customer.data.get("email")
+                recipient = (
+                    cust_data.get("email")
+                    or cust_data.get("Email")
+                    or cust_data.get("email_id")
+                    or cust_data.get("Email_Id")
+                )
                 if not recipient:
                     raise ValueError("Customer email not found.")
                 
@@ -30,7 +37,15 @@ class Dispatcher:
                 )
             
             elif channel_code == "SMS":
-                recipient = delivery.customer.data.get("phone")
+                recipient = (
+                    cust_data.get("phone")
+                    or cust_data.get("phone_no")
+                    or cust_data.get("Phone")
+                    or cust_data.get("Phone_No")
+                    or cust_data.get("mobile")
+                    or cust_data.get("Mobile")
+                    or cust_data.get("phone_number")
+                )
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 
@@ -41,7 +56,15 @@ class Dispatcher:
                 )
             
             elif channel_code == "WHATSAPP":
-                recipient = delivery.customer.data.get("phone")
+                recipient = (
+                    cust_data.get("phone")
+                    or cust_data.get("phone_no")
+                    or cust_data.get("Phone")
+                    or cust_data.get("Phone_No")
+                    or cust_data.get("mobile")
+                    or cust_data.get("Mobile")
+                    or cust_data.get("phone_number")
+                )
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 

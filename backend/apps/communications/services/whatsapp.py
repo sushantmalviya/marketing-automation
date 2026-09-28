@@ -1,19 +1,15 @@
 import logging
 from django.conf import settings
-from apps.communications.models import CommunicationEvent, WhatsAppConnection
+from apps.communications.models import CommunicationEvent, WhatsAppConnection, SenderIdentity
 from apps.communications.providers.whatsapp import MetaWhatsAppProvider
 from apps.integrations.utils.crypto import decrypt_token
-from django.conf import settings
-import logging
 
 logger = logging.getLogger(__name__)
-
-logger = logging.getLogger(__name__)
-
 
 
 def get_whatsapp_connection(organization=None, connection=None):
     """
+    Resolves the WhatsAppConnection for an organization or returns the explicit connection.
     """
     if connection:
         return connection
@@ -34,22 +30,23 @@ def get_whatsapp_connection(organization=None, connection=None):
     return conn
 
 
-def get_whatsapp_provider(organization=None, connection=None):
-    """
-    Returns an initialized MetaWhatsAppProvider instance for the organization or connection.
-    """
-    whatsapp_conn = get_whatsapp_connection(organization=organization, connection=connection)
-
-    if not whatsapp_conn:
-        raise ValueError("No active WhatsApp connection configured.")
-
-    raw_token = whatsapp_conn.get_access_token()
-    if not raw_token:
-        raise ValueError("WhatsApp connection access token could not be decrypted or is empty.")
-
 def get_whatsapp_identity(user=None, identity_id=None):
     """
-    Find active SenderIdentity for WHATSAPP_CLOUD with multi-tenant scoping."""
+    Find active SenderIdentity for WHATSAPP_CLOUD with multi-tenant scoping.
+    """
+    if identity_id:
+        return SenderIdentity.objects.filter(id=identity_id, provider="WHATSAPP_CLOUD").first()
+    if user:
+        from apps.common.ownership import get_organization_users
+        org_users = get_organization_users(user)
+        return SenderIdentity.objects.filter(
+            user__in=org_users,
+            provider="WHATSAPP_CLOUD",
+            status="CONNECTED"
+        ).order_by("-updated_at").first()
+    return SenderIdentity.objects.filter(provider="WHATSAPP_CLOUD", status="CONNECTED").order_by("-updated_at").first()
+
+
 def get_whatsapp_credentials(identity):
     """
     Safely extract decrypted access_token, phone_number_id, and waba_id from SenderIdentity.
@@ -59,7 +56,7 @@ def get_whatsapp_credentials(identity):
 
     creds = identity.encrypted_credentials or {}
     raw_token = creds.get("access_token", "")
-    
+
     # Try decrypting token; fallback to raw if not encrypted
     access_token = ""
     if raw_token:
@@ -81,17 +78,36 @@ def get_whatsapp_credentials(identity):
     }
 
 
-def get_whatsapp_provider(user=None, identity_id=None):
-    identity = get_whatsapp_identity(user=user, identity_id=identity_id)
-    if not identity:
-        raise ValueError("No active WhatsApp provider configured for this user/tenant")
-    
-    creds = get_whatsapp_credentials(identity)
-    return MetaWhatsAppProvider(
-        access_token=raw_token,
-        phone_number_id=whatsapp_conn.phone_number_id,
-        api_version=getattr(settings, "META_GRAPH_API_VERSION", "v19.0"),
-    )
+def get_whatsapp_provider(organization=None, connection=None, user=None, identity_id=None):
+    """
+    Returns an initialized MetaWhatsAppProvider instance for the organization, user, or explicit connection.
+    Supports both WhatsAppConnection and SenderIdentity.
+    """
+    org = organization or user
+    whatsapp_conn = get_whatsapp_connection(organization=org, connection=connection)
+
+    if whatsapp_conn:
+        raw_token = whatsapp_conn.get_access_token()
+        if not raw_token:
+            raise ValueError("WhatsApp connection access token could not be decrypted or is empty.")
+
+        return MetaWhatsAppProvider(
+            access_token=raw_token,
+            phone_number_id=whatsapp_conn.phone_number_id,
+            api_version=getattr(settings, "META_GRAPH_API_VERSION", "v19.0"),
+        )
+
+    # Fallback to SenderIdentity if configured
+    identity = get_whatsapp_identity(user=org, identity_id=identity_id)
+    if identity:
+        creds = get_whatsapp_credentials(identity)
+        return MetaWhatsAppProvider(
+            access_token=creds["access_token"],
+            phone_number_id=creds["phone_number_id"],
+            api_version=getattr(settings, "META_GRAPH_API_VERSION", "v19.0"),
+        )
+
+    raise ValueError("No active WhatsApp connection configured.")
 
 
 def send_whatsapp(to, message, config=None, execution=None, campaign=None, organization=None, connection=None):
@@ -137,41 +153,51 @@ def send_whatsapp(to, message, config=None, execution=None, campaign=None, organ
     return msg_id or True
 
 
-
-def submit_whatsapp_template(template, organization=None, connection=None):
+def submit_whatsapp_template(template, organization=None, connection=None, user=None, identity_id=None):
     """
     Submits a WhatsApp message template to Meta for approval.
     """
     import requests
 
-    if not organization and hasattr(template, "created_by") and template.created_by:
-        organization = template.created_by
+    org = organization or user
+    if not org and hasattr(template, "created_by") and template.created_by:
+        org = template.created_by
 
-    if not whatsapp_conn:
-        raise ValueError("No active WhatsApp connection configured to submit template.")
+    whatsapp_conn = get_whatsapp_connection(organization=org, connection=connection)
+    access_token = None
+    waba_id = None
 
-    access_token = whatsapp_conn.get_access_token()
+    if whatsapp_conn:
+        access_token = whatsapp_conn.get_access_token()
+        waba_id = template.provider_data.get("waba_id") if isinstance(template.provider_data, dict) else None
+        if not waba_id:
+            waba_id = getattr(settings, "META_WABA_ID", None)
+    else:
+        identity = get_whatsapp_identity(user=org, identity_id=identity_id)
+        if identity:
+            creds = get_whatsapp_credentials(identity)
+            access_token = creds.get("access_token")
+            waba_id = creds.get("waba_id")
+
     if not access_token:
         raise ValueError("No access token available for WhatsApp connection.")
 
-    # WABA ID can be stored in provider_data or connection metadata if provided
-    waba_id = template.provider_data.get("waba_id") or getattr(settings, "META_WABA_ID", None)
     if not waba_id:
         raise ValueError("WhatsApp Business Account ID (WABA ID) is required to submit templates.")
 
     version = getattr(settings, "META_GRAPH_API_VERSION", "v19.0").lstrip("/")
     url = f"https://graph.facebook.com/{version}/{waba_id}/message_templates"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
 
-def submit_whatsapp_template(template, user=None, identity_id=None):
-    import requests
-
-    identity = get_whatsapp_identity(user=user, identity_id=identity_id)
-    if not identity:
-        raise ValueError("No active WhatsApp provider configured")
-
-    creds = get_whatsapp_credentials(identity)
-    waba_id = creds.get("waba_id")
-    access_token = creds.get("access_token")
+    components = [
+        {
+            "type": "BODY",
+            "text": template.body,
+        }
+    ]
 
     payload = {
         "name": template.name.lower().replace(" ", "_").replace("-", "_")[:512],
@@ -181,7 +207,7 @@ def submit_whatsapp_template(template, user=None, identity_id=None):
     }
 
     response = requests.post(url, json=payload, headers=headers, timeout=15)
-    
+
     if not response.ok:
         raise RuntimeError(f"Failed to submit WhatsApp Template to Meta: {response.text}")
 
@@ -194,4 +220,3 @@ def submit_whatsapp_template(template, user=None, identity_id=None):
     template.save()
 
     return template
-

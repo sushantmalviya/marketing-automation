@@ -62,6 +62,8 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
         clean_to = str(to).strip().replace(" ", "").replace("-", "")
         if clean_to.startswith("+"):
             clean_to = clean_to[1:]
+        if len(clean_to) == 10 and clean_to[0] in "6789":
+            clean_to = "91" + clean_to
 
         payload = {
             "messaging_product": "whatsapp",
