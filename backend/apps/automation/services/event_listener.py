@@ -101,6 +101,10 @@ def handle_customer_record_created(sender, instance, created, **kwargs):
 
     first_name = name.split()[0] if name else "Valued Customer"
 
+    sub_source_type = record_data.get("sub_source_type") or ("form" if "form_id" in record_data or "__form_id__" in record_data else ("meta_campaign" if "campaign_id" in record_data else ("file" if instance.upload else "manual")))
+    sub_source_id = str(record_data.get("sub_source_id") or record_data.get("__form_id__") or record_data.get("form_id") or record_data.get("campaign_id") or (instance.upload.id if instance.upload else ""))
+    sub_source_name = str(record_data.get("sub_source_name") or record_data.get("form_title") or record_data.get("campaign_name") or (instance.upload.file_name if instance.upload else ""))
+
     context = {
         "contact": {
             "id": str(instance.id),
@@ -111,11 +115,17 @@ def handle_customer_record_created(sender, instance, created, **kwargs):
             "phone": phone,
             "phone_no": phone,
             "source": source,
+            "sub_source_type": sub_source_type,
+            "sub_source_id": sub_source_id,
+            "sub_source_name": sub_source_name,
+            "file_name": instance.upload.file_name if instance.upload else "",
         },
         "data": record_data,
         "email": email,
         "name": name,
         "first_name": first_name,
+        "form_id": record_data.get("form_id") or record_data.get("__form_id__") or "",
+        "campaign_id": record_data.get("campaign_id") or "",
     }
 
     for automation in automations:
