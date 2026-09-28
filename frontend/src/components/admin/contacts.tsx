@@ -3,15 +3,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ChevronDown, Download, Eye,
+  ChevronDown, Download, Eye, FileText, Megaphone,
   Pencil, Plus, Search, Tags, Trash2, Upload, X,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
 
-type RecordRow = { id: number; data: Record<string, unknown>; created_at: string };
+type RecordRow = { id: number | string; data: Record<string, unknown>; created_at: string };
 type AudienceGroup = { id: number; name: string; definition?: { is_group?: boolean } };
+type SubSourceItem = { id: string; name: string; count: number; type: string; sub_source_type: string };
+type HierarchyCategory = { count: number; items: SubSourceItem[] };
+type HierarchyData = { categories: { imported: HierarchyCategory; forms: HierarchyCategory; meta: HierarchyCategory } };
+
 type Contact = {
   name: string; email: string; phone_no: string; tags: string[];
   list: string; score: number; status: string; activity: string;
@@ -78,14 +82,15 @@ export function AdminContacts() {
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("All");
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editing, setEditing] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | string | null>(null);
   const [viewing, setViewing] = useState<{ row: RecordRow; contact: Contact } | null>(null);
   const [form, setForm] = useState<Contact>(blank);
-  const [selectedAudience, setSelectedAudience] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<"all" | "imported" | "forms" | "meta" | number>("all");
+  const [selectedSubItem, setSelectedSubItem] = useState<SubSourceItem | null>(null);
   const [isCreateGroupOpen, setCreateGroupOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   // selection
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<number | string>>(new Set());
   // tag options (global, persisted in localStorage)
 
   const [tagOptions, setTagOptionsState] = useState<string[]>(loadTagOptions);
@@ -95,20 +100,39 @@ export function AdminContacts() {
     saveTagOptions(opts);
   }
   // confirmation modals
-  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);      // single
+  const [confirmDelete, setConfirmDelete] = useState<number | string | null>(null);      // single
   const [confirmBulk, setConfirmBulk] = useState(false);                        // selected
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<number | null>(null); // group
+
+  const hierarchyQuery = useQuery<HierarchyData>({
+    queryKey: ["admin-contacts-hierarchy"],
+    queryFn: async () => (await apiClient.get("/api/customers/hierarchy/")).data,
+  });
 
   const { data: audiencesData } = useQuery<AudienceGroup[] | { results?: AudienceGroup[] }>({
     queryKey: ["admin-audiences"],
     queryFn: async () => (await apiClient.get("/api/audiences/")).data,
   });
   const allAudiences = Array.isArray(audiencesData) ? audiencesData : audiencesData?.results || [];
-  const audiences = allAudiences.filter(a => a.definition?.is_group);
+  const audiences = useMemo(
+    () => allAudiences.filter(a => a.definition?.is_group && !["Imported contacts", "Form leads", "Meta leads"].includes(a.name)),
+    [allAudiences]
+  );
 
   const query = useQuery({
-    queryKey: ["admin-contacts", selectedAudience],
-    queryFn: async () => (await apiClient.get("/api/customers/", { params: { size: 2000, audience_id: selectedAudience || undefined } })).data,
+    queryKey: ["admin-contacts", selectedCategory, selectedSubItem?.id],
+    queryFn: async () => {
+      const params: Record<string, unknown> = { size: 2000 };
+      if (selectedSubItem) {
+        params.sub_source_type = selectedSubItem.sub_source_type;
+        params.sub_source_id = selectedSubItem.id;
+      } else if (typeof selectedCategory === "number") {
+        params.audience_id = selectedCategory;
+      } else if (selectedCategory !== "all") {
+        params.source = selectedCategory;
+      }
+      return (await apiClient.get("/api/customers/", { params })).data;
+    },
   });
   const rows = useMemo(() => (query.data || []) as RecordRow[], [query.data]);
   const normalized = useMemo(() => rows.map(row => ({ row, contact: normalize(row) })), [rows]);
@@ -117,24 +141,34 @@ export function AdminContacts() {
   // Derive column keys from actual data — respecting original CSV order via __col_order__
   const dynamicColumns = useMemo(() => {
     if (!rows.length) return [];
-    // Use __col_order__ from first row that has it
     const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
     let cols: string[] = [];
     if (orderRow) {
       cols = (orderRow.data.__col_order__ as string[]);
     } else {
-      // Fallback: union of all keys preserving first-seen order
-      const seen = new Set<string>();
+      const seenNormalized = new Set<string>();
       for (const row of rows) {
         for (const key of Object.keys(row.data)) {
-          if (!seen.has(key)) { seen.add(key); cols.push(key); }
+          const norm = key.toLowerCase().trim();
+          if (!seenNormalized.has(norm)) {
+            seenNormalized.add(norm);
+            cols.push(key);
+          }
         }
       }
     }
-    return cols.filter(col => {
+    const finalSeen = new Set<string>();
+    const filtered: string[] = [];
+    for (const col of cols) {
       const k = col.toLowerCase().trim();
-      return k !== "__col_order__" && k !== "tags" && !k.startsWith("_") && !k.startsWith("__");
-    });
+      if (k !== "__col_order__" && k !== "tags" && !k.startsWith("_") && !k.startsWith("__")) {
+        if (!finalSeen.has(k)) {
+          finalSeen.add(k);
+          filtered.push(col);
+        }
+      }
+    }
+    return filtered;
   }, [rows]);
 
   const contacts = useMemo(() => {
@@ -155,7 +189,7 @@ export function AdminContacts() {
     if (allVisibleSelected) setSelected(prev => { const n = new Set(prev); visibleIds.forEach(id => n.delete(id)); return n; });
     else setSelected(prev => { const n = new Set(prev); visibleIds.forEach(id => n.add(id)); return n; });
   }
-  function toggleOne(id: number) {
+  function toggleOne(id: number | string) {
     setSelected(prev => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
@@ -172,34 +206,37 @@ export function AdminContacts() {
       if (editing) {
         return apiClient.patch(`/api/customers/${editing}/`, payload as any);
       } else {
-        return apiClient.post("/api/customers/", { ...payload, audience_id: selectedAudience || undefined } as any);
+        return apiClient.post("/api/customers/", { ...payload, audience_id: typeof selectedCategory === "number" ? selectedCategory : undefined } as any);
       }
     },
     onSuccess: () => {
       toast.success(editing ? "Contact updated" : "Contact added");
       setEditorOpen(false); setEditing(null); setForm(blank);
       void client.invalidateQueries({ queryKey: ["admin-contacts"] });
+      void client.invalidateQueries({ queryKey: ["admin-contacts-hierarchy"] });
     },
     onError: err => toast.error(parseApiError(err)),
   });
 
   const remove = useMutation({
-    mutationFn: (id: number) => apiClient.delete(`/api/customers/${id}/`),
+    mutationFn: (id: number | string) => apiClient.delete(`/api/customers/${id}/`),
     onSuccess: (_, id) => {
       toast.success("Contact deleted");
       setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
       void client.invalidateQueries({ queryKey: ["admin-contacts"] });
+      void client.invalidateQueries({ queryKey: ["admin-contacts-hierarchy"] });
     },
     onError: err => toast.error(parseApiError(err)),
   });
 
   const bulkDelete = useMutation({
-    mutationFn: (payload: { ids?: number[]; all?: boolean }) =>
+    mutationFn: (payload: { ids?: (number | string)[]; all?: boolean }) =>
       apiClient.post("/api/customers/bulk-delete/", payload),
     onSuccess: (_, payload) => {
       toast.success(payload.all ? "All contacts deleted" : `${selected.size} contact(s) deleted`);
       setSelected(new Set());
       void client.invalidateQueries({ queryKey: ["admin-contacts"] });
+      void client.invalidateQueries({ queryKey: ["admin-contacts-hierarchy"] });
     },
     onError: err => toast.error(parseApiError(err)),
   });
@@ -219,7 +256,8 @@ export function AdminContacts() {
     mutationFn: (id: number) => apiClient.delete(`/api/audiences/${id}/`),
     onSuccess: () => {
       toast.success("Group deleted");
-      setSelectedAudience(null);
+      setSelectedCategory("all");
+      setSelectedSubItem(null);
       void client.invalidateQueries({ queryKey: ["admin-audiences"] });
     },
     onError: err => toast.error(parseApiError(err)),
@@ -233,6 +271,7 @@ export function AdminContacts() {
       await apiClient.post("/api/customers/uploads/", body);
       toast.success("Contacts imported");
       void client.invalidateQueries({ queryKey: ["admin-contacts"] });
+      void client.invalidateQueries({ queryKey: ["admin-contacts-hierarchy"] });
     } catch (e) { toast.error(parseApiError(e)); }
     finally { if (fileRef.current) fileRef.current.value = ""; }
   }
@@ -248,12 +287,17 @@ export function AdminContacts() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "contacts.csv"; a.click();
   }
 
-  function beginAdd() { setEditing(null); setForm(blank); setEditorOpen(true); }
-  function beginEdit(row: RecordRow) { setViewing(null); setEditing(row.id); setForm(normalize(row)); setEditorOpen(true); }
-  function selectAudience(audienceId: number | null) {
-    setSelectedAudience(audienceId);
-    setSelected(new Set());
+  function beginAdd() {
+    // Manual additions default under Imported contacts section
+    if (selectedCategory !== "imported" && selectedCategory !== "all") {
+      setSelectedCategory("imported");
+      setSelectedSubItem(null);
+    }
+    setEditing(null);
+    setForm(blank);
+    setEditorOpen(true);
   }
+  function beginEdit(row: RecordRow) { setViewing(null); setEditing(row.id); setForm(normalize(row)); setEditorOpen(true); }
 
   return (
     <div>
@@ -280,35 +324,81 @@ export function AdminContacts() {
           <button className="primary-button min-h-12 px-5" onClick={beginAdd}><Plus size={19} />Add Contact</button>
         </div>
       </div>
-      {/* ── Groups (Tabs) ── */}
-      <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+
+      {/* ── Level 1 Category Tabs ── */}
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
         <button
-          onClick={() => selectAudience(null)}
+          onClick={() => { setSelectedCategory("all"); setSelectedSubItem(null); setSelected(new Set()); }}
           className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
-            selectedAudience === null
+            selectedCategory === "all" && !selectedSubItem
               ? "bg-slate-800 text-white shadow-md"
-              : "bg-white text-slate-600 hover:bg-slate-100"
+              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-sm"
           }`}
         >
           <div className="opacity-70"><Tags size={16} /></div>
           All contacts
         </button>
+
+        <button
+          onClick={() => { setSelectedCategory("imported"); setSelectedSubItem(null); setSelected(new Set()); }}
+          className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+            selectedCategory === "imported" && !selectedSubItem
+              ? "bg-blue-600 text-white shadow-md"
+              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-sm"
+          }`}
+        >
+          <div className="opacity-70"><Upload size={15} /></div>
+          Imported contacts
+          <span className="ml-1 rounded-full bg-slate-200/60 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+            {hierarchyQuery.data?.categories?.imported?.count ?? 0}
+          </span>
+        </button>
+
+        <button
+          onClick={() => { setSelectedCategory("forms"); setSelectedSubItem(null); setSelected(new Set()); }}
+          className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+            selectedCategory === "forms" && !selectedSubItem
+              ? "bg-purple-600 text-white shadow-md"
+              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-sm"
+          }`}
+        >
+          <div className="opacity-70"><FileText size={15} /></div>
+          Form leads
+          <span className="ml-1 rounded-full bg-slate-200/60 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+            {hierarchyQuery.data?.categories?.forms?.count ?? 0}
+          </span>
+        </button>
+
+        <button
+          onClick={() => { setSelectedCategory("meta"); setSelectedSubItem(null); setSelected(new Set()); }}
+          className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+            selectedCategory === "meta" && !selectedSubItem
+              ? "bg-indigo-600 text-white shadow-md"
+              : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 shadow-sm"
+          }`}
+        >
+          <div className="opacity-70"><Megaphone size={15} /></div>
+          Meta leads
+          <span className="ml-1 rounded-full bg-slate-200/60 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+            {hierarchyQuery.data?.categories?.meta?.count ?? 0}
+          </span>
+        </button>
+
         {audiences.map(aud => {
-          const isDefault = ["Imported contacts", "Form leads", "Meta leads"].includes(aud.name);
-          const isSelected = selectedAudience === aud.id;
+          const isSelected = selectedCategory === aud.id;
           return (
             <button
               key={aud.id}
-              onClick={() => selectAudience(aud.id)}
-              className={`group/tab flex items-center gap-2 whitespace-nowrap rounded-xl pl-4 pr-3 py-2 text-sm font-semibold transition-all ${
+              onClick={() => { setSelectedCategory(aud.id); setSelectedSubItem(null); setSelected(new Set()); }}
+              className={`group/tab flex items-center gap-2 whitespace-nowrap rounded-xl pl-4 pr-3 py-2.5 text-sm font-semibold transition-all ${
                 isSelected
                   ? "bg-slate-800 text-white shadow-md"
                   : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-sm"
               }`}
             >
               <div className="opacity-70"><Tags size={16} /></div>
-              <span className={!isDefault && isSelected ? "mr-1" : "pr-1"}>{aud.name}</span>
-              {isSelected && !isDefault && (
+              <span>{aud.name}</span>
+              {isSelected && (
                 <div 
                   className="grid place-items-center h-6 w-6 rounded-md hover:bg-red-500/20 text-white/70 hover:text-red-300 transition-colors"
                   onClick={(e) => { e.stopPropagation(); setConfirmDeleteGroup(aud.id); }}
@@ -328,6 +418,51 @@ export function AdminContacts() {
           <Plus size={18} />
         </button>
       </div>
+
+      {/* ── Level 2 Sub-Items Bar ── */}
+      {["imported", "forms", "meta"].includes(String(selectedCategory)) && (
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200/80 bg-slate-50/70 p-2 scrollbar-hide">
+          <span className="pl-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+            {selectedCategory === "imported" ? "Files:" : selectedCategory === "forms" ? "Forms:" : "Ad Campaigns:"}
+          </span>
+          <button
+            onClick={() => { setSelectedSubItem(null); setSelected(new Set()); }}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+              selectedSubItem === null
+                ? "bg-white text-blue-700 shadow border border-slate-200"
+                : "text-slate-600 hover:bg-white/60"
+            }`}
+          >
+            All {selectedCategory === "imported" ? "Imported Files" : selectedCategory === "forms" ? "Forms" : "Ad Campaigns"}
+          </button>
+          {((selectedCategory === "imported" ? hierarchyQuery.data?.categories?.imported?.items :
+             selectedCategory === "forms" ? hierarchyQuery.data?.categories?.forms?.items :
+             hierarchyQuery.data?.categories?.meta?.items) || []).map(item => {
+            const isSubSelected = selectedSubItem?.id === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => { setSelectedSubItem(item); setSelected(new Set()); }}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                  isSubSelected
+                    ? "bg-white text-blue-700 shadow border border-blue-200 ring-2 ring-blue-100"
+                    : "text-slate-600 hover:bg-white/60 border border-transparent"
+                }`}
+              >
+                <span>{item.name}</span>
+                <span className="rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-700">
+                  {item.count}
+                </span>
+              </button>
+            );
+          })}
+          {!((selectedCategory === "imported" ? hierarchyQuery.data?.categories?.imported?.items :
+              selectedCategory === "forms" ? hierarchyQuery.data?.categories?.forms?.items :
+              hierarchyQuery.data?.categories?.meta?.items) || []).length && (
+            <span className="pl-2 text-xs italic text-slate-400">No specific items found in this section.</span>
+          )}
+        </div>
+      )}
 
       <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="sa-card overflow-hidden">
         {/* ── Filters ── */}

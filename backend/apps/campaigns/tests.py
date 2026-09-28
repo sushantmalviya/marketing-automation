@@ -116,3 +116,49 @@ class AdminCampaignWorkspaceTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["total_customers"], 2)
+
+    def test_contact_sub_source_hierarchy_and_filtering(self):
+        from apps.campaigns.models import Contact
+        from apps.campaigns.services import ContactService
+
+        # Create contacts with distinct sub-sources
+        ContactService.upsert_contact(
+            owner=self.admin,
+            payload={"email": "form1@example.com", "name": "Form Lead 1"},
+            default_source="form",
+            sub_source_type="form",
+            sub_source_id="form_101",
+            sub_source_name="Newsletter Signup Form",
+        )
+        ContactService.upsert_contact(
+            owner=self.admin,
+            payload={"email": "meta1@example.com", "name": "Meta Lead 1"},
+            default_source="meta",
+            sub_source_type="meta_campaign",
+            sub_source_id="camp_999",
+            sub_source_name="Fall Clearance Promo",
+        )
+
+        # Test hierarchy endpoint
+        response = self.client.get(reverse("customer-hierarchy"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        categories = response.data["categories"]
+        self.assertIn("imported", categories)
+        self.assertIn("forms", categories)
+        self.assertIn("meta", categories)
+
+        forms_items = categories["forms"]["items"]
+        self.assertTrue(any(f["id"] == "form_101" for f in forms_items))
+
+        meta_items = categories["meta"]["items"]
+        self.assertTrue(any(m["id"] == "camp_999" for m in meta_items))
+
+        # Test filtering by sub_source
+        filtered_form = self.client.get(
+            reverse("customer-list"),
+            {"sub_source_type": "form", "sub_source_id": "form_101"},
+        )
+        self.assertEqual(filtered_form.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(filtered_form.data), 1)
+        self.assertEqual(filtered_form.data[0]["data"]["email"], "form1@example.com")
+

@@ -51,6 +51,8 @@ class CustomerImportService:
 
     @staticmethod
     def save_records(upload, dataframe):
+        from .contact import ContactService
+
         # Store column order inside each record so PostgreSQL jsonb key-sorting can be reversed
         col_order = dataframe.columns.tolist()
         records = [
@@ -62,6 +64,20 @@ class CustomerImportService:
         ]
 
         CustomerRecord.objects.bulk_create(records)
+
+        # Upsert canonical Contact profiles
+        for _, row in dataframe.iterrows():
+            row_dict = row.to_dict()
+            try:
+                ContactService.upsert_contact(
+                    owner=upload.uploaded_by,
+                    payload={"_source": "imported", **row_dict},
+                    default_source="imported",
+                    initial_upload=upload,
+                )
+            except Exception:
+                pass
+
         return len(records)
 
     @staticmethod

@@ -399,24 +399,49 @@ class MetaLeadWebhookView(APIView):
                                 for credential in credentials:
                                     try:
                                         from apps.campaigns.models import CustomerUpload
+                                        from apps.campaigns.services import ContactService
+                                        from apps.events.models import SystemEvent
+
+                                        campaign_name = lead_data.get("campaign_name") or "Summer Promo Campaign"
+                                        campaign_id = str(lead_data.get("campaign_id") or "87654321")
                                         upload, _ = CustomerUpload.objects.get_or_create(
-                                            file_name="Meta Webhooks",
-                                            uploaded_by=credential.user
+                                            file_name=f"Meta: {campaign_name}",
+                                            uploaded_by=credential.user,
+                                            defaults={"file_type": "meta", "status": "COMPLETED"},
                                         )
+                                        meta_payload = {
+                                            'email': email,
+                                            'name': full_name,
+                                            '__source__': 'meta',
+                                            '_source': 'meta',
+                                            'source': 'meta',
+                                            'ad_id': lead_data.get("ad_id") or value.get("ad_id") or "12345678",
+                                            'ad_name': lead_data.get("ad_name") or "E2E Lead Generation Ad",
+                                            'campaign_id': campaign_id,
+                                            'campaign_name': campaign_name,
+                                            'form_id': lead_data.get("form_id") or value.get("form_id") or "555666777"
+                                        }
                                         CustomerRecord.objects.create(
                                             upload=upload,
-                                            data={
-                                                'email': email,
-                                                'name': full_name,
-                                                '__source__': 'meta',
-                                                '_source': 'meta',
-                                                'source': 'meta',
-                                                'ad_id': lead_data.get("ad_id") or value.get("ad_id") or "12345678",
-                                                'ad_name': lead_data.get("ad_name") or "E2E Lead Generation Ad",
-                                                'campaign_id': lead_data.get("campaign_id") or "87654321",
-                                                'campaign_name': lead_data.get("campaign_name") or "Summer Promo Campaign",
-                                                'form_id': lead_data.get("form_id") or value.get("form_id") or "555666777"
-                                            }
+                                            data=meta_payload
+                                        )
+
+                                        contact, _ = ContactService.upsert_contact(
+                                            owner=credential.user,
+                                            payload=meta_payload,
+                                            default_source="meta",
+                                            initial_upload=upload,
+                                            sub_source_type="meta_campaign",
+                                            sub_source_id=campaign_id,
+                                            sub_source_name=campaign_name,
+                                        )
+
+                                        SystemEvent.objects.create(
+                                            event_type=SystemEvent.EventType.WEBHOOK,
+                                            event_name="META_LEAD_RECEIVED",
+                                            user_identifier=contact.email or contact.phone or f"contact_{contact.id}",
+                                            contact=contact,
+                                            metadata=meta_payload
                                         )
                                     except Exception as db_err:
                                         import logging
