@@ -255,3 +255,88 @@ class ContactService:
                 contact.save(update_fields=updated_fields + ["updated_at"])
 
         return contact, created
+
+    @classmethod
+    @transaction.atomic
+    def bulk_upsert_contacts(
+        cls,
+        *,
+        owner,
+        rows: list[dict],
+        default_source: str = Contact.Source.IMPORT,
+        initial_upload=None,
+        sub_source_type: str = "file",
+        sub_source_id: str = "",
+        sub_source_name: str = "",
+    ) -> int:
+        if not rows:
+            return 0
+
+        sub_id = sub_source_id or (str(initial_upload.id) if initial_upload else "general")
+        sub_name = sub_source_name or (initial_upload.file_name if initial_upload else "Imported File")
+
+        existing_contacts = list(Contact.objects.filter(owner=owner))
+        email_map = {c.email.lower(): c for c in existing_contacts if c.email}
+        phone_map = {c.phone: c for c in existing_contacts if c.phone}
+
+        to_create = []
+        to_update = []
+
+        for row_dict in rows:
+            extracted = cls.extract_canonical_and_attributes(row_dict)
+            email = extracted["email"] or None
+            phone = extracted["phone"]
+            if not email and not phone:
+                continue
+
+            contact = (email_map.get(email.lower()) if email else None) or (phone_map.get(phone) if phone else None)
+
+            if not contact:
+                c = Contact(
+                    owner=owner,
+                    email=email,
+                    phone=phone,
+                    name=extracted["name"],
+                    first_name=extracted["first_name"],
+                    last_name=extracted["last_name"],
+                    source=extracted["source"] or default_source,
+                    sub_source_type=sub_source_type,
+                    sub_source_id=sub_id,
+                    sub_source_name=sub_name,
+                    status=extracted["status"] or Contact.Status.ACTIVE,
+                    score=extracted["score"],
+                    tags=extracted["tags"],
+                    attributes=extracted["attributes"],
+                    initial_upload=initial_upload,
+                )
+                to_create.append(c)
+                if email:
+                    email_map[email.lower()] = c
+                if phone:
+                    phone_map[phone] = c
+            else:
+                updated_fields = []
+                if not contact.phone and phone:
+                    contact.phone = phone
+                    updated_fields.append("phone")
+                if not contact.name and extracted["name"]:
+                    contact.name = extracted["name"]
+                    contact.first_name = extracted["first_name"]
+                    contact.last_name = extracted["last_name"]
+                    updated_fields.extend(["name", "first_name", "last_name"])
+                if not contact.sub_source_type:
+                    contact.sub_source_type = sub_source_type
+                    contact.sub_source_id = sub_id
+                    contact.sub_source_name = sub_name
+                    updated_fields.extend(["sub_source_type", "sub_source_id", "sub_source_name"])
+
+                if updated_fields:
+                    to_update.append((contact, updated_fields))
+
+        if to_create:
+            Contact.objects.bulk_create(to_create, ignore_conflicts=True)
+        if to_update:
+            for c, _ in to_update:
+                c.save(update_fields=["phone", "name", "first_name", "last_name", "sub_source_type", "sub_source_id", "sub_source_name", "updated_at"])
+
+        return len(to_create) + len(to_update)
