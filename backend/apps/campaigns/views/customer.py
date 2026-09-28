@@ -1,11 +1,10 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from apps.campaigns.models import CustomerUpload
+from apps.campaigns.models import CustomerUpload, Contact, CustomerRecord, Audience
 from ..serializers import CustomerUploadSerializer,CustomerUploadListSerializer, CampaignCreateSerializer
 from ..serializers.customer_record import CustomerRecordSerializer
 from ..services import CustomerImportService , CampaignService
-from ..models import CustomerRecord
 from apps.common.ownership import filter_customer_records_for_admin, filter_customer_uploads_for_admin
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated

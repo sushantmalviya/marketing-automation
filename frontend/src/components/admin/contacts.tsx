@@ -268,7 +268,7 @@ export function AdminContacts() {
     if (!file) return;
     const body = new FormData(); body.append("file", file);
     try {
-      await apiClient.post("/api/customers/uploads/", body);
+      await apiClient.post("/api/customers/uploads/", body, { timeout: 60000 });
       toast.success("Contacts imported");
       void client.invalidateQueries({ queryKey: ["admin-contacts"] });
       void client.invalidateQueries({ queryKey: ["admin-contacts-hierarchy"] });
