@@ -162,6 +162,7 @@ class DomainAuthenticationDetailView(APIView):
     def delete(self, request, pk):
         try:
             domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+            SenderIdentity.objects.filter(domain_auth=domain_auth).update(domain_auth=None)
             AWSSESService().delete_domain_identity(domain_auth.domain)
             domain_auth.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
