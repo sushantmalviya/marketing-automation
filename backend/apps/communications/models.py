@@ -112,6 +112,9 @@ class DomainAuthentication(models.Model):
     dns_record_type = models.CharField(max_length=10, default="TXT")
     dns_record_name = models.CharField(max_length=50, default="@")
     dns_record_value = models.CharField(max_length=255)
+    dkim_records = models.JSONField(default=list, blank=True)
+    dkim_status = models.CharField(max_length=30, default="PENDING")
+    mail_from_domain = models.CharField(max_length=255, blank=True, default="")
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,
@@ -139,9 +142,7 @@ class DomainAuthentication(models.Model):
 
 class SenderIdentity(models.Model):
     PROVIDER_CHOICES = [
-        ("GMAIL", "Gmail"),
-        ("MICROSOFT", "Microsoft Outlook"),
-        ("YAHOO", "Yahoo"),
+        ("AWS_SES", "Amazon SES (Verified Domain)"),
         ("CUSTOM_SMTP", "Custom SMTP"),
         ("WHATSAPP_CLOUD", "WhatsApp Cloud API"),
         ("TWILIO_SMS", "Twilio SMS"),
@@ -149,7 +150,7 @@ class SenderIdentity(models.Model):
     ]
 
     CONNECTION_TYPE_CHOICES = [
-        ("OAUTH", "OAuth 2.0"),
+        ("AWS_SES", "Amazon SES"),
         ("SMTP", "SMTP"),
         ("API_KEY", "API Key / Token"),
     ]

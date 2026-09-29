@@ -93,193 +93,49 @@ class SMTPEmailSender(BaseEmailSender):
         return True
 
 
-class GmailSender(BaseEmailSender):
-    def _get_access_token(self):
-        enc_refresh_token = self.credentials.get("refresh_token")
-        if not enc_refresh_token:
-            return None
-        refresh_token = decrypt_token(enc_refresh_token)
-
-        from django.conf import settings
-        client_id = (getattr(settings, "GOOGLE_CLIENT_ID", "") or os.getenv("GOOGLE_CLIENT_ID", "")).strip()
-        client_secret = (getattr(settings, "GOOGLE_CLIENT_SECRET", "") or os.getenv("GOOGLE_CLIENT_SECRET", "")).strip()
-
-        if not client_id or not client_secret:
-            logger.error("Google OAuth credentials missing in settings.")
-            return None
-
-        data = urllib.parse.urlencode({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            "https://oauth2.googleapis.com/token",
-            data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                res_data = json.loads(resp.read().decode("utf-8"))
-                return res_data.get("access_token")
-        except Exception as e:
-            logger.error(f"Failed to refresh Google access token: {e}")
-            return None
-
+class AWSSESSender(BaseEmailSender):
     def test_connection(self):
-        token = self._get_access_token()
-        if not token:
-            return False, "Failed to authenticate with Google OAuth."
+        from apps.communications.services.aws_ses import AWSSESService
+        domain = ""
+        if self.sender_identity.domain_auth:
+            domain = self.sender_identity.domain_auth.domain
+        elif self.sender_identity.email and "@" in self.sender_identity.email:
+            domain = self.sender_identity.email.split("@")[-1]
 
-        req = urllib.request.Request(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                if data.get("email"):
-                    return True, f"Google account connected: {data['email']}"
-            return False, "Could not fetch user profile from Google."
-        except Exception as e:
-            return False, f"Google connection error: {e}"
+        if not domain:
+            return False, "Invalid domain for AWS SES sender."
+
+        ses_service = AWSSESService()
+        res = ses_service.get_domain_verification_status(domain)
+        if res.get("success"):
+            return True, f"AWS SES identity for '{domain}' is active and verified."
+        return False, res.get("detail", "AWS SES verification pending.")
 
     def send(self, subject, html_content, recipient, headers=None):
-        token = self._get_access_token()
-        if not token:
-            raise RuntimeError("Could not obtain Google access token.")
-
+        from apps.communications.services.aws_ses import AWSSESService
         from_email = self.sender_identity.email
         display_name = self.sender_identity.display_name
+        from_header = f"{display_name} <{from_email}>" if display_name else from_email
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{display_name} <{from_email}>" if display_name else from_email
-        msg["To"] = recipient
+        tenant_id = str(self.sender_identity.user_id) if self.sender_identity.user_id else ""
 
-        if headers:
-            for k, v in headers.items():
-                if k not in ("Subject", "From", "To"):
-                    msg[k] = v
-
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
-        raw_msg = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
-
-        payload = json.dumps({"raw": raw_msg}).encode("utf-8")
-        req = urllib.request.Request(
-            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
+        ses_service = AWSSESService()
+        result = ses_service.send_email(
+            from_address=from_header,
+            to_address=recipient,
+            subject=subject,
+            html_body=html_content,
+            tenant_id=tenant_id,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            if resp.status in (200, 201, 202):
-                return True
-        return True
-
-
-class MicrosoftSender(BaseEmailSender):
-    def _get_access_token(self):
-        enc_refresh_token = self.credentials.get("refresh_token")
-        if not enc_refresh_token:
-            return None
-        refresh_token = decrypt_token(enc_refresh_token)
-
-        from django.conf import settings
-        client_id = (getattr(settings, "MICROSOFT_CLIENT_ID", "") or os.getenv("MICROSOFT_CLIENT_ID", "")).strip()
-        client_secret = (getattr(settings, "MICROSOFT_CLIENT_SECRET", "") or os.getenv("MICROSOFT_CLIENT_SECRET", "")).strip()
-
-        if not client_id or not client_secret:
-            logger.error("Microsoft OAuth credentials missing in settings.")
-            return None
-
-        data = urllib.parse.urlencode({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-            "scope": "https://graph.microsoft.com/Mail.Send offline_access User.Read",
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                res_data = json.loads(resp.read().decode("utf-8"))
-                return res_data.get("access_token")
-        except Exception as e:
-            logger.error(f"Failed to refresh Microsoft access token: {e}")
-            return None
-
-    def test_connection(self):
-        token = self._get_access_token()
-        if not token:
-            return False, "Failed to authenticate with Microsoft Graph."
-
-        req = urllib.request.Request(
-            "https://graph.microsoft.com/v1.0/me",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                if data.get("userPrincipalName") or data.get("mail"):
-                    return True, "Microsoft account connected successfully."
-            return False, "Could not fetch user profile from Microsoft."
-        except Exception as e:
-            return False, f"Microsoft connection error: {e}"
-
-    def send(self, subject, html_content, recipient, headers=None):
-        token = self._get_access_token()
-        if not token:
-            raise RuntimeError("Could not obtain Microsoft access token.")
-
-        payload = json.dumps({
-            "message": {
-                "subject": subject,
-                "body": {
-                    "contentType": "HTML",
-                    "content": html_content
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": recipient
-                        }
-                    }
-                ]
-            },
-            "saveToSentItems": "true"
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            "https://graph.microsoft.com/v1.0/me/sendMail",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            if resp.status in (200, 202):
-                return True
-        return True
+        return result.get("success", False)
 
 
 def get_sender_provider(sender_identity):
     if not sender_identity:
         return None
     provider = sender_identity.provider.upper()
-    if provider == "GMAIL":
-        return GmailSender(sender_identity)
-    elif provider == "MICROSOFT":
-        return MicrosoftSender(sender_identity)
-    else: # YAHOO or CUSTOM_SMTP
+    if provider == "AWS_SES":
+        return AWSSESSender(sender_identity)
+    else:  # CUSTOM_SMTP or fallback
         return SMTPEmailSender(sender_identity)
+

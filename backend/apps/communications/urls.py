@@ -3,18 +3,16 @@ from django.urls import path
 from apps.communications.views import (
     CommunicationEventListView,
     WhatsAppWebhookView,
+    SESWebhookView,
 )
 from apps.communications.views_sender import (
+    ConnectSESView,
     ConnectSMTPView,
     WhatsAppEmbeddedSignupCallbackView,
     ConnectSMSView,
     DomainAuthenticationDetailView,
     DomainAuthenticationListCreateView,
     DomainAuthenticationVerifyView,
-    GoogleOAuthCallbackView,
-    GoogleOAuthUrlView,
-    MicrosoftOAuthCallbackView,
-    MicrosoftOAuthUrlView,
     SendTestEmailView,
     SenderIdentityDetailView,
     SenderIdentityListView,
@@ -29,6 +27,10 @@ urlpatterns = [
     path(
         "webhooks/whatsapp/",
         WhatsAppWebhookView.as_view(),
+    ),
+    path(
+        "webhooks/ses/",
+        SESWebhookView.as_view(),
     ),
     path(
         "whatsapp/embedded-signup/callback/",
@@ -55,6 +57,10 @@ urlpatterns = [
         SenderIdentityDetailView.as_view(),
     ),
     path(
+        "sender-identities/connect-ses/",
+        ConnectSESView.as_view(),
+    ),
+    path(
         "sender-identities/test-smtp/",
         TestSMTPConnectionView.as_view(),
     ),
@@ -67,25 +73,10 @@ urlpatterns = [
         ConnectSMSView.as_view(),
     ),
     path(
-        "sender-identities/oauth/google/url/",
-        GoogleOAuthUrlView.as_view(),
-    ),
-    path(
-        "sender-identities/oauth/google/callback/",
-        GoogleOAuthCallbackView.as_view(),
-    ),
-    path(
-        "sender-identities/oauth/microsoft/url/",
-        MicrosoftOAuthUrlView.as_view(),
-    ),
-    path(
-        "sender-identities/oauth/microsoft/callback/",
-        MicrosoftOAuthCallbackView.as_view(),
-    ),
-    path(
         "sender-identities/<uuid:pk>/test-email/",
         SendTestEmailView.as_view(),
     ),
 ]
+
 
 
