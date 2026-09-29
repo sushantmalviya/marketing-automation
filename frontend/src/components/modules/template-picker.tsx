@@ -28,7 +28,7 @@ export function TemplatePickerModal({
 
   const templates = useQuery({
     queryKey: ["templates-list"],
-    queryFn: async () => (await apiClient.get<Template[]>("/api/templates")).data,
+    queryFn: async () => (await apiClient.get<Template[]>("/api/templates/")).data,
   });
 
   const filtered = (templates.data ?? []).filter((tpl) => 

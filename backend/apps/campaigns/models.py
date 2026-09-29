@@ -138,11 +138,15 @@ class CustomerRecord(models.Model):
         related_name="records",
     )
     data = models.JSONField()
-    routing_logs = models.JSONField(blank=True, default=list)
+    routing_logs = models.JSONField(
+        default=list,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Record {self.id}"
+
     
 
 

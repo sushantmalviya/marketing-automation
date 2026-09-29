@@ -84,7 +84,7 @@ class CampaignUpdateAPIView(APIView):
                 "message": "Campaign updated successfully.",
                 "campaign": {
                     "id": campaign.id,
-                    "task": campaign.task.id if campaign.task else None,
+                    "task": None,
                     "name": campaign.name,
                     "description": campaign.description,
                     "status": campaign.status,
@@ -266,7 +266,7 @@ class CampaignDetailAPIView(APIView):
     def get(self, request, campaign_id):
         campaign = get_object_or_404(
             Campaign.objects.select_related(
-                "task", "task__audience", "target_audience", "submitted_by", "created_by",
+                "target_audience", "submitted_by", "created_by",
             ).prefetch_related(
                 "campaign_channels__channel",
                 "campaign_templates__channel",

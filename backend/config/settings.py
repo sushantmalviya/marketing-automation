@@ -9,10 +9,10 @@ import dj_database_url
  
 BASE_DIR = Path(__file__).resolve().parent.parent
  
-# This project intentionally uses backend/.env as its single local config
-# source. Override inherited machine variables so DEBUG, database, and API
-# settings match that file consistently when started from an IDE or terminal.
-load_dotenv(BASE_DIR / ".env", override=True)
+# This project uses backend/.env as its local config source.
+# Default to .env but allow explicitly set process environment variables to take precedence (e.g. during testing).
+load_dotenv(BASE_DIR / ".env", override=False)
+
  
 # --------------------------------------------------
 # Security
@@ -358,3 +358,5 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC' 
 from .celerybeat import CELERY_BEAT_SCHEDULE
+
+# Auto-reload trigger
