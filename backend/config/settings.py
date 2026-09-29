@@ -216,6 +216,9 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
+
+# Backward compatibility for django-cloudinary-storage collectstatic command
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
  
 # --------------------------------------------------
 # Default Primary Key

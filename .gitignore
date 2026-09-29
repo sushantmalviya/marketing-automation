@@ -114,7 +114,7 @@ venv/
 env/
 
 # VS Code
-.vscode/
+.vscode/    
 
 # Environment variables
 .env

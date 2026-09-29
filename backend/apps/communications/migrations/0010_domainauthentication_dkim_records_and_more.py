@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('communications', '0008_domainauthentication_senderidentity_domain_auth_and_more'),
+        ('communications', '0009_merge_20260928_1126'),
     ]
 
     operations = [
