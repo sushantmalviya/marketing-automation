@@ -1,4 +1,5 @@
 from .customer import CustomerImportService
+from .contact import ContactService
 from .campaign import CampaignService
 from .channel import assign_channels
 from .audience import AudienceService

@@ -5,7 +5,7 @@ import { FormBuilder } from "./builder";
 import { FormResponses } from "./responses";
 import { FormSettings } from "./settings";
 import { Save, ArrowLeft, Loader2, Globe } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
 import { FormFieldData } from "./types";
@@ -15,6 +15,8 @@ type TabType = "builder" | "responses" | "settings";
 
 export function FormEditor({ formId }: { formId: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/admin") ? "/admin/forms" : "/user/forms";
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>("builder");
   const [formTitle, setFormTitle] = useState("Lead Generation Form");
@@ -92,7 +94,7 @@ export function FormEditor({ formId }: { formId: string }) {
       queryClient.invalidateQueries({ queryKey: ["admin-forms"] });
       if (isNew) {
         setFormUuid(res.data.uuid);
-        router.push(`/admin/forms/${res.data.id}`);
+        router.push(`${basePath}/${res.data.id}`);
       }
     },
     onError: (err: any) => {
@@ -125,7 +127,7 @@ export function FormEditor({ formId }: { formId: string }) {
       <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-6">
           <button 
-            onClick={() => router.push("/admin/forms")}
+            onClick={() => router.push(basePath)}
             className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

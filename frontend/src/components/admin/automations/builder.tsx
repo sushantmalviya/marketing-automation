@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   ReactFlow,
   addEdge,
@@ -39,6 +39,8 @@ export function AutomationBuilder({ automationId }: { automationId: string }) {
 
 function AutomationBuilderContent({ automationId }: { automationId: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const basePath = pathname.startsWith("/admin") ? "/admin/automations" : "/user/automations";
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -169,7 +171,7 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
           workflow_graph: { nodes, edges }
         });
         alert("Draft saved successfully!");
-        router.push(`/admin/automations/${res.data.id}`);
+        router.push(`${basePath}/${res.data.id}`);
       } else {
         await apiClient.patch(`/api/automations/${automationId}/`, {
           name: workflowName,
@@ -244,7 +246,7 @@ function AutomationBuilderContent({ automationId }: { automationId: string }) {
       <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => router.push("/admin/automations")} 
+            onClick={() => router.push(basePath)} 
             className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
           >
             <ArrowLeft size={18} />

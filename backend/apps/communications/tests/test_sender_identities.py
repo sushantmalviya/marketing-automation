@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
 
-from apps.communications.models import SenderIdentity
+from apps.communications.models import DomainAuthentication, SenderIdentity
 
 User = get_user_model()
 
@@ -24,7 +24,53 @@ class SenderIdentityTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
+    def test_add_domain_and_verify(self):
+        url = "/api/communications/sender-domains/"
+        response = self.client.post(url, {"domain": "customdomain.com"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["domain"], "customdomain.com")
+        self.assertEqual(response.data["status"], "PENDING")
+
+        domain_id = response.data["id"]
+        token = response.data["verification_token"]
+
+        # Test verification failure
+        with patch("apps.communications.views_sender.verify_domain_dns", return_value=(False, "TXT record not found", [])):
+            verify_res = self.client.post(f"/api/communications/sender-domains/{domain_id}/verify/")
+            self.assertEqual(verify_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Test verification success
+        with patch("apps.communications.views_sender.verify_domain_dns", return_value=(True, "Verified", [f"automarket-verify={token}"])):
+            verify_res = self.client.post(f"/api/communications/sender-domains/{domain_id}/verify/")
+            self.assertEqual(verify_res.status_code, status.HTTP_200_OK)
+            self.assertEqual(verify_res.data["domain"]["status"], "VERIFIED")
+
+    def test_connect_custom_smtp_requires_verified_domain(self):
+        url = "/api/communications/sender-identities/connect-smtp/"
+        payload = {
+            "email": "smtpuser@unverifieddomain.com",
+            "display_name": "Custom SMTP Sender",
+            "provider": "CUSTOM_SMTP",
+            "host": "smtp.unverifieddomain.com",
+            "port": 587,
+            "security": "STARTTLS",
+            "username": "smtpuser@unverifieddomain.com",
+            "password": "SecretPassword123"
+        }
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("not verified", response.data["detail"])
+
     def test_connect_custom_smtp_identity(self):
+        # Pre-create verified domain
+        domain_auth = DomainAuthentication.objects.create(
+            user=self.user,
+            domain="customdomain.com",
+            verification_token="token123",
+            dns_record_value="automarket-verify=token123",
+            status="VERIFIED"
+        )
+
         url = "/api/communications/sender-identities/connect-smtp/"
         payload = {
             "email": "smtpuser@customdomain.com",
@@ -49,6 +95,7 @@ class SenderIdentityTests(APITestCase):
         identity = SenderIdentity.objects.get(email="smtpuser@customdomain.com")
         self.assertIn("password", identity.encrypted_credentials)
         self.assertNotEqual(identity.encrypted_credentials["password"], "SecretPassword123")
+        self.assertEqual(identity.domain_auth, domain_auth)
 
     def test_delete_sender_identity(self):
         identity = SenderIdentity.objects.create(
@@ -68,7 +115,7 @@ class SenderIdentityTests(APITestCase):
         with self.settings(GOOGLE_CLIENT_ID="mock-google-client-id"):
             response = self.client.get(url)
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn("https://accounts.google.com/o/oauth2/v2/auth", response.data["url"])
+            self.assertIn("https://accounts.google.com/o/oauth2/v2.0/auth", response.data["url"])
             self.assertIn("mock-google-client-id", response.data["url"])
 
     def test_microsoft_oauth_url(self):
@@ -78,3 +125,4 @@ class SenderIdentityTests(APITestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertIn("https://login.microsoftonline.com/common/oauth2/v2.0/authorize", response.data["url"])
             self.assertIn("mock-microsoft-client-id", response.data["url"])
+

@@ -12,15 +12,15 @@ export default async function FeatureEditorPage({
 }) { 
   const { role, section, id } = await params;
 
-  if (role === "admin" && section === "forms") {
+  if ((role === "admin" || role === "user") && section === "forms") {
     return <FormEditor formId={id} />;
   }
 
-  if (role === "admin" && section === "automations") {
+  if ((role === "admin" || role === "user") && section === "automations") {
     return <AutomationBuilder automationId={id} />;
   }
 
-  if ((role === "user" || role === "dummy") && (section === "channels" || section === "content")) {
+  if ((role === "admin" || role === "user") && (section === "channels" || section === "content")) {
     return <UserContentStudio draftId={id} />;
   }
 

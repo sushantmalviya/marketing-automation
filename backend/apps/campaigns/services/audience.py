@@ -1,4 +1,4 @@
-from apps.campaigns.models import CustomerRecord, Audience
+from apps.campaigns.models import CustomerRecord, Contact, Audience
 from apps.common.ownership import filter_customer_records_for_admin
 from django.db.models import Q
 
@@ -45,6 +45,27 @@ class AudienceService:
             field = normalize_column_name(condition["field"])
             operator = str(condition.get("operator", "=")).lower()
             value = condition.get("value")
+
+            if queryset.model == Contact:
+                field_map = {
+                    "name": "name", "full_name": "name", "full name": "name",
+                    "email": "email", "email_address": "email", "email address": "email",
+                    "phone": "phone", "phone_no": "phone", "phone no": "phone", "mobile": "phone",
+                    "source": "source", "_source": "source", "__source__": "source",
+                    "sub_source_type": "sub_source_type",
+                    "sub_source_id": "sub_source_id",
+                    "sub_source_name": "sub_source_name",
+                    "initial_upload": "initial_upload_id",
+                    "file_name": "initial_upload__file_name",
+                    "status": "status", "score": "score", "tags": "tags"
+                }
+                lookup = OPERATOR_MAP.get(operator, "")
+                target_field = field_map.get(field)
+                if target_field:
+                    query_part = Q(**{f"{target_field}{lookup}": value})
+                else:
+                    query_part = Q(**{f"attributes__{field}{lookup}": value})
+                return ~query_part if operator in ("!=", "is_not") else query_part
 
             # Special field: source → maps to _source or __source__ in data
             if field in ("source", "_source", "__source__"):
@@ -173,6 +194,21 @@ class AudienceService:
             base_qs = CustomerRecord.objects.all()
 
         return AudienceService._apply_definition(base_qs, audience_definition)
+
+    @staticmethod
+    def get_contacts(*, user, audience_definition):
+        """
+        Return Contact queryset matching the audience definition.
+        """
+        seg_type = str((audience_definition or {}).get("type", "DYNAMIC")).upper()
+
+        if seg_type == "STATIC":
+            static_ids = (audience_definition or {}).get("static_ids", [])
+            return Contact.objects.filter(owner=user, id__in=static_ids)
+
+        base_qs = Contact.objects.filter(owner=user)
+        return AudienceService._apply_definition(base_qs, audience_definition)
+
 
     @staticmethod
     def preview_audience(*, user=None, audience_definition, customer_upload=None):

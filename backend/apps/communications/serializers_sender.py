@@ -1,12 +1,59 @@
 from rest_framework import serializers
-from apps.communications.models import SenderIdentity
+from apps.communications.models import DomainAuthentication, SenderIdentity
+
+
+class DomainAuthenticationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DomainAuthentication
+        fields = [
+            "id",
+            "domain",
+            "verification_token",
+            "dns_record_type",
+            "dns_record_name",
+            "dns_record_value",
+            "status",
+            "verified_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "verification_token",
+            "dns_record_type",
+            "dns_record_name",
+            "dns_record_value",
+            "status",
+            "verified_at",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class AddDomainSerializer(serializers.Serializer):
+    domain = serializers.CharField(max_length=255)
+
+    def validate_domain(self, value):
+        import urllib.parse
+        val = value.strip().lower()
+        if val.startswith("http://") or val.startswith("https://"):
+            val = urllib.parse.urlparse(val).netloc
+        if val.startswith("www."):
+            val = val[4:]
+        if "." not in val or len(val) < 4:
+            raise serializers.ValidationError("Enter a valid domain name, e.g. company.com")
+        return val
 
 
 class SenderIdentitySerializer(serializers.ModelSerializer):
+    domain = serializers.SerializerMethodField()
+
     class Meta:
         model = SenderIdentity
         fields = [
             "id",
+            "domain_auth",
+            "domain",
             "email",
             "display_name",
             "provider",
@@ -24,6 +71,13 @@ class SenderIdentitySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_domain(self, obj):
+        if obj.domain_auth:
+            return obj.domain_auth.domain
+        if obj.email and "@" in obj.email:
+            return obj.email.split("@")[-1]
+        return ""
 
 
 class ConnectSMTPSerializer(serializers.Serializer):

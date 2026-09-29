@@ -8,6 +8,7 @@ from .customer import (
     CustomerRecordListAPIView,
     CustomerRecordDetailAPIView,
     CustomerBulkDeleteAPIView,
+    ContactHierarchyAPIView,
 )
 from .channel import AssignChannelsView, ChannelListAPIView
 

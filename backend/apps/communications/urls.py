@@ -8,6 +8,9 @@ from apps.communications.views_sender import (
     ConnectSMTPView,
     WhatsAppEmbeddedSignupCallbackView,
     ConnectSMSView,
+    DomainAuthenticationDetailView,
+    DomainAuthenticationListCreateView,
+    DomainAuthenticationVerifyView,
     GoogleOAuthCallbackView,
     GoogleOAuthUrlView,
     MicrosoftOAuthCallbackView,
@@ -30,6 +33,18 @@ urlpatterns = [
     path(
         "whatsapp/embedded-signup/callback/",
         WhatsAppEmbeddedSignupCallbackView.as_view(),
+    ),
+    path(
+        "sender-domains/",
+        DomainAuthenticationListCreateView.as_view(),
+    ),
+    path(
+        "sender-domains/<uuid:pk>/",
+        DomainAuthenticationDetailView.as_view(),
+    ),
+    path(
+        "sender-domains/<uuid:pk>/verify/",
+        DomainAuthenticationVerifyView.as_view(),
     ),
     path(
         "sender-identities/",

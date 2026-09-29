@@ -38,19 +38,39 @@ class CustomerImportService:
     def save_upload(uploaded_file, uploaded_by, summary) :
         extension = os.path.splitext(uploaded_file.name)[1].lower()
 
-        return CustomerUpload.objects.create(
-            original_file=uploaded_file,
-            file_name=uploaded_file.name,
-            file_type=extension.replace(".", ""),
-            uploaded_by=uploaded_by,
-            total_records=summary["total_records"],
-            imported_records=summary["records_after_cleanup"],
-            failed_records=0,
-            status=CustomerUpload.Status.COMPLETED,
-        )
+        if hasattr(uploaded_file, "seek"):
+            try:
+                uploaded_file.seek(0)
+            except Exception:
+                pass
+
+        try:
+            return CustomerUpload.objects.create(
+                original_file=uploaded_file,
+                file_name=uploaded_file.name,
+                file_type=extension.replace(".", ""),
+                uploaded_by=uploaded_by,
+                total_records=summary["total_records"],
+                imported_records=summary["records_after_cleanup"],
+                failed_records=0,
+                status=CustomerUpload.Status.COMPLETED,
+            )
+        except Exception:
+            return CustomerUpload.objects.create(
+                original_file=None,
+                file_name=uploaded_file.name,
+                file_type=extension.replace(".", ""),
+                uploaded_by=uploaded_by,
+                total_records=summary["total_records"],
+                imported_records=summary["records_after_cleanup"],
+                failed_records=0,
+                status=CustomerUpload.Status.COMPLETED,
+            )
 
     @staticmethod
     def save_records(upload, dataframe):
+        from .contact import ContactService
+
         # Store column order inside each record so PostgreSQL jsonb key-sorting can be reversed
         col_order = dataframe.columns.tolist()
         records = [
@@ -62,6 +82,22 @@ class CustomerImportService:
         ]
 
         CustomerRecord.objects.bulk_create(records)
+
+        # Upsert canonical Contact profiles in high-performance batch
+        rows_data = [row.to_dict() for _, row in dataframe.iterrows()]
+        try:
+            ContactService.bulk_upsert_contacts(
+                owner=upload.uploaded_by,
+                rows=rows_data,
+                default_source="imported",
+                initial_upload=upload,
+                sub_source_type="file",
+                sub_source_id=str(upload.id),
+                sub_source_name=upload.file_name,
+            )
+        except Exception:
+            pass
+
         return len(records)
 
     @staticmethod

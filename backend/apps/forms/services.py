@@ -230,43 +230,61 @@ class FormService:
             
             if field_type == "email" or "email" in label_lower:
                 contact_email = answer
-                customer_data["Email"] = answer
                 customer_data["email"] = answer
             elif field_type == "phone" or "phone" in label_lower or "number" in label_lower:
                 contact_phone = answer
-                customer_data["Phone"] = answer
                 customer_data["phone"] = answer
-                customer_data["phone_no"] = answer
-                customer_data["Number"] = answer
             elif field_type == "text" and "name" in label_lower:
                 contact_name = answer
-                customer_data["Name"] = answer
                 customer_data["name"] = answer
             else:
                 customer_data[field.get('label', field_id)] = answer
                 
-        if not customer_data.get("Name"):
-            customer_data["Name"] = contact_name or "Form User"
-            customer_data["name"] = customer_data["Name"]
-        if not customer_data.get("Email"):
-            customer_data["Email"] = contact_email
+        if not customer_data.get("name"):
+            customer_data["name"] = contact_name or "Form User"
+        if not customer_data.get("email") and contact_email:
             customer_data["email"] = contact_email
             
         customer_data["__submission_id__"] = submission.id
         customer_data["__form_id__"] = form.id
 
         try:
-            from apps.campaigns.models import CustomerUpload, CustomerRecord, Audience
+            from apps.campaigns.models import CustomerUpload, CustomerRecord
+            from apps.campaigns.services import ContactService
+            from apps.events.models import SystemEvent
             
+            form_title = form.title or f"Form #{form.id}"
             upload, _ = CustomerUpload.objects.get_or_create(
                 uploaded_by=form.created_by,
-                file_name="Form Submissions",
+                file_name=f"Form: {form_title}",
                 defaults={"file_type": "forms", "status": "COMPLETED"},
             )
             
             customer = CustomerRecord.objects.create(
                 upload=upload,
                 data=customer_data
+            )
+
+            contact, _ = ContactService.upsert_contact(
+                owner=form.created_by,
+                payload=customer_data,
+                default_source="form",
+                initial_upload=upload,
+                sub_source_type="form",
+                sub_source_id=str(form.id),
+                sub_source_name=form_title,
+            )
+
+            SystemEvent.objects.create(
+                event_type=SystemEvent.EventType.WEBSITE,
+                event_name="FORM_SUBMITTED",
+                user_identifier=contact.email or contact.phone or f"contact_{contact.id}",
+                contact=contact,
+                metadata={
+                    "form_id": form.id,
+                    "form_title": getattr(form, "title", f"Form {form.id}"),
+                    "submission_id": submission.id,
+                }
             )
             
             upload.total_records = upload.records.count()
