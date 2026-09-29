@@ -17,6 +17,6 @@ urlpatterns = [
     path("source-delete/", CustomerSourceDeleteAPIView.as_view(), name="customer-source-delete"),
     path("hierarchy/", ContactHierarchyAPIView.as_view(), name="customer-hierarchy"),
     path("", CustomerRecordListAPIView.as_view(), name="customer-list"),
-    path("<int:pk>/", CustomerRecordDetailAPIView.as_view(), name="customer-detail"),
     path("bulk-delete/", CustomerBulkDeleteAPIView.as_view(), name="customer-bulk-delete"),
+    path("<str:pk>/", CustomerRecordDetailAPIView.as_view(), name="customer-detail"),
 ]

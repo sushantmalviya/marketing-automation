@@ -48,14 +48,14 @@ function getFieldValue(data: Record<string, unknown>, col: string): string {
   }
 
   // 3. Known aliases for standard contact columns
-  if (["name", "full_name", "full name"].includes(colLower)) {
-    return val(data, ["name", "Name", "full_name", "Full Name", "first_name"], "");
+  if (col === "Name" || ["name", "full_name", "full name", "customer name", "client name", "user name", "person name", "first_name"].includes(colLower)) {
+    return val(data, ["name", "Name", "full_name", "Full Name", "customer_name", "Customer Name", "client_name", "first_name", "first name"], "");
   }
-  if (["email", "email_address", "email address"].includes(colLower)) {
-    return val(data, ["email", "Email", "email_address", "Email Address"], "");
+  if (col === "Email" || ["email", "email_address", "email address", "mail", "mail id", "e-mail"].includes(colLower)) {
+    return val(data, ["email", "Email", "email_address", "Email Address", "mail", "Mail", "mail_id"], "");
   }
-  if (["phone_no", "phone no", "phone", "number", "mobile", "mobile_no"].includes(colLower)) {
-    return val(data, ["phone_no", "Phone No", "phone", "Phone", "number", "Number", "mobile", "mobile_no"], "");
+  if (col === "Phone Number" || ["phone_no", "phone no", "phone", "number", "mobile", "mobile_no", "mobile number", "contact", "contact no", "telephone", "cell"].includes(colLower)) {
+    return val(data, ["phone_no", "Phone No", "phone", "Phone", "mobile_no", "Mobile No", "mobile", "Mobile", "number", "Number", "contact", "Contact", "phone_number", "Phone Number"], "");
   }
 
   return "";
@@ -65,9 +65,9 @@ function normalize(row: RecordRow): Contact {
   const rawTags = row.data.tags;
   const src = (row.data.__source__ || row.data._source) as string | undefined;
   return {
-    name:     val(row.data, ["name","full_name","Name","Full Name"], "Unnamed contact"),
-    email:    val(row.data, ["email","Email","email_address"]),
-    phone_no: val(row.data, ["phone_no","phone","Phone","mobile_no","mobile","Phone No","Number","number"]),
+    name:     getFieldValue(row.data, "Name") || val(row.data, ["name","full_name","Name","Full Name"], "Unnamed contact"),
+    email:    getFieldValue(row.data, "Email") || val(row.data, ["email","Email","email_address"]),
+    phone_no: getFieldValue(row.data, "Phone Number") || val(row.data, ["phone_no","phone","Phone","mobile_no","mobile","Phone No","Number","number"]),
     tags:     Array.isArray(rawTags) ? rawTags.map(String) : val(row.data, ["tags","Tags"]).split(",").map(t => t.trim()).filter(Boolean),
     list:     val(row.data, ["list","List","segment"], "General"),
     score:    Number(val(row.data, ["score","Score"], "0")) || 0,
@@ -138,37 +138,45 @@ export function AdminContacts() {
   const normalized = useMemo(() => rows.map(row => ({ row, contact: normalize(row) })), [rows]);
   const allTags = useMemo(() => Array.from(new Set(normalized.flatMap(({ contact }) => contact.tags))).sort(), [normalized]);
 
-  // Derive column keys from actual data — respecting original CSV order via __col_order__
+  // Derive column keys from actual data — enforcing compulsory Name, Email, Phone Number, plus dynamic custom columns
   const dynamicColumns = useMemo(() => {
-    if (!rows.length) return [];
+    const mandatory = ["Name", "Email", "Phone Number"];
+    if (!rows.length) return mandatory;
+
+    const extraCols: string[] = [];
+    const seenNormalized = new Set<string>();
+
     const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
     let cols: string[] = [];
     if (orderRow) {
       cols = (orderRow.data.__col_order__ as string[]);
     } else {
-      const seenNormalized = new Set<string>();
       for (const row of rows) {
         for (const key of Object.keys(row.data)) {
-          const norm = key.toLowerCase().trim();
-          if (!seenNormalized.has(norm)) {
-            seenNormalized.add(norm);
-            cols.push(key);
-          }
+          if (!cols.includes(key)) cols.push(key);
         }
       }
     }
-    const finalSeen = new Set<string>();
-    const filtered: string[] = [];
+
+    const canonicalStems = [
+      "name", "full_name", "fullname", "customer_name", "customername", "client_name", "clientname",
+      "user_name", "username", "person_name", "personname", "first_name", "firstname",
+      "email", "email_address", "emailaddress", "mail", "mail_id", "mailid",
+      "phone", "phone_no", "phoneno", "phone_number", "phonenumber", "mobile", "mobile_no", "mobileno",
+      "mobile_number", "mobilenumber", "number", "contact", "contact_no", "contactno", "contact_number", "contactnumber",
+      "tags", "list", "score", "status", "source", "activity", "routing_logs"
+    ];
+
     for (const col of cols) {
       const k = col.toLowerCase().trim();
-      if (k !== "__col_order__" && k !== "tags" && !k.startsWith("_") && !k.startsWith("__")) {
-        if (!finalSeen.has(k)) {
-          finalSeen.add(k);
-          filtered.push(col);
+      if (!k.startsWith("_") && !k.startsWith("__") && !canonicalStems.includes(k) && !canonicalStems.includes(k.replace(/[\s_]+/g, ""))) {
+        if (!seenNormalized.has(k)) {
+          seenNormalized.add(k);
+          extraCols.push(col);
         }
       }
     }
-    return filtered;
+    return [...mandatory, ...extraCols];
   }, [rows]);
 
   const contacts = useMemo(() => {
@@ -296,6 +304,38 @@ export function AdminContacts() {
   // ── helpers ───────────────────────────────────────────────────────────────────
   async function importFile(file?: File) {
     if (!file) return;
+
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      try {
+        const text = await file.slice(0, 4096).text();
+        const firstLine = text.split(/\r?\n/)[0] || "";
+        const headers = firstLine.split(",").map(h => h.replace(/^["']|["']$/g, "").trim());
+
+        const canonicalNameKeys = ["name", "fullname", "customername", "clientname", "username", "personname", "leadname", "first_name", "firstname"];
+        const canonicalEmailKeys = ["email", "emailaddress", "mail", "mailid", "useremail", "contactemail"];
+        const canonicalPhoneKeys = ["phone", "phoneno", "phonenumber", "mobile", "mobileno", "mobilenumber", "number", "contact", "contactno", "contactnumber", "cell", "telephone", "whatsapp"];
+
+        const hasName = headers.some(h => canonicalNameKeys.includes(h.toLowerCase().replace(/[^a-z0-9]/g, "")));
+        const hasEmail = headers.some(h => canonicalEmailKeys.includes(h.toLowerCase().replace(/[^a-z0-9]/g, "")));
+        const hasPhone = headers.some(h => canonicalPhoneKeys.includes(h.toLowerCase().replace(/[^a-z0-9]/g, "")));
+
+        const missing: string[] = [];
+        if (!hasName) missing.push("Name");
+        if (!hasEmail) missing.push("Email");
+        if (!hasPhone) missing.push("Phone Number");
+
+        if (missing.length > 0) {
+          toast.error(`Upload Failed: Missing compulsory column(s): ${missing.join(", ")}. File must contain Name, Email, and Phone Number.`, {
+            duration: 6000,
+          });
+          if (fileRef.current) fileRef.current.value = "";
+          return;
+        }
+      } catch {
+        // proceed to server validation
+      }
+    }
+
     const body = new FormData(); body.append("file", file);
     try {
       await apiClient.post("/api/customers/uploads/", body, { timeout: 60000 });

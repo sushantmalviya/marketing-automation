@@ -304,4 +304,68 @@ class DirectCampaignSendWorkflowTests(APITestCase):
         # Missing audience -> raises ValidationError
         with self.assertRaises(ValidationError):
             DeliveryService.send_campaign(campaign=campaign)
+
+
+class SmartColumnResolverTests(APITestCase):
+    def test_header_resolution_variations(self):
+        from apps.campaigns.utils import SmartColumnResolver
+
+        # Name variations
+        self.assertEqual(SmartColumnResolver.resolve_header("Customer Name"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("Full Name"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("NAME!"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("User Name"), "name")
+
+        # Phone variations
+        self.assertEqual(SmartColumnResolver.resolve_header("Mobile No."), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Contact Number"), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Phone_Num"), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Number"), "phone")
+
+        # Email variations
+        self.assertEqual(SmartColumnResolver.resolve_header("E-Mail Address"), "email")
+        self.assertEqual(SmartColumnResolver.resolve_header("Mail ID"), "email")
+        self.assertEqual(SmartColumnResolver.resolve_header("EmailID"), "email")
+
+        # Extra dynamic custom fields
+        self.assertEqual(SmartColumnResolver.resolve_header("Age"), "age")
+        self.assertEqual(SmartColumnResolver.resolve_header("Gender"), "gender")
+        self.assertEqual(SmartColumnResolver.resolve_header("Date of Birth"), "date_of_birth")
+
+    def test_data_sample_auto_detection(self):
+        from apps.campaigns.utils import SmartColumnResolver
+
+        # Ambiguous header with email values
+        self.assertEqual(
+            SmartColumnResolver.resolve_header("Col_1", ["test@example.com", "user@domain.org"]),
+            "email",
+        )
+        # Ambiguous header with phone values
+        self.assertEqual(
+            SmartColumnResolver.resolve_header("Field_X", ["+19876543210", "9876543210"]),
+            "phone",
+        )
+
+    def test_dataframe_resolution_and_name_merging(self):
+        import pandas as pd
+        from apps.campaigns.utils import normalize_dataframe_columns
+
+        df = pd.DataFrame({
+            "First Name": ["John", "Jane"],
+            "Last Name": ["Doe", "Smith"],
+            "E-Mail Address": ["john@example.com", "jane@example.com"],
+            "Mob. No.": ["1234567890", "0987654321"],
+            "Age": [25, 30],
+            "Gender": ["Male", "Female"],
+        })
+
+        normalized_df = normalize_dataframe_columns(df)
+        self.assertIn("name", normalized_df.columns)
+        self.assertIn("email", normalized_df.columns)
+        self.assertIn("phone", normalized_df.columns)
+        self.assertIn("age", normalized_df.columns)
+        self.assertIn("gender", normalized_df.columns)
+
+        self.assertEqual(normalized_df["name"].tolist(), ["John Doe", "Jane Smith"])
+
    

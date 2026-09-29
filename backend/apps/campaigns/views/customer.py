@@ -419,7 +419,7 @@ class ContactHierarchyAPIView(APIView):
         # 1. Imported Files & Manual contacts
         uploads = (
             CustomerUpload.objects.filter(uploaded_by=user)
-            .exclude(file_type__in=["forms", "meta"])
+            .exclude(file_type__in=["forms", "meta", "manual"])
             .values("id", "file_name")
             .annotate(count=Count("contacts"))
             .order_by("-count")

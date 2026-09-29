@@ -25,6 +25,22 @@ class CustomerImportService:
     def clean_dataframe(dataframe):
         original_records = len(dataframe)
         dataframe = normalize_dataframe_columns(dataframe)
+
+        # Validate mandatory columns
+        missing = []
+        if "name" not in dataframe.columns:
+            missing.append("Name")
+        if "email" not in dataframe.columns:
+            missing.append("Email")
+        if "phone" not in dataframe.columns:
+            missing.append("Phone Number")
+
+        if missing:
+            missing_str = ", ".join(missing)
+            raise ValidationError(
+                f"Upload failed: The file is missing compulsory column(s): {missing_str}. Please ensure your file contains Name, Email, and Phone Number columns."
+            )
+
         dataframe, removed_duplicates = remove_duplicates(dataframe)
 
         return {

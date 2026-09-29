@@ -71,6 +71,8 @@ class ContactService:
         source = ""
         attributes = {}
 
+        from apps.campaigns.utils import SmartColumnResolver
+
         for raw_key, value in payload.items():
             if value is None:
                 continue
@@ -80,13 +82,15 @@ class ContactService:
             if k_clean in ("__col_order__", "routing_logs"):
                 continue
 
-            if k_clean in cls.CANONICAL_EMAIL_KEYS:
+            resolved_key = SmartColumnResolver.resolve_header(raw_key, [value] if value else None)
+
+            if k_clean in cls.CANONICAL_EMAIL_KEYS or resolved_key == "email":
                 if not email:
                     email = cls.normalize_email(str(value))
-            elif k_clean in cls.CANONICAL_PHONE_KEYS:
+            elif k_clean in cls.CANONICAL_PHONE_KEYS or resolved_key == "phone":
                 if not phone:
                     phone = cls.normalize_phone(str(value))
-            elif k_clean in cls.CANONICAL_NAME_KEYS:
+            elif k_clean in cls.CANONICAL_NAME_KEYS or resolved_key == "name":
                 if not full_name:
                     full_name = str(value).strip()
             elif k_clean in cls.CANONICAL_FIRST_NAME_KEYS:
@@ -113,7 +117,7 @@ class ContactService:
                 if not source:
                     source = str(value).strip().lower()
             elif not str(raw_key).startswith("__") and not str(raw_key).startswith("_"):
-                if k_clean not in cls.ALL_CANONICAL_KEYS:
+                if k_clean not in cls.ALL_CANONICAL_KEYS and resolved_key not in ("email", "phone", "name"):
                     attributes[raw_key] = value
 
         if full_name and not (first_name or last_name):
