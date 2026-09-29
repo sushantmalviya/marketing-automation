@@ -10,20 +10,38 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='domainauthentication',
-            name='dkim_records',
-            field=models.JSONField(blank=True, default=list),
-        ),
-        migrations.AddField(
-            model_name='domainauthentication',
-            name='dkim_status',
-            field=models.CharField(default='PENDING', max_length=30),
-        ),
-        migrations.AddField(
-            model_name='domainauthentication',
-            name='mail_from_domain',
-            field=models.CharField(blank=True, default='', max_length=255),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name='domainauthentication',
+                    name='dkim_records',
+                    field=models.JSONField(blank=True, default=list),
+                ),
+                migrations.AddField(
+                    model_name='domainauthentication',
+                    name='dkim_status',
+                    field=models.CharField(default='PENDING', max_length=30),
+                ),
+                migrations.AddField(
+                    model_name='domainauthentication',
+                    name='mail_from_domain',
+                    field=models.CharField(blank=True, default='', max_length=255),
+                ),
+            ],
+            database_operations=[
+                migrations.RunSQL(
+                    sql="""
+                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_records jsonb DEFAULT '[]'::jsonb;
+                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_status varchar(30) DEFAULT 'PENDING';
+                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS mail_from_domain varchar(255) DEFAULT '';
+                    """,
+                    reverse_sql="""
+                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_records;
+                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_status;
+                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS mail_from_domain;
+                    """,
+                ),
+            ],
         ),
         migrations.AlterField(
             model_name='senderidentity',
