@@ -83,7 +83,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# AI Coding Assistants / IDE Caches / Planning
+# AI Coding Assistants / IDE Caches
 .codex/
 .cursor/
 .gemini/
@@ -121,3 +121,6 @@ env/
 
 # Logs
 *.log
+
+# Graphify Output
+graphify-out/

@@ -1,10 +1,15 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
 from apps.communications.views import (
     CommunicationEventListView,
+    WhatsAppConnectionViewSet,
     WhatsAppWebhookView,
     SESWebhookView,
 )
+
+router = DefaultRouter()
+router.register(r"whatsapp/connections", WhatsAppConnectionViewSet, basename="whatsapp-connections")
 from apps.communications.views_sender import (
     ConnectSESView,
     ConnectSMTPView,
@@ -20,13 +25,16 @@ from apps.communications.views_sender import (
 )
 
 urlpatterns = [
+    path("", include(router.urls)),
     path(
         "events/",
         CommunicationEventListView.as_view(),
+        name="communication-events",
     ),
     path(
         "webhooks/whatsapp/",
         WhatsAppWebhookView.as_view(),
+        name="whatsapp-webhook",
     ),
     path(
         "webhooks/ses/",

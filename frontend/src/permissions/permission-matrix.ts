@@ -6,12 +6,12 @@ export type Action = "view" | "create" | "update" | "delete" | "approve" | "publ
 const matrix: Record<UserRole, Partial<Record<ModuleKey, readonly Action[]>>> = {
   [ROLES.ADMIN]: {
     dashboard: ["view"], admins: ["view", "create", "delete"], users: ["view", "create", "delete"], analytics: ["view"],
-    audiences: ["view", "create"], automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view", "approve"],
+    audiences: ["view", "create"], automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view"],
     channels: ["view"], communications: ["view", "create"], content: ["view", "approve", "publish"], customers: ["view"], templates: ["view", "create", "update"],
   },
   [ROLES.USER]: {
     dashboard: ["view"], analytics: ["view"], audiences: ["view", "create"],
-    automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view", "create", "approve"], channels: ["view"],
+    automations: ["view", "create", "update", "delete", "execute"], campaigns: ["view", "create", "send"], channels: ["view"],
     communications: ["view", "create"], content: ["view", "create", "update", "approve", "publish"], customers: ["view", "create"], forms: ["view", "create", "update", "delete", "publish"], templates: ["view", "create", "update"],
     assets: ["view", "create", "update", "delete"],
   },

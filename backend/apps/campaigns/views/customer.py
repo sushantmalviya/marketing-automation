@@ -71,9 +71,12 @@ class CustomerRecordListAPIView(APIView):
             if sub_source_id_param == "manual":
                 contacts_qs = contacts_qs.filter(sub_source_type="manual")
             else:
-                contacts_qs = contacts_qs.filter(
-                    Q(sub_source_id=sub_source_id_param) | Q(initial_upload_id=sub_source_id_param)
-                )
+                if str(sub_source_id_param).isdigit():
+                    contacts_qs = contacts_qs.filter(
+                        Q(sub_source_id=sub_source_id_param) | Q(initial_upload_id=int(sub_source_id_param))
+                    )
+                else:
+                    contacts_qs = contacts_qs.filter(sub_source_id=sub_source_id_param)
 
         if audience_ids_str:
             audience_ids = [int(x.strip()) for x in audience_ids_str.split(",") if x.strip().isdigit()]

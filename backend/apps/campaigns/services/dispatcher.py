@@ -17,8 +17,15 @@ class Dispatcher:
         recipient = None
 
         try:
+            cust_data = delivery.customer.data or {}
+
             if channel_code == "EMAIL":
-                recipient = delivery.customer.data.get("email")
+                recipient = (
+                    cust_data.get("email")
+                    or cust_data.get("Email")
+                    or cust_data.get("email_id")
+                    or cust_data.get("Email_Id")
+                )
                 if not recipient:
                     raise ValueError("Customer email not found.")
                 
@@ -30,7 +37,15 @@ class Dispatcher:
                 )
             
             elif channel_code == "SMS":
-                recipient = delivery.customer.data.get("phone")
+                recipient = (
+                    cust_data.get("phone")
+                    or cust_data.get("phone_no")
+                    or cust_data.get("Phone")
+                    or cust_data.get("Phone_No")
+                    or cust_data.get("mobile")
+                    or cust_data.get("Mobile")
+                    or cust_data.get("phone_number")
+                )
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 
@@ -41,15 +56,33 @@ class Dispatcher:
                 )
             
             elif channel_code == "WHATSAPP":
-                recipient = delivery.customer.data.get("phone")
+                recipient = (
+                    cust_data.get("phone")
+                    or cust_data.get("phone_no")
+                    or cust_data.get("Phone")
+                    or cust_data.get("Phone_No")
+                    or cust_data.get("mobile")
+                    or cust_data.get("Mobile")
+                    or cust_data.get("phone_number")
+                )
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 
-                send_whatsapp(
+                result = send_whatsapp(
                     to=recipient,
                     message=delivery.rendered_message,
                     campaign=delivery.campaign,
+                    organization=getattr(delivery.campaign, "created_by", None),
                 )
+                if isinstance(result, str):
+                    provider_msg_id = result
+                else:
+                    provider_msg_id = ""
+                
+                return {
+                    "success": True,
+                    "provider_message_id": provider_msg_id,
+                }
             
             else:
                 raise ValueError(f"No dispatcher configured for channel {channel_code}")
@@ -58,6 +91,7 @@ class Dispatcher:
                 "success": True,
                 "provider_message_id": "",
             }
+
 
         except Exception as exc:
             logger.exception(

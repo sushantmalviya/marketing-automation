@@ -7,7 +7,10 @@ from rest_framework.exceptions import ValidationError
 
 from apps.campaigns.models import (
     Campaign,
+    CampaignAudience,
+    CampaignChannel,
     CampaignDelivery,
+    CampaignTemplate,
 )
 from apps.campaigns.services.dispatcher import Dispatcher
 from apps.campaigns.services.renderer import TemplateRenderer
@@ -82,11 +85,29 @@ class DeliveryService:
         """
 
         if campaign.status not in (
+            Campaign.Status.DRAFT,
             Campaign.Status.APPROVED,
             Campaign.Status.SCHEDULED,
         ):
             raise ValidationError(
                 "Campaign cannot be sent."
+            )
+
+        if not CampaignAudience.objects.filter(campaign=campaign).exists():
+            raise ValidationError(
+                "Campaign has no recipients."
+            )
+
+        campaign_channels = CampaignChannel.objects.filter(campaign=campaign)
+        if not campaign_channels.exists():
+            raise ValidationError(
+                "Campaign has no channels."
+            )
+
+        template_count = CampaignTemplate.objects.filter(campaign=campaign).count()
+        if template_count != campaign_channels.count():
+            raise ValidationError(
+                "Every selected channel must have an assigned template."
             )
 
     @staticmethod
