@@ -191,6 +191,11 @@ class CustomerRecordListAPIView(APIView):
                 sub_source_id=str(upload.id),
                 sub_source_name=upload.file_name,
             )
+            if contact_obj.initial_upload != upload or str(contact_obj.sub_source_id) != str(upload.id):
+                contact_obj.initial_upload = upload
+                contact_obj.sub_source_type = "file"
+                contact_obj.sub_source_id = str(upload.id)
+                contact_obj.save(update_fields=["initial_upload", "sub_source_type", "sub_source_id"])
             customer = CustomerRecord.objects.create(upload=upload, data={**contact_payload, "__source__": "imported"})
         else:
             upload, _ = CustomerUpload.objects.get_or_create(
@@ -207,6 +212,11 @@ class CustomerRecordListAPIView(APIView):
                 sub_source_id="manual",
                 sub_source_name="Manual Contacts",
             )
+            if contact_obj.initial_upload != upload or str(contact_obj.sub_source_id) != "manual":
+                contact_obj.initial_upload = upload
+                contact_obj.sub_source_type = "manual"
+                contact_obj.sub_source_id = "manual"
+                contact_obj.save(update_fields=["initial_upload", "sub_source_type", "sub_source_id"])
             customer = CustomerRecord.objects.create(upload=upload, data={**contact_payload, "__source__": "created"})
         
         if audience_id:
