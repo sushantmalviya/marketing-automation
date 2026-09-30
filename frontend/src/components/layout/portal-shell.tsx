@@ -72,6 +72,32 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
   const [open, setOpen]           = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: "1",
+      title: "Festival Offer Campaign Active",
+      message: "Your WhatsApp campaign was successfully scheduled and is now running.",
+      time: "25m ago",
+      read: false
+    },
+    {
+      id: "2",
+      title: "Instagram Connection Verified",
+      message: "Social channel sync completed. Ready for scheduled posts.",
+      time: "2h ago",
+      read: false
+    },
+    {
+      id: "3",
+      title: "Automation Milestone",
+      message: "Lead Nurturing Sequence crossed 4,000 enrolled contacts.",
+      time: "1d ago",
+      read: true
+    }
+  ]);
+  
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   
   // Theme toggler
   const { theme, toggle } = useTheme();
@@ -282,10 +308,97 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
               <Moon size={20} className="absolute top-2 left-2 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </button>
             
-            <button className="relative p-2 text-[#0a194f]/70 hover:text-[#00a8ff] hover:bg-[#00a8ff]/10 dark:text-white/70 dark:hover:text-[#00a8ff] dark:hover:bg-[#00a8ff]/20 rounded-full transition-all duration-300">
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 border-2 border-white dark:border-[#0c1222] rounded-full"></span>
-            </button>
+            {/* Notification Bell */}
+            <div className="relative">
+              <button 
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                aria-label="Notifications"
+                className="relative p-2 text-[#0a194f]/70 hover:text-[#00a8ff] hover:bg-[#00a8ff]/10 dark:text-white/70 dark:hover:text-[#00a8ff] dark:hover:bg-[#00a8ff]/20 rounded-full transition-all duration-300"
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-[#0c1222]">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-[110%] w-80 sm:w-96 bg-white dark:bg-[#111827] rounded-2xl shadow-[0_15px_50px_-10px_rgba(0,0,0,0.18)] border border-slate-100 dark:border-white/10 overflow-hidden z-50"
+                    >
+                      <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-white/5">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Notifications</h3>
+                          {unreadCount > 0 && (
+                            <span className="rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                              {unreadCount} new
+                            </span>
+                          )}
+                        </div>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5">
+                        {notifications.length === 0 ? (
+                          <div className="p-8 text-center text-slate-400 text-xs">
+                            No notifications
+                          </div>
+                        ) : (
+                          notifications.map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item))}
+                              className={`p-4 transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex gap-3 ${!n.read ? "bg-blue-50/30 dark:bg-blue-950/20" : ""}`}
+                            >
+                              <div className="mt-1">
+                                <span className={`inline-block h-2 w-2 rounded-full ${!n.read ? "bg-blue-500 animate-pulse" : "bg-transparent"}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-semibold ${!n.read ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400"}`}>
+                                  {n.title}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
+                                  {n.message}
+                                </p>
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 inline-block font-medium">
+                                  {n.time}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {notifications.length > 0 && (
+                        <div className="p-2 border-t border-slate-100 dark:border-white/10 bg-slate-50/30 dark:bg-white/[0.02] text-center">
+                          <button
+                            onClick={() => setNotifications([])}
+                            className="text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                          >
+                            Clear all notifications
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
 
             <div className="h-8 w-px bg-slate-200 dark:bg-white/10 hidden sm:block"></div>
             

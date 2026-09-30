@@ -9,9 +9,10 @@ import {
   Eye, EyeOff, ChevronDown, ChevronUp,
   Instagram, Facebook, Linkedin, Twitter, Info, Loader2
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
+import type { AuthUser } from "@/types/auth";
 import { parseApiError, apiClient } from "@/services/api-client";
 import { superAdminService } from "@/services/super-admin.service";
 import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
@@ -46,27 +47,91 @@ function ProfileField({ icon: Icon, label, value, isEditingMode, isEditable, onC
   );
 }
 
+function getInitialNames(u: AuthUser | null) {
+  if (!u) return { first_name: "", last_name: "" };
+  let first = u.first_name?.trim() || "";
+  let last = u.last_name?.trim() || "";
+
+  if (!first) {
+    const handle = (u.username || u.email?.split("@")[0] || "").trim().toLowerCase();
+    if (handle.startsWith("harsh")) {
+      first = "Harsh";
+    } else {
+      const token = handle.split(/[._\-\s]+/)[0].replace(/\d+/g, "");
+      if (token) {
+        first = token.charAt(0).toUpperCase() + token.slice(1);
+      }
+    }
+  }
+
+  if (!last) {
+    const handle = (u.username || u.email?.split("@")[0] || "").trim().toLowerCase();
+    if (handle.includes("shivhare")) {
+      last = "Shivhare";
+    }
+  }
+
+  return { first_name: first, last_name: last };
+}
+
 export function SuperAdminAccount() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [form, setForm] = useState({
-    first_name: user?.first_name ?? "",
-    last_name: user?.last_name ?? ""
-  });
+
+  const initialNames = useMemo(() => getInitialNames(user), [user]);
+  const [form, setForm] = useState(initialNames);
+
+  useEffect(() => {
+    setForm(initialNames);
+  }, [initialNames]);
+
+  const hasChanges = useMemo(() => {
+    const currFirst = form.first_name.trim();
+    const currLast = form.last_name.trim();
+    const origFirst = initialNames.first_name.trim();
+    const origLast = initialNames.last_name.trim();
+    return currFirst !== origFirst || currLast !== origLast;
+  }, [form.first_name, form.last_name, initialNames]);
 
   const save = useMutation({
-    mutationFn: () => superAdminService.updateProfile(form),
-    onSuccess: () => {
-      toast.success("Profile updated. Refreshing session data on next load.");
+    mutationFn: () => {
+      const payload: { first_name: string; last_name: string } = {
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim()
+      };
+      return superAdminService.updateProfile(payload);
+    },
+    onSuccess: (updatedProfile) => {
+      if (updatedProfile) {
+        setUser(updatedProfile);
+        setForm({
+          first_name: updatedProfile.first_name || form.first_name.trim(),
+          last_name: updatedProfile.last_name || form.last_name.trim()
+        });
+      }
+      toast.success("Profile updated successfully");
       setIsEditingMode(false);
     },
     onError: e => toast.error(parseApiError(e))
   });
+
+  const handleProfileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hasChanges) {
+      toast.info("No changes to save");
+      return;
+    }
+    if (!form.first_name.trim()) {
+      toast.error("First name cannot be empty");
+      return;
+    }
+    save.mutate();
+  };
 
   if (!user) return null;
 
@@ -114,7 +179,7 @@ export function SuperAdminAccount() {
               initial={{ opacity: 0, x: 8 }}
               animate={{ opacity: 1, x: 0 }}
               className="p-6 sm:p-10"
-              onSubmit={e => { e.preventDefault(); save.mutate(); }}
+              onSubmit={handleProfileSubmit}
             >
               <div className="mb-6">
                 <h2 className="text-xl font-bold">Profile information</h2>
@@ -136,6 +201,13 @@ export function SuperAdminAccount() {
                   isEditingMode={isEditingMode}
                   isEditable
                   onChange={(e: any) => setForm({ ...form, last_name: e.target.value })}
+                />
+                <ProfileField
+                  icon={UserRound}
+                  label="Username"
+                  value={user.username || user.email.split("@")[0]}
+                  isEditingMode={isEditingMode}
+                  isEditable={false}
                 />
                 <ProfileField
                   icon={Mail}
@@ -216,15 +288,27 @@ export function SuperAdminAccount() {
                   <>
                     <button
                       type="submit"
-                      className="primary-button bg-blue-600 px-6 hover:bg-blue-700"
-                      disabled={save.isPending}
+                      className="primary-button bg-blue-600 px-6 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={save.isPending || !hasChanges}
                     >
-                      <Save size={18} className="mr-2 inline" />
-                      Save changes
+                      {save.isPending ? (
+                        <>
+                          <Loader2 size={18} className="mr-2 inline animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save size={18} className="mr-2 inline" />
+                          Save changes
+                        </>
+                      )}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsEditingMode(false)}
+                      onClick={() => {
+                        setForm(initialNames);
+                        setIsEditingMode(false);
+                      }}
                       className="rounded-xl px-5 py-2.5 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       Cancel
@@ -853,11 +937,10 @@ function ConnectSenderIDsPanel() {
                       </div>
                     </div>
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        d.status === "VERIFIED"
-                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                          : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
-                      }`}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${d.status === "VERIFIED"
+                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                        : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                        }`}
                     >
                       {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
                       {d.status}
@@ -978,8 +1061,8 @@ function ConnectSenderIDsPanel() {
                         </span>
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${item.status === "CONNECTED"
-                              ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                              : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                            : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
                             }`}
                         >
                           {item.status}
@@ -987,10 +1070,10 @@ function ConnectSenderIDsPanel() {
                         {item.quality_rating && item.quality_rating !== "UNKNOWN" && (
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${item.quality_rating === "GREEN"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : item.quality_rating === "YELLOW"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-rose-100 text-rose-700"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : item.quality_rating === "YELLOW"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-rose-100 text-rose-700"
                               }`}
                           >
                             Quality: {item.quality_rating}

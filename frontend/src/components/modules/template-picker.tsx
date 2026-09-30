@@ -3,6 +3,7 @@ import { X, Search, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { apiClient } from "@/services/api-client";
+import { parseWhatsAppTemplate } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
 
 type Template = {
   id: number;
@@ -34,7 +35,10 @@ export function TemplatePickerModal({
   const filtered = (templates.data ?? []).filter((tpl) => 
     tpl.channel === channelId &&
     tpl.status === "ACTIVE" &&
-    (!search || tpl.name.toLowerCase().includes(search.toLowerCase()) || (tpl.subject ?? "").toLowerCase().includes(search.toLowerCase()))
+    (!search ||
+      tpl.name.toLowerCase().includes(search.toLowerCase()) ||
+      (tpl.subject ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (tpl.body ?? "").toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -60,7 +64,7 @@ export function TemplatePickerModal({
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} />
             <input
               className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              placeholder="Search by template name or subject..."
+              placeholder="Search by template name, subject, or content..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -80,27 +84,104 @@ export function TemplatePickerModal({
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((tpl) => (
-                <div key={tpl.id} className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg">
-                  <div className="p-5">
-                    <h3 className="font-bold text-slate-900 truncate" title={tpl.name}>{tpl.name}</h3>
-                    {tpl.subject && (
-                      <p className="mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate" title={tpl.subject}>Subj: <span className="text-slate-700 capitalize">{tpl.subject}</span></p>
-                    )}
-                    <div className="mt-3 text-xs leading-relaxed text-slate-600 line-clamp-4 overflow-hidden text-ellipsis whitespace-normal"
-                         dangerouslySetInnerHTML={{ __html: tpl.body.replace(/<[^>]*>?/gm, " ").trim() || "No content." }}
-                    />
-                  </div>
-                  <div className="border-t border-slate-50 bg-slate-50 p-4">
-                    <button
-                      className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
-                      onClick={() => onSelect(tpl)}
+              {filtered.map((tpl) => {
+                const isWhatsApp =
+                  tpl.channel_name?.toUpperCase().includes("WHATS") ||
+                  (tpl.subject && tpl.subject.trim().startsWith("{"));
+
+                if (isWhatsApp) {
+                  const wa = parseWhatsAppTemplate(tpl.subject, tpl.body);
+                  return (
+                    <div
+                      key={tpl.id}
+                      className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-lg"
                     >
-                      Use This Template
-                    </button>
+                      <div className="p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-slate-900 truncate" title={tpl.name}>
+                            {tpl.name}
+                          </h3>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 uppercase">
+                            WhatsApp · {wa.category || "Marketing"}
+                          </span>
+                          {wa.header && wa.header.type !== "NONE" && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                              {wa.header.type === "IMAGE"
+                                ? "📷 Image Header"
+                                : wa.header.type === "VIDEO"
+                                ? "🎥 Video Header"
+                                : wa.header.type === "DOCUMENT"
+                                ? "📄 Document"
+                                : "Header: Text"}
+                            </span>
+                          )}
+                          {wa.buttons && wa.buttons.length > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                              🔘 {wa.buttons.length} Button{wa.buttons.length > 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 text-xs leading-relaxed text-slate-600 line-clamp-3 overflow-hidden text-ellipsis whitespace-normal">
+                          {wa.body || "No message content."}
+                        </div>
+                        {wa.footer && (
+                          <p className="mt-1.5 text-[11px] italic text-slate-400 truncate">
+                            _{wa.footer}_
+                          </p>
+                        )}
+                      </div>
+                      <div className="border-t border-slate-50 bg-slate-50 p-4">
+                        <button
+                          className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                          onClick={() => onSelect(tpl)}
+                        >
+                          Use This Template
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Default rendering for Email, SMS, and other channels
+                return (
+                  <div
+                    key={tpl.id}
+                    className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg"
+                  >
+                    <div className="p-5">
+                      <h3 className="font-bold text-slate-900 truncate" title={tpl.name}>
+                        {tpl.name}
+                      </h3>
+                      {tpl.subject && (
+                        <p
+                          className="mt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate"
+                          title={tpl.subject}
+                        >
+                          Subj: <span className="text-slate-700 capitalize">{tpl.subject}</span>
+                        </p>
+                      )}
+                      <div
+                        className="mt-3 text-xs leading-relaxed text-slate-600 line-clamp-4 overflow-hidden text-ellipsis whitespace-normal"
+                        dangerouslySetInnerHTML={{
+                          __html: tpl.body.replace(/<[^>]*>?/gm, " ").trim() || "No content.",
+                        }}
+                      />
+                    </div>
+                    <div className="border-t border-slate-50 bg-slate-50 p-4">
+                      <button
+                        className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                        onClick={() => onSelect(tpl)}
+                      >
+                        Use This Template
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

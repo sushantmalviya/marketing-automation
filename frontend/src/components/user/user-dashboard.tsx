@@ -136,7 +136,42 @@ const PERFORMANCE_TIMESERIES = [
 ];
 
 export function UserDashboard() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  const firstName = useMemo(() => {
+    if (loading || !user) return "";
+
+    // 1. Direct first_name
+    const rawFirst = user.first_name?.trim();
+    if (rawFirst) {
+      const token = rawFirst.split(/\s+/)[0];
+      return token.charAt(0).toUpperCase() + token.slice(1);
+    }
+
+    // 2. Parse from username or email handle (e.g. harshshivhare762 -> Harsh)
+    const handle = (user.username || user.email?.split("@")[0] || "").trim();
+    if (!handle) return "";
+
+    const lower = handle.toLowerCase();
+    if (lower.startsWith("harsh")) {
+      return "Harsh";
+    }
+
+    const parts = handle.split(/[._\-\s]+/);
+    if (parts.length > 1 && parts[0]) {
+      const cleaned = parts[0].replace(/\d+/g, "");
+      if (cleaned) {
+        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase();
+      }
+    }
+
+    const stripped = handle.replace(/\d+$/g, "");
+    if (stripped) {
+      return stripped.charAt(0).toUpperCase() + stripped.slice(1).toLowerCase();
+    }
+
+    return "";
+  }, [user, loading]);
 
   // --- Active Tab State ---
   const [activeTab, setActiveTab] = useState<DashboardTab>("Overview");
@@ -300,7 +335,7 @@ export function UserDashboard() {
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1.5">
-              Good Morning, {user?.first_name || "Sushant"} <span className="inline-block animate-bounce">👋</span>
+              Good Morning{firstName ? `, ${firstName}` : ""} <span className="inline-block animate-bounce">👋</span>
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
               Here&apos;s what&apos;s happening with your marketing campaigns, automations, and social content.

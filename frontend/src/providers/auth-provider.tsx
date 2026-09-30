@@ -9,9 +9,12 @@ import { isUserRole } from "@/constants/roles";
 import type { AuthUser } from "@/types/auth";
 
 interface AuthContextValue {
-  user: AuthUser | null; loading: boolean;
+  user: AuthUser | null;
+  loading: boolean;
   login(email: string, password: string, rememberMe?: boolean): Promise<void>;
   logout(): Promise<void>;
+  setUser: React.Dispatch<React.SetStateAction<AuthUser | null>>;
+  refreshUser(): Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -78,7 +81,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { if (refresh) await authService.logout(refresh); } finally { clear(); router.replace("/login"); }
   }, [clear, router]);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const refreshUser = useCallback(async () => {
+    try {
+      const profile = await authService.profile();
+      setUser(profile);
+      return profile;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, loading, login, logout, setUser, refreshUser }),
+    [user, loading, login, logout, refreshUser]
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

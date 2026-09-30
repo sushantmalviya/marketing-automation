@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
+import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, ExternalLink, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Phone, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Tag, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
 import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,6 +15,9 @@ import { useDateRange } from "@/components/ui/date-range-picker";
 import { useAuth } from "@/providers/auth-provider";
 import { PromptEnhancerModal } from "@/components/user/prompt-enhancer-modal";
 import { TemplatePickerModal } from "@/components/modules/template-picker";
+import { WhatsAppPreview } from "@/components/user/templates/whatsapp-builder/whatsapp-preview";
+import { parseWhatsAppTemplate, serializeWhatsAppMetadata, compileWhatsAppMessage } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
+import type { WhatsAppTemplateData } from "@/components/user/templates/whatsapp-builder/whatsapp-types";
 
 type TaskInfo = { id: number; title: string; description: string; instructions: string; audience: number; audience_name: string; channels: number[]; priority: string; status: string; due_date: string; created_at?: string };
 type Assignment = { id: number; task: TaskInfo; status: string; remarks: string; created_at: string; updated_at: string; submitted_at: string | null };
@@ -856,29 +859,143 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
         </motion.div>}
 
         {/* ── Step 2: Template per channel ── */}
-        {step === 2 && currentChannel && <motion.div key={`ch-${channelIndex}`} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold ${isEmail(currentChannel.name) ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"}`}>{channelIndex + 1}</span>
-                <h2 className="text-2xl font-black">{currentChannel.name} Template</h2>
+        {step === 2 && currentChannel && (() => {
+          const isWhatsAppChannel = currentChannel.name.toUpperCase().includes("WHATS");
+          const waData = isWhatsAppChannel ? parseWhatsAppTemplate(currentCT.subject, currentCT.body) : null;
+
+          return (
+            <motion.div key={`ch-${channelIndex}`} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold ${isEmail(currentChannel.name) ? "bg-blue-100 text-blue-700" : isWhatsAppChannel ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>{channelIndex + 1}</span>
+                    <h2 className="text-2xl font-black">{currentChannel.name} Template</h2>
+                  </div>
+                  <p className="text-sm text-slate-500 ml-10">Template {channelIndex + 1} of {taskChannels.length} — auto-saved to My Templates on Next</p>
+                </div>
+                <button type="button" className="secondary-button flex items-center gap-2 border-blue-300 px-5 text-blue-600" onClick={() => setPickerOpen(true)}><FileText size={17} />My Templates</button>
               </div>
-              <p className="text-sm text-slate-500 ml-10">Template {channelIndex + 1} of {taskChannels.length} — auto-saved to My Templates on Next</p>
-            </div>
-            <button type="button" className="secondary-button flex items-center gap-2 border-blue-300 px-5 text-blue-600" onClick={() => setPickerOpen(true)}><FileText size={17} />My Templates</button>
-          </div>
-          <div className="mt-7 space-y-5">
-            <label className="field"><span>Template Name <b className="text-red-500">*</b></span><input placeholder={`${form.name} - ${currentChannel.name}`} value={currentCT.template_name} onChange={e => setCurrentCT({ template_name: e.target.value, template_id: "" })} /></label>
-            {isEmail(currentChannel.name) && <label className="field"><span>Subject <span className="ml-1 text-[10px] font-normal text-slate-400">(max 255 characters)</span></span><input placeholder="Email subject line" maxLength={255} value={currentCT.subject ?? ""} onChange={e => setCurrentCT({ subject: e.target.value, template_id: "" })} /><span className={`mt-1 block text-right text-[11px] font-semibold ${(currentCT.subject?.length ?? 0) > 220 ? "text-red-500" : (currentCT.subject?.length ?? 0) > 180 ? "text-amber-500" : "text-slate-400"}`}>{currentCT.subject?.length ?? 0}/255</span></label>}
-            <label className="field"><span>Body <b className="text-red-500">*</b></span>
-              <RichBodyEditor
-                value={currentCT.body}
-                onChange={(body: string) => setCurrentCT({ body, template_id: "" })}
-                placeholder={`Enter ${currentChannel.name} message body...`}
-              />
-            </label>
-          </div>
-        </motion.div>}
+              <div className="mt-7 space-y-5">
+                <label className="field">
+                  <span>Template Name <b className="text-red-500">*</b></span>
+                  <input
+                    placeholder={`${form.name} - ${currentChannel.name}`}
+                    value={currentCT.template_name}
+                    onChange={e => setCurrentCT({ template_name: e.target.value, template_id: "" })}
+                  />
+                </label>
+                {isEmail(currentChannel.name) && (
+                  <label className="field">
+                    <span>Subject <span className="ml-1 text-[10px] font-normal text-slate-400">(max 255 characters)</span></span>
+                    <input
+                      placeholder="Email subject line"
+                      maxLength={255}
+                      value={currentCT.subject ?? ""}
+                      onChange={e => setCurrentCT({ subject: e.target.value, template_id: "" })}
+                    />
+                    <span className={`mt-1 block text-right text-[11px] font-semibold ${(currentCT.subject?.length ?? 0) > 220 ? "text-red-500" : (currentCT.subject?.length ?? 0) > 180 ? "text-amber-500" : "text-slate-400"}`}>
+                      {currentCT.subject?.length ?? 0}/255
+                    </span>
+                  </label>
+                )}
+
+                {isWhatsAppChannel && waData ? (
+                  <div className="space-y-4">
+                    {/* Header Summary / Preview */}
+                    {waData.header && waData.header.type !== "NONE" && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                            <ImageIcon size={14} className="text-emerald-600" />
+                            Header ({waData.header.type})
+                          </span>
+                        </div>
+                        {waData.header.type === "IMAGE" && waData.header.mediaUrl ? (
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-200">
+                              <img
+                                src={resolveApiUrl(waData.header.mediaUrl)}
+                                alt="Header preview"
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 truncate max-w-md font-mono" title={waData.header.mediaUrl}>
+                              {waData.header.mediaUrl}
+                            </span>
+                          </div>
+                        ) : waData.header.type === "TEXT" && waData.header.text ? (
+                          <p className="text-sm font-semibold text-slate-800">{waData.header.text}</p>
+                        ) : (
+                          <p className="text-xs text-slate-500 font-mono truncate">{waData.header.mediaUrl || "Media header configured"}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* WhatsApp Body Editor */}
+                    <label className="field">
+                      <span>Message Body <b className="text-red-500">*</b></span>
+                      <textarea
+                        rows={6}
+                        className="w-full rounded-xl border border-slate-200 p-3.5 text-sm leading-relaxed text-slate-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 font-sans"
+                        placeholder="Enter WhatsApp message body... Use {{variable}} for personalization."
+                        value={waData.body}
+                        onChange={(e) => {
+                          const updated: WhatsAppTemplateData = {
+                            ...waData,
+                            body: e.target.value,
+                          };
+                          setCurrentCT({
+                            template_id: "",
+                            body: compileWhatsAppMessage(updated),
+                            subject: serializeWhatsAppMetadata(updated),
+                          });
+                        }}
+                      />
+                    </label>
+
+                    {/* Footer indicator */}
+                    {waData.footer && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between text-xs">
+                        <span className="font-bold uppercase tracking-wider text-slate-500">Footer</span>
+                        <span className="italic text-slate-600 truncate max-w-md">{waData.footer}</span>
+                      </div>
+                    )}
+
+                    {/* CTA Buttons preview */}
+                    {waData.buttons && waData.buttons.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Configured Buttons ({waData.buttons.length})</span>
+                        <div className="flex flex-wrap gap-2">
+                          {waData.buttons.map((btn, idx) => (
+                            <span key={btn.id || idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700">
+                              {btn.type === "URL" ? <ExternalLink size={13} className="text-blue-500" /> : btn.type === "PHONE_NUMBER" ? <Phone size={13} className="text-emerald-500" /> : <Tag size={13} className="text-purple-500" />}
+                              <span>{btn.text}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ({btn.url || btn.phoneNumber || btn.couponCode || btn.type})
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="field">
+                    <span>Body <b className="text-red-500">*</b></span>
+                    <RichBodyEditor
+                      value={currentCT.body}
+                      onChange={(body: string) => setCurrentCT({ body, template_id: "" })}
+                      placeholder={`Enter ${currentChannel.name} message body...`}
+                    />
+                  </label>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {/* ── Step 3: Preview ── */}
         {step === 3 && <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
@@ -935,10 +1052,25 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
 
             <div className="grid lg:grid-cols-[280px_1fr]">
               {(() => {
-                const activeChId = taskChannels[previewChannelIdx]?.id;
+                const activeCh = taskChannels[previewChannelIdx];
+                const activeChId = activeCh?.id;
                 const activeCT = form.channelTemplates[String(activeChId ?? "")] ?? { template_id: "", template_name: "", subject: "", body: "" };
-                const combinedText = (activeCT.subject || "") + (activeCT.body || "");
-                const usedVars = Array.from(new Set([...combinedText.matchAll(/\{\{(.*?)\}\}/g)].map((m: RegExpMatchArray) => m[1].trim())));
+                const isWhatsapp = (activeCh?.name || "").toUpperCase().includes("WHATS");
+
+                let usedVars: string[] = [];
+                if (isWhatsapp) {
+                  const waData = parseWhatsAppTemplate(activeCT.subject, activeCT.body);
+                  const waText = [
+                    waData.header?.text || "",
+                    waData.body || "",
+                    waData.footer || "",
+                    ...(waData.buttons || []).map(b => `${b.text} ${b.url || ""} ${b.phoneNumber || ""} ${b.couponCode || ""}`)
+                  ].join(" ");
+                  usedVars = Array.from(new Set([...waText.matchAll(/\{\{(.*?)\}\}/g)].map(m => m[1].trim())));
+                } else {
+                  const combinedText = (activeCT.subject || "") + (activeCT.body || "");
+                  usedVars = Array.from(new Set([...combinedText.matchAll(/\{\{(.*?)\}\}/g)].map((m: RegExpMatchArray) => m[1].trim())));
+                }
 
                 return (
                   <div className="flex flex-col gap-4 border-b border-slate-200 p-5 lg:border-b-0 lg:border-r bg-white">
@@ -1009,27 +1141,31 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                       </div>
                     )}
 
-                    {isWhatsapp && (
-                      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-[#efeae2] shadow-sm overflow-hidden relative h-[600px] flex flex-col">
-                        <div className="bg-[#075e54] px-4 py-3 text-white flex items-center gap-3">
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-300 overflow-hidden"><User size={24} className="text-[#075e54]" /></span>
-                          <div>
-                            <p className="font-bold">Your Brand</p>
-                            <p className="text-[10px] text-white/80">Business Account</p>
-                          </div>
+                    {isWhatsapp && (() => {
+                      const waData = parseWhatsAppTemplate(activeCT.subject, activeCT.body);
+                      const resolvedWA: WhatsAppTemplateData = {
+                        ...waData,
+                        header: {
+                          ...waData.header,
+                          text: resolveText(waData.header?.text),
+                        },
+                        body: resolveText(waData.body),
+                        footer: resolveText(waData.footer),
+                        buttons: (waData.buttons || []).map(b => ({
+                          ...b,
+                          text: resolveText(b.text),
+                          url: resolveText(b.url),
+                          phoneNumber: resolveText(b.phoneNumber),
+                          couponCode: resolveText(b.couponCode),
+                        })),
+                      };
+
+                      return (
+                        <div className="w-full flex justify-center py-2">
+                          <WhatsAppPreview data={resolvedWA} />
                         </div>
-                        <div className="flex-1 p-4 overflow-y-auto" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundSize: 'cover', backgroundBlendMode: 'overlay', backgroundColor: 'rgba(239, 234, 226, 0.9)' }}>
-                          <div className="bg-white rounded-tr-xl rounded-b-xl p-3 shadow-sm text-[15px] leading-snug text-slate-900 w-[90%] whitespace-pre-wrap float-left">
-                            <div dangerouslySetInnerHTML={{ __html: resolvedBody.replace(/\n/g, "<br/>") || "<span style='color:#94a3b8'>No message...</span>" }} />
-                            <p className="text-[10px] text-right text-slate-400 mt-2">11:30 AM</p>
-                          </div>
-                        </div>
-                        <div className="bg-[#f0f0f0] p-2 flex gap-2 items-center">
-                          <div className="bg-white rounded-full flex-1 px-4 py-2.5 text-sm text-slate-400">Message</div>
-                          <div className="bg-[#00a884] rounded-full h-10 w-10 flex items-center justify-center text-white"><Mic size={18} /></div>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {isSms && (
                       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden relative h-[600px] flex flex-col">

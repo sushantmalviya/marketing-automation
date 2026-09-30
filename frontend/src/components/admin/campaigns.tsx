@@ -12,8 +12,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from "recharts";
-import { apiClient, parseApiError } from "@/services/api-client";
+import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
 import { toast } from "sonner";
+import { parseWhatsAppTemplate, renderFormattedWhatsAppText } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
 
 type Campaign = {
   id: number;
@@ -567,7 +568,7 @@ function ChannelPreviewCard({ preview }: { preview: ChannelPreview }) {
   const isSms = code.includes("SMS");
 
   if (isEmail) return <EmailPreview subject={preview.subject} body={preview.body} />;
-  if (isWhatsApp) return <WhatsAppPreview body={preview.body} />;
+  if (isWhatsApp) return <WhatsAppPreview subject={preview.subject} body={preview.body} />;
   if (isSms) return <SmsPreview body={preview.body} />;
 
   // Generic fallback
@@ -605,7 +606,10 @@ function EmailPreview({ subject, body }: { subject: string; body: string }) {
   );
 }
 
-function WhatsAppPreview({ body }: { body: string }) {
+function WhatsAppPreview({ subject, body }: { subject?: string; body: string }) {
+  const data = parseWhatsAppTemplate(subject, body);
+  const mediaUrl = data.header.mediaUrl ? resolveApiUrl(data.header.mediaUrl) : "";
+
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Header bar */}
@@ -616,12 +620,53 @@ function WhatsAppPreview({ body }: { body: string }) {
         <span className="text-sm font-bold text-emerald-700">WhatsApp</span>
       </div>
       {/* Chat area */}
-      <div className="flex flex-1 flex-col bg-[#ece5dd] p-4">
-        <div className="max-w-[90%] self-start rounded-b-2xl rounded-tr-2xl bg-white px-4 py-3 shadow-sm">
-          <p className="text-sm text-slate-800 whitespace-pre-wrap">{body}</p>
-          <p className="mt-1.5 text-right text-[10px] text-slate-400">
+      <div className="flex flex-1 flex-col bg-[#ece5dd] p-4 space-y-2">
+        <div className="max-w-[95%] self-start rounded-b-2xl rounded-tr-2xl bg-white p-3.5 shadow-sm space-y-2">
+          {/* Header */}
+          {data.header.type === "IMAGE" && mediaUrl && (
+            <div className="rounded-lg overflow-hidden bg-slate-100 max-h-[180px] flex items-center justify-center border border-slate-100">
+              <img
+                src={mediaUrl}
+                alt={data.header.mediaName || "Header Banner"}
+                className="w-full h-auto max-h-[180px] object-contain rounded-lg"
+              />
+            </div>
+          )}
+          {data.header.type === "TEXT" && data.header.text && (
+            <p className="font-bold text-xs text-slate-900 border-b border-slate-100 pb-1">{data.header.text}</p>
+          )}
+
+          {/* Body */}
+          <div
+            className="text-sm text-slate-800 whitespace-pre-line leading-relaxed break-words"
+            dangerouslySetInnerHTML={renderFormattedWhatsAppText(data.body)}
+          />
+
+          {/* Footer */}
+          {data.footer && (
+            <p className="text-[11px] text-slate-400 italic pt-0.5">{data.footer}</p>
+          )}
+
+          <p className="mt-1 text-right text-[10px] text-slate-400">
             {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </p>
+
+          {/* Buttons */}
+          {data.buttons.length > 0 && (
+            <div className="border-t border-slate-100 pt-2 space-y-1">
+              {data.buttons.map((btn, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-50 text-xs font-semibold text-[#00a884] border border-slate-100"
+                >
+                  <span>{btn.text}</span>
+                  {btn.url && <span className="text-[10px] text-slate-400 font-normal">({btn.url})</span>}
+                  {btn.phoneNumber && <span className="text-[10px] text-slate-400 font-normal">({btn.phoneNumber})</span>}
+                  {btn.couponCode && <span className="text-[10px] text-slate-400 font-normal">({btn.couponCode})</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       {/* Input bar */}
