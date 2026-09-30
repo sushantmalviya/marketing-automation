@@ -56,8 +56,11 @@ class LoginSerializer(serializers.Serializer):
         return attrs
     
 class ProfileSerializer(serializers.ModelSerializer):
-
     role = serializers.SerializerMethodField()
+    organization_id = serializers.SerializerMethodField()
+    organization_name = serializers.SerializerMethodField()
+    rental_status = serializers.SerializerMethodField()
+    wallet_balance = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -73,12 +76,33 @@ class ProfileSerializer(serializers.ModelSerializer):
             "last_login",
             "date_joined",
             "role",
+            "organization_id",
+            "organization_name",
+            "rental_status",
+            "wallet_balance",
         ]
         read_only_fields = fields
 
     def get_role(self, obj):
         ma_user = obj.ma_users.first()
         return ma_user.role if ma_user else ("ADMIN" if obj.is_superuser else "USER")
+
+    def get_organization_id(self, obj):
+        return str(obj.organization_id) if obj.organization_id else None
+
+    def get_organization_name(self, obj):
+        return obj.organization.name if obj.organization else None
+
+    def get_rental_status(self, obj):
+        if obj.organization and hasattr(obj.organization, 'subscription'):
+            return obj.organization.subscription.rent_status
+        return "N/A"
+
+    def get_wallet_balance(self, obj):
+        if obj.organization and hasattr(obj.organization, 'subscription'):
+            return str(obj.organization.subscription.wallet_balance)
+        return "0.00"
+
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -257,18 +281,22 @@ class CreateAdminSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         password = validated_data.pop("password")
+        request = self.context.get("request")
+        admin_org = getattr(request.user, "organization", None) if request and hasattr(request, "user") else None
+
         user = User.objects.create_user(
             password=password,
+            organization=admin_org,
             **validated_data,
         )
 
         MAUser.objects.create(
             user=user,
+            organization=admin_org,
             role="USER",
         )
 
         return user
-    
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -301,14 +329,19 @@ class CreateUserSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         password = validated_data.pop("password")
+        request = self.context.get("request")
+        admin_org = getattr(request.user, "organization", None) if request and hasattr(request, "user") else None
+
         user = User.objects.create_user(
             password=password,
+            organization=admin_org,
             **validated_data,
         )
 
         MAUser.objects.create(
             user=user,
-            role="USER",   
+            organization=admin_org,
+            role="USER",
         )
 
         return user

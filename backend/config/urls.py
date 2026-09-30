@@ -18,6 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apps.accounts.views import ListAdminsView, ListUsersView, AdminDetailView
+from apps.accounts.views_external import (
+    ExternalOrganizationProvisionView,
+    ExternalOrganizationRentalUpdateView,
+    ExternalOrganizationUsageReportView,
+)
 
 # ── Inline asset library view (avoids sub-module reload timing issues) ─────────
 import os, uuid as _uuid
@@ -150,12 +155,14 @@ urlpatterns = [
         "api/content/",
         include("apps.content_studio.urls"),
     ),
-    path(
-        "api/integrations/",
-        include("apps.integrations.urls"),
-    ),
+    path("api/integrations/", include("apps.integrations.urls")),
     path("api/assets/",          _AssetListCreate.as_view(), name="asset-list-create"),
     path("api/assets/<uuid:pk>/", _AssetDetail.as_view(),    name="asset-detail"),
+
+    # External Master Integration APIs (Provisioning, Rental Management, Usage Reporting)
+    path("api/v1/external/organizations/provision/", ExternalOrganizationProvisionView.as_view(), name="external-org-provision"),
+    path("api/v1/external/organizations/<str:external_company_id>/rental/", ExternalOrganizationRentalUpdateView.as_view(), name="external-org-rental-update"),
+    path("api/v1/external/organizations/<str:external_company_id>/usage/", ExternalOrganizationUsageReportView.as_view(), name="external-org-usage-report"),
 ]
 
 import sys
