@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,9 +8,9 @@ import {
   User as UserIcon, Mail, Phone, Calendar, Building2,
   ShieldCheck, UserCircle2, Briefcase, UserPlus, Pencil,
   Eye, EyeOff, ChevronDown, ChevronUp,
-  Instagram, Facebook, Linkedin, Twitter, Info, Loader2
+  Instagram, Facebook, Linkedin, Twitter, Info, Loader2,
+  Trash2, X, MessageSquare, MessageSquareMore, ExternalLink, ChevronRight, CheckCircle2
 } from "lucide-react";
-import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import type { AuthUser } from "@/types/auth";
@@ -20,7 +21,6 @@ import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
 import { ConnectEmailModal } from "@/components/admin/account/connect-email-modal";
 import { ConnectWhatsAppModal } from "@/components/admin/account/connect-whatsapp-modal";
 import { ConnectSMSModal } from "@/components/admin/account/connect-sms-modal";
-import { MessageSquare, MessageSquareMore, ExternalLink, ChevronRight, CheckCircle2 } from "lucide-react";
 
 function ProfileField({ icon: Icon, label, value, isEditingMode, isEditable, onChange }: any) {
   return (
@@ -824,6 +824,7 @@ function ConnectSenderIDsPanel() {
   const [activeModal, setActiveModal] = useState<"EMAIL" | "WHATSAPP" | "SMS" | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingDomain, setDeletingDomain] = useState<{ id: string; domain: string } | null>(null);
   const qc = useQueryClient();
 
   const { data: senderIdentities = [] } = useQuery({
@@ -853,6 +854,20 @@ function ConnectSenderIDsPanel() {
     onError: (err) => {
       toast.error(parseApiError(err));
       setDeletingId(null);
+    },
+  });
+
+  const deleteDomainMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/communications/sender-domains/${id}/`),
+    onSuccess: () => {
+      toast.success("Domain authentication removed successfully");
+      void qc.invalidateQueries({ queryKey: ["sender-domains"] });
+      void qc.invalidateQueries({ queryKey: ["sender-identities"] });
+      setDeletingDomain(null);
+    },
+    onError: (err) => {
+      toast.error(parseApiError(err));
+      setDeletingDomain(null);
     },
   });
 
@@ -936,15 +951,26 @@ function ConnectSenderIDsPanel() {
                         </div>
                       </div>
                     </div>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${d.status === "VERIFIED"
-                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                        : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          d.status === "VERIFIED"
+                            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                            : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
                         }`}
-                    >
-                      {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
-                      {d.status}
-                    </span>
+                      >
+                        {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
+                        {d.status}
+                      </span>
+                      <button
+                        title="Remove domain authentication"
+                        onClick={() => setDeletingDomain({ id: d.id, domain: d.domain })}
+                        className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-900/40"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1211,6 +1237,42 @@ function ConnectSenderIDsPanel() {
         onClose={() => setActiveModal(null)}
         onSuccess={() => void qc.invalidateQueries({ queryKey: ["sender-identities"] })}
       />
+
+      {/* Delete Domain Confirmation Modal */}
+      {deletingDomain && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Remove Domain Authentication</h3>
+              <button onClick={() => setDeletingDomain(null)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="py-5 text-sm text-slate-600 dark:text-slate-300 space-y-3">
+              <p>Are you sure you want to remove domain <strong className="text-slate-900 dark:text-white">{deletingDomain.domain}</strong>?</p>
+              <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-xl border border-rose-100 dark:border-rose-900/40">
+                <strong>Warning:</strong> Deleting this domain will revoke its DKIM/SPF verification status. Emails sent from this domain will no longer be authenticated.
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setDeletingDomain(null)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleteDomainMutation.isPending}
+                onClick={() => deleteDomainMutation.mutate(deletingDomain.id)}
+                className="flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-rose-700 transition disabled:opacity-50"
+              >
+                {deleteDomainMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Remove Domain
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

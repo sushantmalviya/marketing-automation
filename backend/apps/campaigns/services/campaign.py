@@ -17,8 +17,8 @@ class CampaignService:
         if campaign.created_by != user:
             raise PermissionDenied("You can only edit your own campaigns.")
             
-        if campaign.status not in [Campaign.Status.DRAFT, Campaign.Status.REJECTED]:
-            raise ValidationError("Only draft or rejected campaigns can be edited.")
+        if campaign.status not in [Campaign.Status.DRAFT, Campaign.Status.REJECTED, Campaign.Status.APPROVED, Campaign.Status.PENDING_APPROVAL]:
+            raise ValidationError("Only uncompleted campaigns can be edited.")
             
         was_rejected = campaign.status == Campaign.Status.REJECTED
         
@@ -39,10 +39,11 @@ class CampaignService:
             
         campaign.save(update_fields=["name", "description", "target_audience", "updated_at"])
 
-        if audience_updated:
+        if audience_updated or not CampaignAudience.objects.filter(campaign=campaign).exists():
             CampaignAudience.objects.filter(campaign=campaign).delete()
-            if campaign.target_audience and campaign.target_audience.customer_upload:
+            if campaign.target_audience:
                 customers = AudienceService.get_customers(
+                    user=campaign.created_by,
                     customer_upload=campaign.target_audience.customer_upload,
                     audience_definition=campaign.target_audience.definition or {},
                 )
@@ -103,8 +104,9 @@ class CampaignService:
             status=Campaign.Status.DRAFT,
         )
 
-        if target_audience and target_audience.customer_upload:
+        if target_audience:
             customers = AudienceService.get_customers(
+                user=user,
                 customer_upload=target_audience.customer_upload,
                 audience_definition=target_audience.definition or {},
             )

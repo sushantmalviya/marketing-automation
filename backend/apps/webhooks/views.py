@@ -124,11 +124,32 @@ def meta_lead_webhook(request):
             }
             
             try:
-                from apps.campaigns.models import CustomerUpload
-                upload, _ = CustomerUpload.objects.get_or_create(file_name="Meta Webhooks")
+                from apps.campaigns.models import CustomerUpload, CustomerRecord
+                from apps.campaigns.services import ContactService
+                
+                campaign_name = lead_data.get('campaign_name') or f"Campaign {campaign_id}" if campaign_id else "Meta Lead Campaign"
+                upload, _ = CustomerUpload.objects.get_or_create(
+                    file_name=f"Meta: {campaign_name}",
+                    defaults={"file_type": "meta", "status": "COMPLETED"}
+                )
                 CustomerRecord.objects.create(upload=upload, data=customer_data)
+                
+                # Try finding lead owner if credential exists
+                from apps.ads.models import MetaUserCredential
+                credential = MetaUserCredential.objects.first()
+                owner = credential.user if credential else None
+                if owner:
+                    ContactService.upsert_contact(
+                        owner=owner,
+                        payload=customer_data,
+                        default_source="meta",
+                        initial_upload=upload,
+                        sub_source_type="meta_campaign",
+                        sub_source_id=str(campaign_id or ad_id or "meta_campaign"),
+                        sub_source_name=campaign_name,
+                    )
             except Exception as model_err:
-                logger.error(f"Failed to create CustomerRecord: {str(model_err)}")
+                logger.error(f"Failed to create CustomerRecord/Contact: {str(model_err)}")
                 
             return HttpResponse("Success", status=200)
             

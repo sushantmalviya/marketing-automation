@@ -41,6 +41,13 @@ class SystemEvent(models.Model):
     
     event_name = models.CharField(max_length=100, db_index=True, blank=True)
     user_identifier = models.CharField(max_length=255, db_index=True, blank=True)
+    contact = models.ForeignKey(
+        "campaigns.Contact",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
     
     session_id = models.CharField(max_length=255, blank=True, db_index=True)
     url = models.CharField(max_length=2048, blank=True)

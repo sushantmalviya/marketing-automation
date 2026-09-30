@@ -12,6 +12,9 @@ class DomainAuthenticationSerializer(serializers.ModelSerializer):
             "dns_record_type",
             "dns_record_name",
             "dns_record_value",
+            "dkim_records",
+            "dkim_status",
+            "mail_from_domain",
             "status",
             "verified_at",
             "created_at",
@@ -23,6 +26,9 @@ class DomainAuthenticationSerializer(serializers.ModelSerializer):
             "dns_record_type",
             "dns_record_name",
             "dns_record_value",
+            "dkim_records",
+            "dkim_status",
+            "mail_from_domain",
             "status",
             "verified_at",
             "created_at",
@@ -80,15 +86,21 @@ class SenderIdentitySerializer(serializers.ModelSerializer):
         return ""
 
 
+class ConnectSESSenderSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    display_name = serializers.CharField(required=False, allow_blank=True, default="")
+
+
 class ConnectSMTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     display_name = serializers.CharField(required=False, allow_blank=True, default="")
-    provider = serializers.ChoiceField(choices=["YAHOO", "CUSTOM_SMTP"], default="CUSTOM_SMTP")
+    provider = serializers.ChoiceField(choices=["CUSTOM_SMTP"], default="CUSTOM_SMTP")
     host = serializers.CharField()
     port = serializers.IntegerField(default=587)
     security = serializers.ChoiceField(choices=["SSL/TLS", "STARTTLS", "NONE"], default="STARTTLS")
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
 
 
 class WhatsAppEmbeddedSignupSerializer(serializers.Serializer):

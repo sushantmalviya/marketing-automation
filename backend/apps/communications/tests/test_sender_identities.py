@@ -101,7 +101,7 @@ class SenderIdentityTests(APITestCase):
         identity = SenderIdentity.objects.create(
             user=self.user,
             email="delete@example.com",
-            provider="YAHOO",
+            provider="CUSTOM_SMTP",
             connection_type="SMTP",
             status="CONNECTED"
         )
@@ -110,19 +110,27 @@ class SenderIdentityTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(SenderIdentity.objects.filter(id=identity.id).exists())
 
-    def test_google_oauth_url(self):
-        url = "/api/communications/sender-identities/oauth/google/url/"
-        with self.settings(GOOGLE_CLIENT_ID="mock-google-client-id"):
-            response = self.client.get(url)
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn("https://accounts.google.com/o/oauth2/v2.0/auth", response.data["url"])
-            self.assertIn("mock-google-client-id", response.data["url"])
+    def test_connect_aws_ses_identity(self):
+        # Pre-create verified domain
+        domain_auth = DomainAuthentication.objects.create(
+            user=self.user,
+            domain="customdomain.com",
+            verification_token="token123",
+            dns_record_value="automarket-verify=token123",
+            status="VERIFIED"
+        )
 
-    def test_microsoft_oauth_url(self):
-        url = "/api/communications/sender-identities/oauth/microsoft/url/"
-        with self.settings(MICROSOFT_CLIENT_ID="mock-microsoft-client-id"):
-            response = self.client.get(url)
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn("https://login.microsoftonline.com/common/oauth2/v2.0/authorize", response.data["url"])
-            self.assertIn("mock-microsoft-client-id", response.data["url"])
+        url = "/api/communications/sender-identities/connect-ses/"
+        payload = {
+            "email": "newsletter@customdomain.com",
+            "display_name": "SaaS Newsletter"
+        }
+        
+        response = self.client.post(url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["email"], "newsletter@customdomain.com")
+        self.assertEqual(response.data["provider"], "AWS_SES")
+        self.assertEqual(response.data["status"], "CONNECTED")
+        self.assertEqual(response.data["domain"], "customdomain.com")
+
 

@@ -1,0 +1,1010 @@
+{
+  "campaignName": "Playwright Real WA Flow 1790595191703",
+  "consoleErrors": [],
+  "networkRequests": [
+    {
+      "url": "http://127.0.0.1:8000/api/auth/login/",
+      "method": "POST",
+      "status": 200,
+      "payload": {
+        "email": "harshshivhare762@gmail.com",
+        "password": "harshshivhare762@gmail.com"
+      },
+      "response": {
+        "success": true,
+        "message": "Login successful.",
+        "data": {
+          "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzkwNTk2OTgxLCJpYXQiOjE3OTA1OTUxODEsImp0aSI6IjgwNzYyMzg3YjRiNjRjNjZhZTEyZjZkY2Q1ZTAwMGVhIiwidXNlcl9pZCI6IjU4In0.eLzEIcbw2oNobtZqv79Zj5YShMPcslD6yZRj-BX-JDA",
+          "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc5MTE5OTk4MSwiaWF0IjoxNzkwNTk1MTgxLCJqdGkiOiIxNmUwZjgyNjExMjM0YTdjYmEzZmE4YTdkMzcxODZkYiIsInVzZXJfaWQiOiI1OCJ9.WO90LkUMvspYys1uviN4TBdLBkbpZDZLmofYyl2FRao",
+          "user": {
+            "id": 58,
+            "email": "harshshivhare762@gmail.com",
+            "role": "USER",
+            "is_active": true,
+            "last_login": "2026-09-28T11:33:01.058567Z"
+          }
+        }
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/auth/token/refresh/",
+      "method": "POST",
+      "status": 200,
+      "payload": {
+        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc5MTE5OTk4MSwiaWF0IjoxNzkwNTk1MTgxLCJqdGkiOiIxNmUwZjgyNjExMjM0YTdjYmEzZmE4YTdkMzcxODZkYiIsInVzZXJfaWQiOiI1OCJ9.WO90LkUMvspYys1uviN4TBdLBkbpZDZLmofYyl2FRao"
+      },
+      "response": {
+        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzkwNTk2OTgzLCJpYXQiOjE3OTA1OTUxODQsImp0aSI6IjQ3MjJhNDg1MTc4NDQ3ZDBiMzlkMTQ4ZTA2MjhiZTk3IiwidXNlcl9pZCI6IjU4In0.K-vMHRN3PDa89P8TaDDW-Wmt2DJHWVqD3zZnFYnKqnA"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/auth/profile/",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": {
+        "id": 58,
+        "email": "harshshivhare762@gmail.com",
+        "username": null,
+        "first_name": "Harsh",
+        "last_name": "Shivhare",
+        "is_active": true,
+        "is_staff": false,
+        "is_superuser": false,
+        "last_login": "2026-09-28T17:03:01.058567+05:30",
+        "date_joined": "2026-07-20T15:37:33.957660+05:30",
+        "role": "USER"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/my/?page=1&search=",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": {
+        "count": 3,
+        "next": null,
+        "previous": null,
+        "results": [
+          {
+            "id": 93,
+            "campaign_name": "Mayur Rudrawal",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "test",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "DRAFT",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-28T16:04:27.025324+05:30",
+            "updated_at": "2026-09-28T16:04:27.025340+05:30",
+            "submitted_at": null,
+            "approved_at": null,
+            "approved_by": "",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "edit",
+              "delete",
+              "send",
+              "schedule"
+            ]
+          },
+          {
+            "id": 84,
+            "campaign_name": "Real WhatsApp Campaign Verification",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "COMPLETED",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-25T10:42:41.122208+05:30",
+            "updated_at": "2026-09-25T10:42:41.122228+05:30",
+            "submitted_at": null,
+            "approved_at": "2026-09-25T10:42:41.121474+05:30",
+            "approved_by": "harshshivhare762@gmail.com",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "view"
+            ]
+          },
+          {
+            "id": 83,
+            "campaign_name": "Real WhatsApp Campaign Verification",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "APPROVED",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-25T10:40:17.868657+05:30",
+            "updated_at": "2026-09-25T10:40:17.868674+05:30",
+            "submitted_at": null,
+            "approved_at": "2026-09-25T10:40:17.867966+05:30",
+            "approved_by": "harshshivhare762@gmail.com",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "edit",
+              "delete",
+              "send",
+              "schedule"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/audiences/",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": [
+        {
+          "id": 46,
+          "name": "Form leads",
+          "customer_upload": null,
+          "customer_upload_name": "All Contacts",
+          "definition": {
+            "type": "DYNAMIC",
+            "is_group": true,
+            "conditions": [
+              {
+                "field": "source",
+                "value": "form",
+                "operator": "contains"
+              }
+            ]
+          },
+          "type": "DYNAMIC",
+          "contacts_count": 0,
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-08-13T15:17:03.648940+05:30",
+          "updated_at": "2026-08-13T15:17:03.649012+05:30"
+        },
+        {
+          "id": 45,
+          "name": "Imported contacts",
+          "customer_upload": null,
+          "customer_upload_name": "All Contacts",
+          "definition": {
+            "type": "DYNAMIC",
+            "is_group": true,
+            "conditions": [
+              {
+                "field": "source",
+                "value": "imported",
+                "operator": "contains"
+              }
+            ]
+          },
+          "type": "DYNAMIC",
+          "contacts_count": 1010,
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-08-13T12:39:54.808435+05:30",
+          "updated_at": "2026-08-13T12:39:54.808463+05:30"
+        },
+        {
+          "id": 43,
+          "name": "Meta leads",
+          "customer_upload": null,
+          "customer_upload_name": "All Contacts",
+          "definition": {
+            "type": "DYNAMIC",
+            "is_group": true,
+            "conditions": [
+              {
+                "field": "source",
+                "value": "meta",
+                "operator": "contains"
+              }
+            ]
+          },
+          "type": "DYNAMIC",
+          "contacts_count": 0,
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-08-13T12:04:12.679204+05:30",
+          "updated_at": "2026-08-13T12:04:12.679231+05:30"
+        },
+        {
+          "id": 56,
+          "name": "test",
+          "customer_upload": null,
+          "customer_upload_name": "All Contacts",
+          "definition": {
+            "type": "STATIC",
+            "groups": [
+              {
+                "operator": "AND",
+                "conditions": [
+                  {
+                    "field": "Phone No",
+                    "value": "7806030359",
+                    "operator": "contains"
+                  }
+                ]
+              }
+            ],
+            "static_ids": [
+              14523
+            ],
+            "description": "",
+            "base_group_ids": [
+              45
+            ],
+            "groups_operator": "OR"
+          },
+          "type": "STATIC",
+          "contacts_count": 1,
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T12:52:09.488303+05:30",
+          "updated_at": "2026-09-28T12:52:09.488322+05:30"
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/auth/profile/",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": {
+        "id": 58,
+        "email": "harshshivhare762@gmail.com",
+        "username": null,
+        "first_name": "Harsh",
+        "last_name": "Shivhare",
+        "is_active": true,
+        "is_staff": false,
+        "is_superuser": false,
+        "last_login": "2026-09-28T17:03:01.058567+05:30",
+        "date_joined": "2026-07-20T15:37:33.957660+05:30",
+        "role": "USER"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/channels/",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": [
+        {
+          "id": 1,
+          "name": "Email",
+          "code": "EMAIL",
+          "description": "Email Campaign",
+          "icon": null
+        },
+        {
+          "id": 2,
+          "name": "WhatsApp",
+          "code": "WHATSAPP",
+          "description": "WhatsApp Campaign",
+          "icon": null
+        },
+        {
+          "id": 3,
+          "name": "SMS",
+          "code": "SMS",
+          "description": "SMS Campaign",
+          "icon": null
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/templates/",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": [
+        {
+          "id": 110,
+          "name": "132343",
+          "channel": 1,
+          "channel_name": "Email",
+          "subject": "shfhd",
+          "body": "hii hi hih hi",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-09T15:23:22.429600+05:30",
+          "updated_at": "2026-09-09T15:23:22.429857+05:30"
+        },
+        {
+          "id": 149,
+          "name": "789",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "4575",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T15:44:38.410526+05:30",
+          "updated_at": "2026-09-28T15:44:44.681461+05:30"
+        },
+        {
+          "id": 146,
+          "name": "ABC",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<div>What can you do&nbsp;</div><div><br></div>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T15:04:33.640838+05:30",
+          "updated_at": "2026-09-28T15:04:41.321555+05:30"
+        },
+        {
+          "id": 145,
+          "name": "ABC",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<div>What can you do&nbsp;</div><div><br></div>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T15:04:33.166348+05:30",
+          "updated_at": "2026-09-28T15:04:33.166369+05:30"
+        },
+        {
+          "id": 123,
+          "name": "DUMMY",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>MayurTestCamping</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T11:47:57.332682+05:30",
+          "updated_at": "2026-09-28T11:48:07.061133+05:30"
+        },
+        {
+          "id": 150,
+          "name": "Mayur Test",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "12345",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T16:04:23.368330+05:30",
+          "updated_at": "2026-09-28T16:04:29.319091+05:30"
+        },
+        {
+          "id": 148,
+          "name": "Pakaging",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "mayur&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T15:34:33.481565+05:30",
+          "updated_at": "2026-09-28T15:34:38.806926+05:30"
+        },
+        {
+          "id": 132,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:40.325939+05:30",
+          "updated_at": "2026-09-28T14:17:40.325951+05:30"
+        },
+        {
+          "id": 138,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:42.288793+05:30",
+          "updated_at": "2026-09-28T14:17:42.288807+05:30"
+        },
+        {
+          "id": 139,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:42.772643+05:30",
+          "updated_at": "2026-09-28T14:17:42.772659+05:30"
+        },
+        {
+          "id": 140,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:43.117448+05:30",
+          "updated_at": "2026-09-28T14:17:43.117460+05:30"
+        },
+        {
+          "id": 141,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:43.443555+05:30",
+          "updated_at": "2026-09-28T14:17:43.443567+05:30"
+        },
+        {
+          "id": 142,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:43.746930+05:30",
+          "updated_at": "2026-09-28T14:17:43.746944+05:30"
+        },
+        {
+          "id": 144,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:44.469037+05:30",
+          "updated_at": "2026-09-28T14:17:44.469051+05:30"
+        },
+        {
+          "id": 143,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:44.169604+05:30",
+          "updated_at": "2026-09-28T14:17:53.024914+05:30"
+        },
+        {
+          "id": 147,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "I am Mayur Rudrawal&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T15:10:10.093799+05:30",
+          "updated_at": "2026-09-28T15:10:20.521023+05:30"
+        },
+        {
+          "id": 125,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:38.169307+05:30",
+          "updated_at": "2026-09-28T14:17:38.169321+05:30"
+        },
+        {
+          "id": 126,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:38.522613+05:30",
+          "updated_at": "2026-09-28T14:17:38.522629+05:30"
+        },
+        {
+          "id": 127,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:38.821929+05:30",
+          "updated_at": "2026-09-28T14:17:38.821944+05:30"
+        },
+        {
+          "id": 128,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:39.122255+05:30",
+          "updated_at": "2026-09-28T14:17:39.122272+05:30"
+        },
+        {
+          "id": 129,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:39.422894+05:30",
+          "updated_at": "2026-09-28T14:17:39.422910+05:30"
+        },
+        {
+          "id": 130,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:39.722943+05:30",
+          "updated_at": "2026-09-28T14:17:39.722958+05:30"
+        },
+        {
+          "id": 131,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:40.027548+05:30",
+          "updated_at": "2026-09-28T14:17:40.027561+05:30"
+        },
+        {
+          "id": 133,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "what do you want to do&nbsp;",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:40.626790+05:30",
+          "updated_at": "2026-09-28T14:17:40.626803+05:30"
+        },
+        {
+          "id": 134,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:40.925670+05:30",
+          "updated_at": "2026-09-28T14:17:40.925682+05:30"
+        },
+        {
+          "id": 135,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:41.224776+05:30",
+          "updated_at": "2026-09-28T14:17:41.224790+05:30"
+        },
+        {
+          "id": 136,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:41.592966+05:30",
+          "updated_at": "2026-09-28T14:17:41.592980+05:30"
+        },
+        {
+          "id": 137,
+          "name": "TEST",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "<b>what do you want to do&nbsp;</b>",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T14:17:41.911487+05:30",
+          "updated_at": "2026-09-28T14:17:41.911500+05:30"
+        },
+        {
+          "id": 124,
+          "name": "Test",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "hi mayur",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T12:58:07.431664+05:30",
+          "updated_at": "2026-09-28T12:58:17.412085+05:30"
+        },
+        {
+          "id": 122,
+          "name": "Test",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "hgfdsjhgfd bgvfcd",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-25T12:11:28.455537+05:30",
+          "updated_at": "2026-09-25T12:11:38.010840+05:30"
+        },
+        {
+          "id": 118,
+          "name": "Test Ch 2 Template",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": "",
+          "body": "Hello test",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-13T14:38:23.423236+05:30",
+          "updated_at": "2026-09-13T15:40:57.909623+05:30"
+        },
+        {
+          "id": 121,
+          "name": "WhatsApp Campaign Test Template",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": null,
+          "body": "Hi Mayur - campaign test",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-25T10:42:40.851078+05:30",
+          "updated_at": "2026-09-25T10:42:40.851085+05:30"
+        },
+        {
+          "id": 120,
+          "name": "WhatsApp Campaign Test Template",
+          "channel": 2,
+          "channel_name": "WhatsApp",
+          "subject": null,
+          "body": "Hi Mayur - campaign test",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-25T10:40:17.582017+05:30",
+          "updated_at": "2026-09-25T10:40:17.582038+05:30"
+        },
+        {
+          "id": 119,
+          "name": "hbbfg",
+          "channel": 3,
+          "channel_name": "SMS",
+          "subject": "",
+          "body": "ce",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-24T11:47:45.785717+05:30",
+          "updated_at": "2026-09-24T11:47:45.785729+05:30"
+        },
+        {
+          "id": 106,
+          "name": "test email",
+          "channel": 1,
+          "channel_name": "Email",
+          "subject": "abcd",
+          "body": "hello {{name}} sir,\nwe would like to",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-03T15:58:38.944318+05:30",
+          "updated_at": "2026-09-03T15:58:38.944339+05:30"
+        },
+        {
+          "id": 114,
+          "name": "test template",
+          "channel": 1,
+          "channel_name": "Email",
+          "subject": "for testing purpose",
+          "body": "HIi Mr {{name}} , how are you this is test main",
+          "status": "ACTIVE",
+          "created_by": 58,
+          "created_by_name": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-09T15:56:33.893230+05:30",
+          "updated_at": "2026-09-09T15:56:33.893246+05:30"
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/create/",
+      "method": "POST",
+      "status": 200,
+      "payload": {
+        "name": "Playwright Real WA Flow 1790595191703",
+        "description": "",
+        "audience": 56
+      },
+      "response": {
+        "message": "Campaign created successfully.",
+        "campaign": {
+          "id": 94,
+          "task": null,
+          "name": "Playwright Real WA Flow 1790595191703",
+          "description": "",
+          "status": "DRAFT",
+          "created_by": "harshshivhare762@gmail.com",
+          "created_at": "2026-09-28T11:33:18.934212Z"
+        }
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/channels/94/",
+      "method": "POST",
+      "status": 200,
+      "payload": {
+        "channels": [
+          2
+        ]
+      },
+      "response": {
+        "message": "Channels assigned successfully."
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/templates/149/",
+      "method": "PATCH",
+      "status": 200,
+      "payload": {
+        "subject": "",
+        "body": "4575"
+      },
+      "response": {
+        "message": "Template updated successfully.",
+        "campaign_status": "DRAFT"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/templates/assign/",
+      "method": "POST",
+      "status": 201,
+      "payload": {
+        "campaign": 94,
+        "channel": 2,
+        "template": 149
+      },
+      "response": {
+        "message": "Template assigned to campaign successfully."
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/my/?page=1&search=",
+      "method": "GET",
+      "status": 200,
+      "payload": null,
+      "response": {
+        "count": 4,
+        "next": null,
+        "previous": null,
+        "results": [
+          {
+            "id": 94,
+            "campaign_name": "Playwright Real WA Flow 1790595191703",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "test",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "DRAFT",
+            "scheduled_at": null,
+            "contacts": 1,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-28T17:03:18.934212+05:30",
+            "updated_at": "2026-09-28T17:03:18.934221+05:30",
+            "submitted_at": null,
+            "approved_at": null,
+            "approved_by": "",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "edit",
+              "delete",
+              "send",
+              "schedule"
+            ]
+          },
+          {
+            "id": 93,
+            "campaign_name": "Mayur Rudrawal",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "test",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "DRAFT",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-28T16:04:27.025324+05:30",
+            "updated_at": "2026-09-28T16:04:27.025340+05:30",
+            "submitted_at": null,
+            "approved_at": null,
+            "approved_by": "",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "edit",
+              "delete",
+              "send",
+              "schedule"
+            ]
+          },
+          {
+            "id": 84,
+            "campaign_name": "Real WhatsApp Campaign Verification",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "COMPLETED",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-25T10:42:41.122208+05:30",
+            "updated_at": "2026-09-25T10:42:41.122228+05:30",
+            "submitted_at": null,
+            "approved_at": "2026-09-25T10:42:41.121474+05:30",
+            "approved_by": "harshshivhare762@gmail.com",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "view"
+            ]
+          },
+          {
+            "id": 83,
+            "campaign_name": "Real WhatsApp Campaign Verification",
+            "task_id": null,
+            "task_name": "",
+            "audience_name": "",
+            "channels": [
+              "WhatsApp"
+            ],
+            "status": "APPROVED",
+            "scheduled_at": null,
+            "contacts": 0,
+            "sent": 0,
+            "delivered": 0,
+            "opened": 0,
+            "clicked": 0,
+            "created_at": "2026-09-25T10:40:17.868657+05:30",
+            "updated_at": "2026-09-25T10:40:17.868674+05:30",
+            "submitted_at": null,
+            "approved_at": "2026-09-25T10:40:17.867966+05:30",
+            "approved_by": "harshshivhare762@gmail.com",
+            "submitted_by_name": "Harsh Shivhare",
+            "rejection_reason": null,
+            "review_comments": null,
+            "available_actions": [
+              "edit",
+              "delete",
+              "send",
+              "schedule"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/send/",
+      "method": "POST",
+      "status": 200,
+      "payload": {
+        "campaign": 94
+      },
+      "response": {
+        "message": "Campaign sent successfully."
+      }
+    },
+    {
+      "url": "http://127.0.0.1:8000/api/campaigns/my/?page=1&search=",
+      "method": "GET",
+      "payload": null
+    }
+  ]
+}

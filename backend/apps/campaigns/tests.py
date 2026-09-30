@@ -116,3 +116,256 @@ class AdminCampaignWorkspaceTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["total_customers"], 2)
+    def test_contact_sub_source_hierarchy_and_filtering(self):
+        from apps.campaigns.models import Contact
+        from apps.campaigns.services import ContactService
+
+        # Create contacts with distinct sub-sources
+        ContactService.upsert_contact(
+            owner=self.admin,
+            payload={"email": "form1@example.com", "name": "Form Lead 1"},
+            default_source="form",
+            sub_source_type="form",
+            sub_source_id="form_101",
+            sub_source_name="Newsletter Signup Form",
+        )
+        ContactService.upsert_contact(
+            owner=self.admin,
+            payload={"email": "meta1@example.com", "name": "Meta Lead 1"},
+            default_source="meta",
+            sub_source_type="meta_campaign",
+            sub_source_id="camp_999",
+            sub_source_name="Fall Clearance Promo",
+        )
+
+        # Test hierarchy endpoint
+        response = self.client.get(reverse("customer-hierarchy"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        categories = response.data["categories"]
+        self.assertIn("imported", categories)
+        self.assertIn("forms", categories)
+        self.assertIn("meta", categories)
+
+        forms_items = categories["forms"]["items"]
+        self.assertTrue(any(f["id"] == "form_101" for f in forms_items))
+
+        meta_items = categories["meta"]["items"]
+        self.assertTrue(any(m["id"] == "camp_999" for m in meta_items))
+
+        # Test filtering by sub_source
+        filtered_form = self.client.get(
+            reverse("customer-list"),
+            {"sub_source_type": "form", "sub_source_id": "form_101"},
+        )
+        self.assertEqual(filtered_form.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(filtered_form.data), 1)
+        self.assertEqual(filtered_form.data[0]["data"]["email"], "form1@example.com")
+
+
+
+class DirectCampaignSendWorkflowTests(APITestCase):
+    def setUp(self):
+        from apps.campaigns.models import Channel, Template, CampaignChannel, CampaignTemplate, CampaignAudience
+        from unittest.mock import patch
+
+        self.user = User.objects.create_user(
+            email="regular-user@example.com",
+            password="StrongPass123!",
+        )
+        MAUser.objects.create(user=self.user, role="USER")
+
+        self.other_user = User.objects.create_user(
+            email="other-user@example.com",
+            password="StrongPass123!",
+        )
+        MAUser.objects.create(user=self.other_user, role="USER")
+
+        self.upload = CustomerUpload.objects.create(
+            file_name="test-list.csv",
+            uploaded_by=self.user,
+            status=CustomerUpload.Status.COMPLETED,
+        )
+        self.customer = CustomerRecord.objects.create(
+            upload=self.upload,
+            data={"email": "client@example.com", "phone": "1234567890", "name": "Client"}
+        )
+        self.audience = Audience.objects.create(
+            name="Client list",
+            customer_upload=self.upload,
+            created_by=self.user,
+        )
+        self.channel = Channel.objects.create(
+            name="Email Channel",
+            code="EMAIL",
+        )
+        self.template = Template.objects.create(
+            name="Welcome Email",
+            channel=self.channel,
+            subject="Welcome {{name}}",
+            body="Hello {{name}}",
+            created_by=self.user,
+        )
+
+    def test_user_can_send_own_draft_campaign_directly(self):
+        from unittest.mock import patch
+        self.client.force_authenticate(self.user)
+
+        # 1. Create campaign
+        res = self.client.post(
+            reverse("campaign-create"),
+            {"audience": self.audience.id, "name": "Direct Launch", "description": "No approval needed"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        campaign_id = res.data["campaign"]["id"]
+        campaign = Campaign.objects.get(id=campaign_id)
+        self.assertEqual(campaign.status, Campaign.Status.DRAFT)
+        self.assertEqual(campaign.audience.count(), 1)
+        self.assertEqual(campaign.audience.first().customer.id, self.customer.id)
+
+        # 2. Assign channel & template
+        from apps.campaigns.models import CampaignChannel, CampaignTemplate
+        CampaignChannel.objects.create(campaign=campaign, channel=self.channel)
+        CampaignTemplate.objects.create(campaign=campaign, channel=self.channel, template=self.template)
+
+        # 3. Direct send immediately from DRAFT
+        with patch("apps.campaigns.tasks.send_campaign_background.delay") as mock_task:
+            send_res = self.client.post(
+                reverse("campaign-send"),
+                {"campaign": campaign.id},
+                format="json",
+            )
+            self.assertEqual(send_res.status_code, status.HTTP_200_OK)
+            mock_task.assert_called_once_with(campaign.id)
+
+    def test_campaign_creation_materializes_selected_audience_recipients(self):
+        self.client.force_authenticate(self.user)
+        res = self.client.post(
+            reverse("campaign-create"),
+            {"audience": self.audience.id, "name": "Audience Materialization Test", "description": "Verifies recipient resolution"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        campaign = Campaign.objects.get(id=res.data["campaign"]["id"])
+        self.assertEqual(campaign.audience.count(), 1)
+        self.assertEqual(campaign.audience.first().customer.id, self.customer.id)
+
+    def test_user_cannot_send_other_user_campaign(self):
+        self.client.force_authenticate(self.other_user)
+
+        # Other user tries to send user's campaign
+        campaign = Campaign.objects.create(
+            name="Target Campaign",
+            target_audience=self.audience,
+            created_by=self.user,
+            status=Campaign.Status.DRAFT,
+        )
+
+        send_res = self.client.post(
+            reverse("campaign-send"),
+            {"campaign": campaign.id},
+            format="json",
+        )
+        self.assertEqual(send_res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_user_can_schedule_own_draft_campaign_directly(self):
+        self.client.force_authenticate(self.user)
+
+        campaign = Campaign.objects.create(
+            name="Scheduled Campaign",
+            target_audience=self.audience,
+            created_by=self.user,
+            status=Campaign.Status.DRAFT,
+        )
+        from apps.campaigns.models import CampaignChannel, CampaignTemplate, CampaignAudience
+        CampaignAudience.objects.create(campaign=campaign, customer=self.customer)
+        CampaignChannel.objects.create(campaign=campaign, channel=self.channel)
+        CampaignTemplate.objects.create(campaign=campaign, channel=self.channel, template=self.template)
+
+        future_time = timezone.now() + timedelta(days=2)
+        sched_res = self.client.post(
+            reverse("campaign-schedule"),
+            {"campaign": campaign.id, "scheduled_at": future_time.isoformat()},
+            format="json",
+        )
+        self.assertEqual(sched_res.status_code, status.HTTP_200_OK)
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, Campaign.Status.SCHEDULED)
+
+    def test_delivery_service_validates_templates_and_recipients(self):
+        from apps.campaigns.services.delivery import DeliveryService
+        from rest_framework.exceptions import ValidationError
+
+        campaign = Campaign.objects.create(
+            name="Empty Campaign",
+            created_by=self.user,
+            status=Campaign.Status.DRAFT,
+        )
+        # Missing audience -> raises ValidationError
+        with self.assertRaises(ValidationError):
+            DeliveryService.send_campaign(campaign=campaign)
+
+
+class SmartColumnResolverTests(APITestCase):
+    def test_header_resolution_variations(self):
+        from apps.campaigns.utils import SmartColumnResolver
+
+        # Name variations
+        self.assertEqual(SmartColumnResolver.resolve_header("Customer Name"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("Full Name"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("NAME!"), "name")
+        self.assertEqual(SmartColumnResolver.resolve_header("User Name"), "name")
+
+        # Phone variations
+        self.assertEqual(SmartColumnResolver.resolve_header("Mobile No."), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Contact Number"), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Phone_Num"), "phone")
+        self.assertEqual(SmartColumnResolver.resolve_header("Number"), "phone")
+
+        # Email variations
+        self.assertEqual(SmartColumnResolver.resolve_header("E-Mail Address"), "email")
+        self.assertEqual(SmartColumnResolver.resolve_header("Mail ID"), "email")
+        self.assertEqual(SmartColumnResolver.resolve_header("EmailID"), "email")
+
+        # Extra dynamic custom fields
+        self.assertEqual(SmartColumnResolver.resolve_header("Age"), "age")
+        self.assertEqual(SmartColumnResolver.resolve_header("Gender"), "gender")
+        self.assertEqual(SmartColumnResolver.resolve_header("Date of Birth"), "date_of_birth")
+
+    def test_data_sample_auto_detection(self):
+        from apps.campaigns.utils import SmartColumnResolver
+
+        # Ambiguous header with email values
+        self.assertEqual(
+            SmartColumnResolver.resolve_header("Col_1", ["test@example.com", "user@domain.org"]),
+            "email",
+        )
+        # Ambiguous header with phone values
+        self.assertEqual(
+            SmartColumnResolver.resolve_header("Field_X", ["+19876543210", "9876543210"]),
+            "phone",
+        )
+
+    def test_dataframe_resolution_and_name_merging(self):
+        import pandas as pd
+        from apps.campaigns.utils import normalize_dataframe_columns
+
+        df = pd.DataFrame({
+            "First Name": ["John", "Jane"],
+            "Last Name": ["Doe", "Smith"],
+            "E-Mail Address": ["john@example.com", "jane@example.com"],
+            "Mob. No.": ["1234567890", "0987654321"],
+            "Age": [25, 30],
+            "Gender": ["Male", "Female"],
+        })
+
+        normalized_df = normalize_dataframe_columns(df)
+        self.assertIn("name", normalized_df.columns)
+        self.assertIn("email", normalized_df.columns)
+        self.assertIn("phone", normalized_df.columns)
+        self.assertIn("age", normalized_df.columns)
+        self.assertIn("gender", normalized_df.columns)
+
+        self.assertEqual(normalized_df["name"].tolist(), ["John Doe", "Jane Smith"])
+
+   

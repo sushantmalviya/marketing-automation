@@ -253,11 +253,11 @@ class MyCampaignListSerializer(serializers.ModelSerializer):
 
     def get_available_actions(self, obj):
         if obj.status in [Campaign.Status.DRAFT, Campaign.Status.APPROVED]:
-            return ["edit", "delete", "send", "schedule", "submit"]
+            return ["edit", "delete", "send", "schedule"]
         elif obj.status == Campaign.Status.PENDING_APPROVAL:
-            return ["approve", "reject", "view", "send", "schedule"]
+            return ["edit", "delete", "send", "schedule", "view"]
         elif obj.status == Campaign.Status.REJECTED:
-            return ["edit", "submit"]
+            return ["edit", "delete", "send", "schedule"]
         elif obj.status == Campaign.Status.COMPLETED:
             return ["view"]
         return ["edit", "delete", "send", "schedule"]

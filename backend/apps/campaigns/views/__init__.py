@@ -5,9 +5,12 @@ from .campaign import (
 from .customer import (
     CustomerUploadAPIView,
     CustomerUploadListAPIView,
+    CustomerUploadDetailAPIView,
+    CustomerSourceDeleteAPIView,
     CustomerRecordListAPIView,
     CustomerRecordDetailAPIView,
     CustomerBulkDeleteAPIView,
+    ContactHierarchyAPIView,
 )
 from .channel import AssignChannelsView, ChannelListAPIView
 

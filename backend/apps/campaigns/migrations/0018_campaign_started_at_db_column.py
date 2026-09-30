@@ -52,6 +52,27 @@ END $$;
 """
 
 
+def forwards_func(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute(FORWARD_SQL)
+    elif schema_editor.connection.vendor == "sqlite":
+        try:
+            schema_editor.execute("ALTER TABLE campaigns RENAME COLUMN started_at TO processing_started_at;")
+        except Exception:
+            pass
+
+
+def backwards_func(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute(REVERSE_SQL)
+    elif schema_editor.connection.vendor == "sqlite":
+        try:
+            schema_editor.execute("ALTER TABLE campaigns RENAME COLUMN processing_started_at TO started_at;")
+        except Exception:
+            pass
+
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("campaigns", "0017_alter_campaigntemplate_template"),
@@ -60,7 +81,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.SeparateDatabaseAndState(
             database_operations=[
-                migrations.RunSQL(FORWARD_SQL, reverse_sql=REVERSE_SQL),
+                migrations.RunPython(forwards_func, backwards_func),
             ],
             state_operations=[
                 migrations.AlterField(
@@ -75,3 +96,4 @@ class Migration(migrations.Migration):
             ],
         ),
     ]
+

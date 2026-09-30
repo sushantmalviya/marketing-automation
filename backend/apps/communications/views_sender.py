@@ -18,12 +18,14 @@ from apps.communications.providers.sender_abstraction import (
 )
 from apps.communications.serializers_sender import (
     AddDomainSerializer,
+    ConnectSESSenderSerializer,
     ConnectSMTPSerializer,
     DomainAuthenticationSerializer,
     WhatsAppEmbeddedSignupSerializer,
     ConnectSMSSerializer,
     SenderIdentitySerializer,
 )
+from apps.communications.services.aws_ses import AWSSESService
 from apps.communications.services.dns_verifier import verify_domain_dns
 from apps.communications.services.meta_api import MetaAPIService
 from apps.integrations.utils.crypto import encrypt_token
@@ -76,9 +78,15 @@ class DomainAuthenticationListCreateView(APIView):
         if existing_domain:
             return Response(DomainAuthenticationSerializer(existing_domain).data, status=status.HTTP_200_OK)
 
-        # Create new token
+        # Register domain with AWS SES
+        ses_service = AWSSESService()
+        ses_res = ses_service.create_domain_identity(domain_name)
+
         token_suffix = secrets.token_hex(8)
         verification_value = f"automarket-verify={token_suffix}"
+        dkim_records = ses_res.get("dkim_records", [])
+        dkim_status = ses_res.get("dkim_status", "PENDING")
+        mail_from_domain = ses_res.get("mail_from_domain", f"bounces.{domain_name}")
 
         domain_auth = DomainAuthentication.objects.create(
             user=request.user,
@@ -87,6 +95,9 @@ class DomainAuthenticationListCreateView(APIView):
             dns_record_type="TXT",
             dns_record_name="@",
             dns_record_value=verification_value,
+            dkim_records=dkim_records,
+            dkim_status=dkim_status,
+            mail_from_domain=mail_from_domain,
             status="PENDING",
         )
         return Response(DomainAuthenticationSerializer(domain_auth).data, status=status.HTTP_201_CREATED)
@@ -101,25 +112,48 @@ class DomainAuthenticationVerifyView(APIView):
         except DomainAuthentication.DoesNotExist:
             return Response({"detail": "Domain authentication record not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        is_verified, msg, found_records = verify_domain_dns(domain_auth.domain, domain_auth.verification_token)
-        if is_verified:
+        # 1. Check AWS SES DKIM Verification Status first
+        ses_service = AWSSESService()
+        ses_res = ses_service.get_domain_verification_status(domain_auth.domain)
+
+        is_ses_verified = ses_res.get("status") == "VERIFIED" or ses_res.get("dkim_status") == "SUCCESS"
+        dkim_records = ses_res.get("dkim_records") or domain_auth.dkim_records
+
+        if dkim_records:
+            domain_auth.dkim_records = dkim_records
+        if ses_res.get("dkim_status"):
+            domain_auth.dkim_status = ses_res.get("dkim_status")
+
+        if is_ses_verified:
             domain_auth.status = "VERIFIED"
             domain_auth.verified_at = timezone.now()
-            domain_auth.save(update_fields=["status", "verified_at"])
+            domain_auth.save(update_fields=["status", "verified_at", "dkim_records", "dkim_status"])
+            return Response({
+                "success": True,
+                "message": f"Domain '{domain_auth.domain}' verified successfully via AWS SES Easy DKIM!",
+                "domain": DomainAuthenticationSerializer(domain_auth).data
+            })
+
+        # 2. Fallback check via DNS TXT record if SES is pending
+        is_txt_verified, msg, found_records = verify_domain_dns(domain_auth.domain, domain_auth.verification_token)
+        if is_txt_verified:
+            domain_auth.status = "VERIFIED"
+            domain_auth.verified_at = timezone.now()
+            domain_auth.save(update_fields=["status", "verified_at", "dkim_records", "dkim_status"])
             return Response({
                 "success": True,
                 "message": msg,
                 "domain": DomainAuthenticationSerializer(domain_auth).data
             })
-        else:
-            domain_auth.status = "FAILED"
-            domain_auth.save(update_fields=["status"])
-            return Response({
-                "success": False,
-                "detail": msg,
-                "found_records": found_records,
-                "domain": DomainAuthenticationSerializer(domain_auth).data
-            }, status=status.HTTP_400_BAD_REQUEST)
+
+        domain_auth.status = "FAILED"
+        domain_auth.save(update_fields=["status", "dkim_records", "dkim_status"])
+        return Response({
+            "success": False,
+            "detail": ses_res.get("detail") or "DKIM CNAME / TXT record verification pending in DNS.",
+            "found_records": found_records,
+            "domain": DomainAuthenticationSerializer(domain_auth).data
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DomainAuthenticationDetailView(APIView):
@@ -128,6 +162,8 @@ class DomainAuthenticationDetailView(APIView):
     def delete(self, request, pk):
         try:
             domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+            SenderIdentity.objects.filter(domain_auth=domain_auth).update(domain_auth=None)
+            AWSSESService().delete_domain_identity(domain_auth.domain)
             domain_auth.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except DomainAuthentication.DoesNotExist:
@@ -237,198 +273,35 @@ class ConnectSMTPView(APIView):
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
 
-class GoogleOAuthUrlView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
-        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
-
-        if not client_id:
-            return Response({"detail": "Google OAuth client ID is not configured in backend."}, status=status.HTTP_400_BAD_REQUEST)
-
-        params = {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
-            "access_type": "offline",
-            "prompt": "consent",
-            "state": str(request.user.id),
-        }
-        url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
-        return Response({"url": url})
-
-
-class GoogleOAuthCallbackView(APIView):
+class ConnectSESView(APIView):
+    """
+    Connect a Sender Email address on a verified SES domain.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        code = request.data.get("code")
-        if not code:
-            return Response({"detail": "Authorization code is required."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ConnectSESSenderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-        client_id = getattr(settings, "GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
-        client_secret = getattr(settings, "GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
-        redirect_uri = getattr(settings, "GOOGLE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/google/callback"))
-
-        # Exchange code for tokens
-        token_url = "https://oauth2.googleapis.com/token"
-        data = urllib.parse.urlencode({
-            "code": code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        }).encode("utf-8")
-
-        req = urllib.request.Request(token_url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                tokens = json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            return Response({"detail": f"Failed to exchange code with Google: {e}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        access_token = tokens.get("access_token")
-        refresh_token = tokens.get("refresh_token")
-
-        if not access_token:
-            return Response({"detail": "Google did not return an access token."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Get authenticated user email
-        profile_req = urllib.request.Request(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        try:
-            with urllib.request.urlopen(profile_req, timeout=10) as p_resp:
-                profile = json.loads(p_resp.read().decode("utf-8"))
-                email = profile.get("email")
-                display_name = profile.get("name", "")
-        except Exception as e:
-            return Response({"detail": f"Failed to fetch Google profile: {e}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not email:
-            return Response({"detail": "Could not retrieve email address from Google."}, status=status.HTTP_400_BAD_REQUEST)
-
-        domain_auth, error_msg = validate_user_domain_verified(request.user, email)
+        domain_auth, error_msg = validate_user_domain_verified(request.user, data["email"])
         if not domain_auth:
             return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        credentials = {}
-        if refresh_token:
-            credentials["refresh_token"] = encrypt_token(refresh_token)
-
         identity, _ = SenderIdentity.objects.update_or_create(
             user=request.user,
-            email=email,
+            email=data["email"],
             defaults={
                 "domain_auth": domain_auth,
-                "display_name": display_name,
-                "provider": "GMAIL",
-                "connection_type": "OAUTH",
+                "display_name": data.get("display_name", ""),
+                "provider": "AWS_SES",
+                "connection_type": "AWS_SES",
                 "status": "CONNECTED",
-                "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
             }
         )
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
-
-class MicrosoftOAuthUrlView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os.getenv("MICROSOFT_CLIENT_ID", ""))
-        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
-
-        if not client_id:
-            return Response({"detail": "Microsoft OAuth client ID is not configured in backend."}, status=status.HTTP_400_BAD_REQUEST)
-
-        params = {
-            "client_id": client_id,
-            "response_type": "code",
-            "redirect_uri": redirect_uri,
-            "response_mode": "query",
-            "scope": "https://graph.microsoft.com/Mail.Send offline_access User.Read",
-            "state": str(request.user.id),
-        }
-        url = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" + urllib.parse.urlencode(params)
-        return Response({"url": url})
-
-
-class MicrosoftOAuthCallbackView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        code = request.data.get("code")
-        if not code:
-            return Response({"detail": "Authorization code is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        client_id = getattr(settings, "MICROSOFT_CLIENT_ID", os.getenv("MICROSOFT_CLIENT_ID", ""))
-        client_secret = getattr(settings, "MICROSOFT_CLIENT_SECRET", os.getenv("MICROSOFT_CLIENT_SECRET", ""))
-        redirect_uri = getattr(settings, "MICROSOFT_REDIRECT_URI", os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:3000/admin/account/oauth/microsoft/callback"))
-
-        token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-        data = urllib.parse.urlencode({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-            "scope": "https://graph.microsoft.com/Mail.Send offline_access User.Read",
-        }).encode("utf-8")
-
-        req = urllib.request.Request(token_url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                tokens = json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            return Response({"detail": f"Failed to exchange code with Microsoft: {e}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        access_token = tokens.get("access_token")
-        refresh_token = tokens.get("refresh_token")
-
-        if not access_token:
-            return Response({"detail": "Microsoft did not return an access token."}, status=status.HTTP_400_BAD_REQUEST)
-
-        profile_req = urllib.request.Request(
-            "https://graph.microsoft.com/v1.0/me",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        try:
-            with urllib.request.urlopen(profile_req, timeout=10) as p_resp:
-                profile = json.loads(p_resp.read().decode("utf-8"))
-                email = profile.get("mail") or profile.get("userPrincipalName")
-                display_name = profile.get("displayName", "")
-        except Exception as e:
-            return Response({"detail": f"Failed to fetch Microsoft profile: {e}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not email:
-            return Response({"detail": "Could not retrieve email from Microsoft account."}, status=status.HTTP_400_BAD_REQUEST)
-
-        domain_auth, error_msg = validate_user_domain_verified(request.user, email)
-        if not domain_auth:
-            return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-        credentials = {}
-        if refresh_token:
-            credentials["refresh_token"] = encrypt_token(refresh_token)
-
-        identity, _ = SenderIdentity.objects.update_or_create(
-            user=request.user,
-            email=email,
-            defaults={
-                "domain_auth": domain_auth,
-                "display_name": display_name,
-                "provider": "MICROSOFT",
-                "connection_type": "OAUTH",
-                "status": "CONNECTED",
-                "encrypted_credentials": credentials,
-                "last_verified_at": timezone.now(),
-            }
-        )
-        return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
 
 class SendTestEmailView(APIView):

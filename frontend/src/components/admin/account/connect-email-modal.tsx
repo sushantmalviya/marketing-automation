@@ -10,13 +10,19 @@ import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
-type ProviderType = "GMAIL" | "MICROSOFT" | "CUSTOM_SMTP";
+type ProviderType = "AWS_SES" | "CUSTOM_SMTP";
 
 interface ConnectEmailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   initialDomain?: string;
+}
+
+interface DkimRecord {
+  name: string;
+  value: string;
+  type: string;
 }
 
 interface DomainAuthRecord {
@@ -26,6 +32,9 @@ interface DomainAuthRecord {
   dns_record_type: string;
   dns_record_name: string;
   dns_record_value: string;
+  dkim_records?: DkimRecord[];
+  dkim_status?: string;
+  mail_from_domain?: string;
   status: "PENDING" | "VERIFIED" | "FAILED";
   verified_at?: string;
 }
@@ -56,7 +65,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
   // Step 4 & 5: Sender details state
   const [senderName, setSenderName] = useState("Marketing Team");
   const [senderEmail, setSenderEmail] = useState("");
-  const [provider, setProvider] = useState<ProviderType>("CUSTOM_SMTP");
+  const [provider, setProvider] = useState<ProviderType>("AWS_SES");
 
   // Step 5: SMTP state
   const [smtpForm, setSmtpForm] = useState({
@@ -77,7 +86,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
       setDomainAuth(null);
       setSenderName("Marketing Team");
       setSenderEmail("");
-      setProvider("CUSTOM_SMTP");
+      setProvider("AWS_SES");
       setSmtpForm({ host: "", port: 587, security: "STARTTLS", username: "", password: "" });
       setConnectedIdentity(null);
     }
@@ -115,7 +124,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
       if (record.status === "VERIFIED") {
         setStep(3); // Jump to Domain Verified!
       } else {
-        setStep(2); // Go to Verify Domain TXT instructions
+        setStep(2); // Go to Verify Domain Easy DKIM instructions
       }
     } catch (err) {
       toast.error(parseApiError(err));
@@ -135,7 +144,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
         setDomainAuth(res.data.domain);
         setStep(3);
       } else {
-        toast.error(res.data?.detail || "DNS verification failed. Record not found yet.");
+        toast.error(res.data?.detail || "DKIM DNS verification pending. Please allow time for DNS propagation.");
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail || parseApiError(err);
@@ -145,7 +154,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
     }
   };
 
-  // Step 4 Action: Continue to connection method (Google/Microsoft OAuth or SMTP config)
+  // Step 4 Action: Continue to connection method (AWS SES or Custom SMTP)
   const handleProceedSender = async () => {
     if (!senderEmail || !senderEmail.includes("@")) {
       toast.error("Please enter a valid sender email address.");
@@ -158,26 +167,20 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
       return;
     }
 
-    if (provider === "GMAIL") {
+    if (provider === "AWS_SES") {
       setLoading(true);
       try {
-        const res = await apiClient.get("/api/communications/sender-identities/oauth/google/url/");
-        if (res.data?.url) {
-          window.location.href = res.data.url;
-        }
+        const res = await apiClient.post("/api/communications/sender-identities/connect-ses/", {
+          email: senderEmail,
+          display_name: senderName,
+        });
+        setConnectedIdentity(res.data);
+        toast.success("AWS SES sender email connected successfully!");
+        setStep(6);
+        onSuccess();
       } catch (err) {
         toast.error(parseApiError(err));
-        setLoading(false);
-      }
-    } else if (provider === "MICROSOFT") {
-      setLoading(true);
-      try {
-        const res = await apiClient.get("/api/communications/sender-identities/oauth/microsoft/url/");
-        if (res.data?.url) {
-          window.location.href = res.data.url;
-        }
-      } catch (err) {
-        toast.error(parseApiError(err));
+      } finally {
         setLoading(false);
       }
     } else {
@@ -345,56 +348,102 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
               </motion.div>
             )}
 
-            {/* STEP 2: VERIFY DOMAIN (TXT Record Instructions) */}
+            {/* STEP 2: VERIFY DOMAIN (AWS SES Easy DKIM CNAME Instructions) */}
             {step === 2 && domainAuth && (
               <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Verify Domain Ownership</h2>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Verify Domain DKIM Records</h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Add the following TXT record to your domain's DNS settings for <strong className="text-slate-900 dark:text-white">{domainAuth.domain}</strong>.
+                    Add the following <strong className="text-slate-900 dark:text-white">3 CNAME Easy DKIM records</strong> to your DNS provider (Cloudflare, GoDaddy, Route53, etc.) for <strong className="text-slate-900 dark:text-white">{domainAuth.domain}</strong>.
                   </p>
                 </div>
 
-                {/* TXT Record Copy Table */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-800/50 space-y-4">
-                  <div className="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Type</span>
-                    <div className="flex items-center gap-2 font-mono text-xs font-bold text-slate-900 dark:text-white">
-                      <span>{domainAuth.dns_record_type}</span>
-                      <button
-                        onClick={() => copyToClipboard(domainAuth.dns_record_type, "Type")}
-                        className="rounded p-1 text-slate-400 hover:text-blue-600 transition"
-                      >
-                        {copiedField === "Type" ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
+                {/* DKIM CNAME Records Copy Table */}
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {domainAuth.dkim_records && domainAuth.dkim_records.length > 0 ? (
+                    domainAuth.dkim_records.map((rec, idx) => (
+                      <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/50 space-y-2 text-xs">
+                        <div className="flex items-center justify-between font-bold text-slate-700 dark:text-slate-300">
+                          <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                            <ShieldCheck size={14} /> Easy DKIM Record #{idx + 1} ({rec.type})
+                          </span>
+                          <span className="rounded bg-blue-100 dark:bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-700 dark:text-blue-300">CNAME</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between py-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-slate-500 dark:text-slate-400">Name</span>
+                          <div className="flex items-center gap-2 font-mono font-semibold text-slate-900 dark:text-white max-w-[280px] truncate">
+                            <span className="truncate">{rec.name}</span>
+                            <button
+                              onClick={() => copyToClipboard(rec.name, `DKIM Name #${idx + 1}`)}
+                              className="rounded p-1 text-slate-400 hover:text-blue-600 transition shrink-0"
+                            >
+                              {copiedField === `DKIM Name #${idx + 1}` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            </button>
+                          </div>
+                        </div>
 
-                  <div className="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Host / Name</span>
-                    <div className="flex items-center gap-2 font-mono text-xs font-bold text-slate-900 dark:text-white">
-                      <span>{domainAuth.dns_record_name}</span>
-                      <button
-                        onClick={() => copyToClipboard(domainAuth.dns_record_name, "Host")}
-                        className="rounded p-1 text-slate-400 hover:text-blue-600 transition"
-                      >
-                        {copiedField === "Host" ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                      </button>
+                        <div className="flex items-center justify-between py-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                          <span className="text-slate-500 dark:text-slate-400">Value</span>
+                          <div className="flex items-center gap-2 font-mono font-semibold text-blue-600 dark:text-blue-400 max-w-[280px] truncate">
+                            <span className="truncate">{rec.value}</span>
+                            <button
+                              onClick={() => copyToClipboard(rec.value, `DKIM Value #${idx + 1}`)}
+                              className="rounded p-1 text-slate-400 hover:text-blue-600 transition shrink-0"
+                            >
+                              {copiedField === `DKIM Value #${idx + 1}` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    /* Fallback Single TXT record */
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-800/50 space-y-4">
+                      <div className="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Type</span>
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-slate-900 dark:text-white">
+                          <span>{domainAuth.dns_record_type}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-slate-700/60">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Host / Name</span>
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-slate-900 dark:text-white">
+                          <span>{domainAuth.dns_record_name}</span>
+                          <button
+                            onClick={() => copyToClipboard(domainAuth.dns_record_name, "Host")}
+                            className="rounded p-1 text-slate-400 hover:text-blue-600 transition"
+                          >
+                            {copiedField === "Host" ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Value</span>
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 max-w-[280px] truncate">
+                          <span className="truncate">{domainAuth.dns_record_value}</span>
+                          <button
+                            onClick={() => copyToClipboard(domainAuth.dns_record_value, "Value")}
+                            className="rounded p-1 text-slate-400 hover:text-blue-600 transition shrink-0"
+                          >
+                            {copiedField === "Value" ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-center justify-between py-1">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Value</span>
-                    <div className="flex items-center gap-2 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 max-w-[280px] truncate">
-                      <span className="truncate">{domainAuth.dns_record_value}</span>
-                      <button
-                        onClick={() => copyToClipboard(domainAuth.dns_record_value, "Value")}
-                        className="rounded p-1 text-slate-400 hover:text-blue-600 transition shrink-0"
-                      >
-                        {copiedField === "Value" ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                      </button>
+                  {/* Custom MAIL FROM Domain Notice */}
+                  {domainAuth.mail_from_domain && (
+                    <div className="rounded-xl border border-slate-200/80 bg-blue-50/50 p-3 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 flex items-center justify-between">
+                      <div>
+                        <strong className="font-semibold">Custom MAIL FROM Domain:</strong> {domainAuth.mail_from_domain}
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">
+                        SPF Compliant
+                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Collapsible Helper Guide */}
@@ -404,15 +453,15 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                     onClick={() => setShowGuide(!showGuide)}
                     className="flex w-full items-center justify-between p-4 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
                   >
-                    <span>How to add this record?</span>
+                    <span>How to add these records in DNS?</span>
                     {showGuide ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                   {showGuide && (
                     <div className="p-4 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                      <p>1. Log in to your DNS provider (e.g. GoDaddy, Cloudflare, Namecheap, Route 53).</p>
-                      <p>2. Navigate to DNS Management for <strong>{domainAuth.domain}</strong>.</p>
-                      <p>3. Add a new record of type <strong>TXT</strong> with Host <strong>@</strong> and paste the Value above.</p>
-                      <p>4. Save the record and click "I have added the record" below.</p>
+                      <p>1. Log in to your DNS provider (e.g. Cloudflare, GoDaddy, Route 53, Namecheap).</p>
+                      <p>2. Go to DNS Records management for <strong>{domainAuth.domain}</strong>.</p>
+                      <p>3. Create <strong>3 CNAME records</strong> using the exact Name and Value fields listed above.</p>
+                      <p>4. Save the DNS records and click <strong>Check Verification Status</strong> below.</p>
                     </div>
                   )}
                 </div>
@@ -432,7 +481,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                     className="flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition disabled:opacity-50"
                   >
                     {loading ? <Loader2 className="animate-spin" size={14} /> : null}
-                    I have added the record
+                    Check Verification Status
                   </button>
                 </div>
               </motion.div>
@@ -447,7 +496,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Domain Verified!</h2>
                   <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                    You can now add and configure sender emails for <strong className="text-slate-900 dark:text-white">{domainAuth.domain}</strong>.
+                    Easy DKIM has been verified for <strong className="text-slate-900 dark:text-white">{domainAuth.domain}</strong>. You can now add sender email addresses.
                   </p>
                 </div>
 
@@ -469,14 +518,14 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add Sender Email</h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Enter the email address you want to send emails from.
+                    Specify the sender name and email address on your verified domain.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                      Sender Name
+                      Sender Display Name
                     </label>
                     <input
                       type="text"
@@ -489,7 +538,7 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
-                      Email Address
+                      Sender Email Address
                     </label>
                     <input
                       type="email"
@@ -504,26 +553,21 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                 {/* Connection Method Picker */}
                 <div className="space-y-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    Connection Method
+                    Bulk Email Delivery Provider
                   </label>
                   <div className="space-y-2.5">
                     {[
                       {
-                        id: "GMAIL",
-                        label: "Google Workspace",
-                        sub: "Securely connect with Google OAuth 2.0",
-                        icon: "🔴",
-                      },
-                      {
-                        id: "MICROSOFT",
-                        label: "Microsoft 365",
-                        sub: "Connect with Microsoft Graph Mail.Send",
-                        icon: "🔷",
+                        id: "AWS_SES",
+                        label: "Amazon SES (Recommended)",
+                        sub: "Enterprise multi-tenant bulk email delivery with instant domain verification",
+                        icon: "⚡",
+                        badge: "SaaS Enterprise",
                       },
                       {
                         id: "CUSTOM_SMTP",
-                        label: "Custom SMTP",
-                        sub: "Use your own SMTP server details",
+                        label: "Custom SMTP Server",
+                        sub: "Connect using custom SMTP host and port credentials",
                         icon: "⚙️",
                       },
                     ].map((m) => (
@@ -539,7 +583,14 @@ export function ConnectEmailModal({ isOpen, onClose, onSuccess, initialDomain = 
                         <div className="flex items-center gap-3">
                           <span className="text-xl">{m.icon}</span>
                           <div>
-                            <div className="text-sm font-bold text-slate-900 dark:text-white">{m.label}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">{m.label}</span>
+                              {m.badge && (
+                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                                  {m.badge}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">{m.sub}</div>
                           </div>
                         </div>

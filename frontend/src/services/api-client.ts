@@ -78,6 +78,7 @@ apiClient.interceptors.response.use(undefined, async (error: AxiosError) => {
 
 export function parseApiError(error: unknown): string {
   if (!axios.isAxiosError(error)) return error instanceof Error ? error.message : "Unexpected error";
+  if (error.code === "ECONNABORTED") return "Request timed out. Please try again.";
   if (!error.response) return "Cannot reach the API. Check that the backend is running.";
   const data = error.response.data as Record<string, unknown> | undefined;
   const detail = data?.detail;

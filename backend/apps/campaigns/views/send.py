@@ -32,6 +32,14 @@ class CampaignSendAPIView(APIView):
             "campaign"
         ]
 
+        from rest_framework.exceptions import PermissionDenied
+        from apps.common.ownership import can_manage_campaign
+
+        if not can_manage_campaign(request.user, campaign):
+            raise PermissionDenied(
+                "You can only send your own campaigns."
+            )
+
         # Trigger background task
         send_campaign_background.delay(campaign.id)
 

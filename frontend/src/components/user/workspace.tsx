@@ -599,7 +599,8 @@ export function UserCampaigns() {
       }
 
       storeCampaignDraft(editDraft);
-      setEditingCampaign(campaign);
+      const isCompleted = fullData.status === "COMPLETED" || campaign.status === "COMPLETED";
+      setEditingCampaign(isCompleted ? null : campaign);
       setResumeDraft(true);
       setCreateOpen(true);
     } catch (error) {
@@ -607,10 +608,369 @@ export function UserCampaigns() {
       console.error(error);
     }
   };
-  if (campaigns.isError) return <ErrorState error={campaigns.error} />; const rows = campaigns.data?.results ?? [];
-  if (createOpen) return <CampaignWizard assignments={[]} initialDraft={resumeDraft ? readCampaignDraft() : null} editingCampaignId={editingCampaign?.id} onCancel={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(false) }} onCreated={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(false); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }} />;
-  return <div><div className="mb-7 flex items-end justify-between gap-4"><PageHeading title="Campaigns" subtitle="Create and manage your marketing campaigns" /><button className="primary-button px-6" onClick={() => { storeCampaignDraft(null); setEditingCampaign(null); setResumeDraft(false); setCreateOpen(true) }}><Plus size={18} />Create Campaign</button></div><section className="sa-card overflow-hidden"><div className="grid gap-3 border-b border-slate-100 p-5 md:grid-cols-[1fr_220px]"><SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search campaigns..." /><Select value={status} onChange={value => { setStatus(value); setPage(1) }} label="All Status" options={["DRAFT", "PENDING_APPROVAL", "APPROVED", "SCHEDULED", "SENDING", "COMPLETED", "FAILED", "REJECTED"]} /></div>{campaigns.isLoading ? <Skeleton /> : <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-slate-50"><tr><th className="px-6 py-5">Campaign Name</th><th>Audience Name</th><th>Channel</th><th>Created At</th><th>Status</th><th className="text-center">Actions</th></tr></thead><tbody>{rows.map((row, index) => <motion.tr initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .03 }} className="border-t border-slate-100 hover:bg-blue-50/30" key={row.id}><td className="px-6 py-5 font-semibold">{row.campaign_name}</td><td>{row.audience_name || "—"}</td><td><div className="flex flex-wrap gap-2">{row.channels.length ? row.channels.map(name => <ChannelIcon name={name} key={name} />) : "—"}</div></td><td>{formatDate(row.created_at)}</td><td><Badge className={campaignTone[row.status]}>{pretty(row.status)}</Badge></td><td className="text-center"><div className="inline-flex items-center gap-2"><button aria-label="Edit" title="Edit campaign" className="icon-button !border !border-slate-200 !text-orange-500" onClick={() => loadCampaignForEdit(row)}><Pencil size={16} /></button><button aria-label="View" title="View campaign" className="icon-button !border !border-slate-200 !text-blue-600" onClick={() => setViewing(row)}><Eye size={17} /></button><button aria-label="Delete" title="Delete campaign" className="icon-button !border !border-slate-200 !text-red-500" onClick={() => setDeleteTarget(row)}><Trash2 size={16} /></button></div></td></motion.tr>)}</tbody></table>{!rows.length && <Empty message="No campaigns found." />}</div>}<Pagination page={page} count={campaigns.data?.count ?? 0} pageSize={10} setPage={setPage} /></section>
-    <AnimatePresence>{createOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.form initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-lg rounded-3xl bg-white shadow-2xl" onSubmit={event => { event.preventDefault(); create.mutate() }}><ModalHeader title="Create Campaign" onClose={() => setCreateOpen(false)} /><div className="space-y-5 p-6"><label className="field"><span>Target Audience Segment *</span><select required value={form.audience} onChange={event => setForm({ ...form, audience: event.target.value })}><option value="">Select Audience Segment</option>{(audiences.data ?? []).map(row => <option value={row.id} key={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Campaign name *</span><input required minLength={3} placeholder="Enter campaign name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label><label className="field"><span>Description</span><textarea rows={4} placeholder="Describe this campaign" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-5"><button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button><button className="primary-button px-6" disabled={create.isPending}>{create.isPending ? "Creating..." : "Create Campaign"}</button></div></motion.form></div>}{viewing && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><button aria-label="Close" className="absolute right-4 top-4 icon-button z-10" type="button" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}><X size={20} /></button><div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 pb-5 pt-7 text-center"><span className={`grid h-14 w-14 place-items-center rounded-full ${viewing.status === "REJECTED" ? "bg-red-50 text-red-500" : viewing.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-500"}`}><Megaphone size={24} /></span><h2 className="text-xl font-black text-slate-900">Campaign Details</h2></div><div className="p-6 space-y-4"><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-600"><Megaphone size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Campaign Name</p><p className="text-sm font-semibold text-slate-800">{viewing.campaign_name}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${viewing.status === "APPROVED" ? "bg-emerald-100 text-emerald-600" : viewing.status === "REJECTED" ? "bg-red-100 text-red-500" : "bg-slate-200 text-slate-500"}`}><CheckCircle2 size={17} /></span><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Status</p><Badge className={campaignTone[viewing.status]}>{pretty(viewing.status)}</Badge></div></div>{viewing.status === "REJECTED" && <div className="rounded-2xl border border-red-100 bg-red-50 p-4"><div className="flex items-center gap-2 mb-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-500"><X size={13} /></span><p className="text-sm font-black text-red-700">Rejected by Admin</p></div>{viewing.rejection_reason && <div className="mb-3"><p className="text-xs font-bold uppercase tracking-wide text-red-400">Rejected Reason</p><p className="mt-1 text-sm text-red-800">{viewing.rejection_reason}</p></div>}{viewing.review_comments && <div><p className="text-xs font-bold uppercase tracking-wide text-red-400">Description</p><p className="mt-1 text-sm text-red-800">{viewing.review_comments}</p></div>}</div>}{viewing.status === "APPROVED" && !scheduleOpen && <div className="grid grid-cols-2 gap-3 pt-1"><button disabled={send.isPending} onClick={() => send.mutate(viewing.id)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-blue-100 bg-blue-50 px-4 py-5 text-center transition hover:border-blue-400 hover:bg-blue-100 disabled:opacity-60"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-blue-600 shadow-sm"><Send size={20} /></span><span className="text-sm font-black text-blue-700">{send.isPending ? "Sending…" : "Send Now"}</span><span className="text-[11px] text-slate-500">Send campaign immediately</span></button><button onClick={() => setScheduleOpen(true)} className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm"><CalendarClock size={20} /></span><span className="text-sm font-black text-indigo-700">Schedule</span><span className="text-[11px] text-slate-500">Schedule for later</span></button></div>}{viewing.status === "APPROVED" && scheduleOpen && <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 space-y-3"><p className="text-sm font-black text-indigo-700 flex items-center gap-2"><CalendarClock size={16} />Pick a date &amp; time</p><input type="datetime-local" min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" /><div className="flex gap-2"><button className="secondary-button flex-1" onClick={() => { setScheduleOpen(false); setScheduleDate("") }}>Cancel</button><button disabled={!scheduleDate || schedule.isPending} onClick={() => { if (viewing && scheduleDate) schedule.mutate({ id: viewing.id, at: scheduleDate }) }} className="primary-button flex-1 justify-center disabled:opacity-60">{schedule.isPending ? "Scheduling…" : "Confirm"}</button></div></div>}<div className="grid grid-cols-2 gap-3"><Info label="Audience" value={viewing.audience_name || "—"} /></div></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">{viewing.status === "REJECTED" && <button className="secondary-button flex items-center gap-2 px-5 text-blue-600 border-blue-300" onClick={() => { storeCampaignDraft(null); setViewing(null); setCreateOpen(true) }}><Pencil size={15} />Edit Campaign</button>}<button className="secondary-button px-5" onClick={() => { setViewing(null); setScheduleOpen(false); setScheduleDate("") }}>Close</button>{viewing.available_actions.includes("submit") && <button className="primary-button px-5" disabled={submit.isPending} onClick={() => submit.mutate(viewing.id)}>Submit for approval</button>}</div></motion.div></div>}{deleteTarget && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm"><motion.div initial={{ opacity: 0, scale: .95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex flex-col items-center gap-3 p-8 text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-red-50"><Trash2 size={28} className="text-red-500" /></span><h2 className="text-xl font-black text-slate-900">Delete Campaign?</h2><p className="text-sm text-slate-500">Are you sure you want to delete <strong>&quot;{deleteTarget.campaign_name}&quot;</strong>? This action cannot be undone.</p></div><div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button className="secondary-button px-6" onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>Cancel</button><button className="flex min-h-10 items-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50" onClick={() => remove.mutate(deleteTarget.id)} disabled={remove.isPending}>{remove.isPending ? "Deleting..." : "Delete"}</button></div></motion.div></motion.div>}</AnimatePresence></div>;
+  if (campaigns.isError) return <ErrorState error={campaigns.error} />;
+  const rows = campaigns.data?.results ?? [];
+
+  if (createOpen) {
+    return (
+      <CampaignWizard
+        assignments={[]}
+        initialDraft={resumeDraft ? readCampaignDraft() : null}
+        editingCampaignId={editingCampaign?.id}
+        onCancel={() => {
+          storeCampaignDraft(null);
+          setEditingCampaign(null);
+          setResumeDraft(false);
+          setCreateOpen(false);
+        }}
+        onCreated={() => {
+          storeCampaignDraft(null);
+          setEditingCampaign(null);
+          setResumeDraft(false);
+          setCreateOpen(false);
+          void client.invalidateQueries({ queryKey: ["user-campaigns"] });
+          void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] });
+        }}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-7 flex items-end justify-between gap-4">
+        <PageHeading title="Campaigns" subtitle="Create and manage your marketing campaigns" />
+        <button
+          className="primary-button px-6"
+          onClick={() => {
+            storeCampaignDraft(null);
+            setEditingCampaign(null);
+            setResumeDraft(false);
+            setCreateOpen(true);
+          }}
+        >
+          <Plus size={18} />
+          Create Campaign
+        </button>
+      </div>
+
+      <section className="sa-card overflow-hidden">
+        <div className="grid gap-3 border-b border-slate-100 p-5 md:grid-cols-[1fr_220px]">
+          <SearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            placeholder="Search campaigns..."
+          />
+          <Select
+            value={status}
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+            label="All Status"
+            options={[
+              "DRAFT",
+              "PENDING_APPROVAL",
+              "APPROVED",
+              "SCHEDULED",
+              "SENDING",
+              "COMPLETED",
+              "FAILED",
+              "REJECTED",
+            ]}
+          />
+        </div>
+
+        {campaigns.isLoading ? (
+          <Skeleton />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-5">Campaign Name</th>
+                  <th>Audience Name</th>
+                  <th>Channel</th>
+                  <th>Created At</th>
+                  <th>Status</th>
+                  <th className="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <motion.tr
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="border-t border-slate-100 hover:bg-blue-50/30"
+                    key={row.id}
+                  >
+                    <td className="px-6 py-5 font-semibold">{row.campaign_name}</td>
+                    <td>{row.audience_name || "—"}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        {row.channels.length
+                          ? row.channels.map((name) => <ChannelIcon name={name} key={name} />)
+                          : "—"}
+                      </div>
+                    </td>
+                    <td>{formatDate(row.created_at)}</td>
+                    <td>
+                      <Badge className={campaignTone[row.status]}>{pretty(row.status)}</Badge>
+                    </td>
+                    <td className="text-center">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          aria-label="Edit"
+                          title="Edit campaign"
+                          className="icon-button !border !border-slate-200 !text-orange-500"
+                          onClick={() => loadCampaignForEdit(row)}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          aria-label="View"
+                          title="View campaign"
+                          className="icon-button !border !border-slate-200 !text-blue-600"
+                          onClick={() => setViewing(row)}
+                        >
+                          <Eye size={17} />
+                        </button>
+                        <button
+                          aria-label="Delete"
+                          title="Delete campaign"
+                          className="icon-button !border !border-slate-200 !text-red-500"
+                          onClick={() => setDeleteTarget(row)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+            {!rows.length && <Empty message="No campaigns found." />}
+          </div>
+        )}
+
+        <Pagination page={page} count={campaigns.data?.count ?? 0} pageSize={10} setPage={setPage} />
+      </section>
+
+      <AnimatePresence>
+        {viewing && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            >
+              <button
+                aria-label="Close"
+                className="absolute right-4 top-4 icon-button z-10"
+                type="button"
+                onClick={() => {
+                  setViewing(null);
+                  setScheduleOpen(false);
+                  setScheduleDate("");
+                }}
+              >
+                <X size={20} />
+              </button>
+              <div className="flex flex-col items-center gap-2 border-b border-slate-100 px-6 pb-5 pt-7 text-center">
+                <span
+                  className={`grid h-14 w-14 place-items-center rounded-full ${
+                    viewing.status === "REJECTED"
+                      ? "bg-red-50 text-red-500"
+                      : viewing.status === "APPROVED"
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-blue-50 text-blue-500"
+                  }`}
+                >
+                  <Megaphone size={24} />
+                </span>
+                <h2 className="text-xl font-black text-slate-900">Campaign Details</h2>
+              </div>
+              <div className="space-y-4 p-6">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-600">
+                    <Megaphone size={17} />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Campaign Name</p>
+                    <p className="text-sm font-semibold text-slate-800">{viewing.campaign_name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <span
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                      viewing.status === "APPROVED"
+                        ? "bg-emerald-100 text-emerald-600"
+                        : viewing.status === "REJECTED"
+                        ? "bg-red-100 text-red-500"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <CheckCircle2 size={17} />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Status</p>
+                    <Badge className={campaignTone[viewing.status]}>{pretty(viewing.status)}</Badge>
+                  </div>
+                </div>
+                {viewing.status === "REJECTED" && (
+                  <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-500">
+                        <X size={13} />
+                      </span>
+                      <p className="text-sm font-black text-red-700">Rejected by Admin</p>
+                    </div>
+                    {viewing.rejection_reason && (
+                      <div className="mb-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-red-400">Rejected Reason</p>
+                        <p className="mt-1 text-sm text-red-800">{viewing.rejection_reason}</p>
+                      </div>
+                    )}
+                    {viewing.review_comments && (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-red-400">Description</p>
+                        <p className="mt-1 text-sm text-red-800">{viewing.review_comments}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {(viewing.status === "DRAFT" || viewing.status === "APPROVED") && !scheduleOpen && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <button
+                      disabled={send.isPending}
+                      onClick={() => send.mutate(viewing.id)}
+                      className="flex flex-col items-center gap-2 rounded-2xl border-2 border-blue-100 bg-blue-50 px-4 py-5 text-center transition hover:border-blue-400 hover:bg-blue-100 disabled:opacity-60"
+                    >
+                      <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-blue-600 shadow-sm">
+                        <Send size={20} />
+                      </span>
+                      <span className="text-sm font-black text-blue-700">{send.isPending ? "Sending…" : "Send Now"}</span>
+                      <span className="text-[11px] text-slate-500">Send campaign immediately</span>
+                    </button>
+                    <button
+                      onClick={() => setScheduleOpen(true)}
+                      className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"
+                    >
+                      <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm">
+                        <CalendarClock size={20} />
+                      </span>
+                      <span className="text-sm font-black text-indigo-700">Schedule</span>
+                      <span className="text-[11px] text-slate-500">Schedule for later</span>
+                    </button>
+                  </div>
+                )}
+                {(viewing.status === "DRAFT" || viewing.status === "APPROVED") && scheduleOpen && (
+                  <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                    <p className="flex items-center gap-2 text-sm font-black text-indigo-700">
+                      <CalendarClock size={16} />
+                      Pick a date &amp; time
+                    </p>
+                    <input
+                      type="datetime-local"
+                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                      className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        className="secondary-button flex-1"
+                        onClick={() => {
+                          setScheduleOpen(false);
+                          setScheduleDate("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        disabled={!scheduleDate || schedule.isPending}
+                        onClick={() => {
+                          if (viewing && scheduleDate) schedule.mutate({ id: viewing.id, at: scheduleDate });
+                        }}
+                        className="primary-button flex-1 justify-center disabled:opacity-60"
+                      >
+                        {schedule.isPending ? "Scheduling…" : "Confirm"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <Info label="Audience" value={viewing.audience_name || "—"} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+                {(viewing.status === "DRAFT" || viewing.status === "REJECTED" || viewing.status === "APPROVED") && (
+                  <button
+                    className="secondary-button flex items-center gap-2 border-blue-300 px-5 text-blue-600"
+                    onClick={() => {
+                      const v = viewing;
+                      setViewing(null);
+                      loadCampaignForEdit(v);
+                    }}
+                  >
+                    <Pencil size={15} />
+                    Edit Campaign
+                  </button>
+                )}
+                <button
+                  className="secondary-button px-5"
+                  onClick={() => {
+                    setViewing(null);
+                    setScheduleOpen(false);
+                    setScheduleDate("");
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {deleteTarget && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
+            >
+              <div className="flex flex-col items-center gap-3 p-8 text-center">
+                <span className="grid h-16 w-16 place-items-center rounded-full bg-red-50">
+                  <Trash2 size={28} className="text-red-500" />
+                </span>
+                <h2 className="text-xl font-black text-slate-900">Delete Campaign?</h2>
+                <p className="text-sm text-slate-500">
+                  Are you sure you want to delete <strong>&ldquo;{deleteTarget.campaign_name}&rdquo;</strong>? This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+                <button className="secondary-button px-6" onClick={() => setDeleteTarget(null)} disabled={remove.isPending}>
+                  Cancel
+                </button>
+                <button
+                  className="flex min-h-10 items-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
+                  onClick={() => remove.mutate(deleteTarget.id)}
+                  disabled={remove.isPending}
+                >
+                  {remove.isPending ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 
@@ -618,9 +978,15 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
   const user = useQuery({ queryKey: ["auth-profile"], queryFn: authService.profile });
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
   const router = useRouter();
-  const [step, setStep] = useState(initialDraft?.task || initialDraft?.audience ? 2 : 1);
+  const [step, setStep] = useState(1);
   const [channelIndex, setChannelIndex] = useState(0);
   const [form, setForm] = useState<CampaignDraft>(() => initialDraft ? { ...emptyCampaignDraft, ...initialDraft } : { ...emptyCampaignDraft });
+
+  useEffect(() => {
+    if (initialDraft) {
+      setForm({ ...emptyCampaignDraft, ...initialDraft });
+    }
+  }, [initialDraft]);
   const [previewPage, setPreviewPage] = useState(1);
   const [previewSearch, setPreviewSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);

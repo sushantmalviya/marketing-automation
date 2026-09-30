@@ -1,5 +1,95 @@
+import uuid
 from django.db import models
 from django.conf import settings
+
+class Contact(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "Active", "Active"
+        UNSUBSCRIBED = "Unsubscribed", "Unsubscribed"
+        BOUNCED = "Bounced", "Bounced"
+        ARCHIVED = "Archived", "Archived"
+
+    class Source(models.TextChoices):
+        IMPORT = "imported", "CSV Import"
+        FORM = "form", "Form Submission"
+        META = "meta", "Meta Ad Lead"
+        MANUAL = "manual", "Manual Entry"
+        API = "api", "API / Integration"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="contacts",
+    )
+
+    email = models.EmailField(blank=True, null=True, db_index=True)
+    phone = models.CharField(max_length=50, blank=True, default="", db_index=True)
+    first_name = models.CharField(max_length=150, blank=True, default="")
+    last_name = models.CharField(max_length=150, blank=True, default="")
+    name = models.CharField(max_length=255, blank=True, default="")
+
+    source = models.CharField(
+        max_length=50,
+        choices=Source.choices,
+        default=Source.MANUAL,
+        db_index=True,
+    )
+    sub_source_type = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    sub_source_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    sub_source_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        db_index=True,
+    )
+    score = models.IntegerField(default=50)
+    tags = models.JSONField(default=list, blank=True)
+
+    attributes = models.JSONField(default=dict, blank=True)
+    initial_upload = models.ForeignKey(
+        "CustomerUpload",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contacts",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "contacts"
+        unique_together = [("owner", "email")]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["owner", "email"]),
+            models.Index(fields=["owner", "phone"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["source"]),
+            models.Index(fields=["sub_source_type", "sub_source_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name or self.email} ({self.owner.email})"
+
+
 
 class CustomerUpload(models.Model):
     class Status(models.TextChoices):
@@ -48,11 +138,15 @@ class CustomerRecord(models.Model):
         related_name="records",
     )
     data = models.JSONField()
-    routing_logs = models.JSONField(blank=True, default=list)
+    routing_logs = models.JSONField(
+        default=list,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Record {self.id}"
+
     
 
 
@@ -287,6 +381,16 @@ class CampaignAudience(models.Model):
         CustomerRecord,
         on_delete=models.CASCADE,
         related_name="campaigns",
+        null=True,
+        blank=True,
+    )
+
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.CASCADE,
+        related_name="campaigns",
+        null=True,
+        blank=True,
     )
 
     created_at = models.DateTimeField(
@@ -475,6 +579,16 @@ class CampaignDelivery(models.Model):
         CustomerRecord,
         on_delete=models.CASCADE,
         related_name="deliveries",
+        null=True,
+        blank=True,
+    )
+
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.CASCADE,
+        related_name="deliveries",
+        null=True,
+        blank=True,
     )
 
     channel = models.ForeignKey(

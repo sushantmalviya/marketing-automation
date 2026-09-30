@@ -115,6 +115,20 @@ class AudienceDetailAPIView(APIView):
             audience, data=request.data, partial=True, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
+        definition = serializer.validated_data.get("definition", audience.definition) or {}
+        seg_type = str(definition.get("type", "DYNAMIC")).upper()
+        if seg_type == "STATIC":
+            if definition.get("is_group"):
+                definition = {**definition, "static_ids": []}
+            else:
+                base_qs = AudienceService._base_queryset(request.user)
+                matched_ids = list(
+                    AudienceService._apply_definition(base_qs, definition)
+                    .values_list("id", flat=True)[:10000]
+                )
+                definition = {**definition, "static_ids": matched_ids}
+            serializer.validated_data["definition"] = definition
+
         serializer.save()
         return Response(AudienceSerializer(audience, context={"request": request}).data)
 
