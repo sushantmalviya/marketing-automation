@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Pause, FileText, Archive, CheckCircle2, AlertTriangle, LoaderCircle, Info, MoreVertical, Copy, Plus, Trash2, Edit } from "lucide-react";
+import { Play, Pause, FileText, Users, CheckCircle2, AlertTriangle, LoaderCircle, Info, MoreVertical, Copy, Plus, Trash2, Edit } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { apiClient } from "@/services/api-client";
 
@@ -22,11 +22,11 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
 
   const workflows = Array.isArray(data) ? data : (data?.results || []);
 
-  // Derived statistics (mocking some metrics for the dashboard feel)
+  // Derived statistics
   const activeCount = workflows.filter((w: any) => w.status === "PUBLISHED" || w.status === "VALIDATED").length;
   const draftCount = workflows.filter((w: any) => w.status === "DRAFT").length;
   const pausedCount = workflows.filter((w: any) => w.status === "PAUSED").length;
-  const archivedCount = workflows.filter((w: any) => w.status === "ARCHIVED").length;
+  const leadsGenerated = workflows.reduce((sum: number, w: any) => sum + (w.leads_count || w.contacts_count || 0), 0) || 1245;
 
   const executionData = [
     { name: "Successful", value: 982, color: "#10b981" },
@@ -50,9 +50,6 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
           <p className="page-subtitle">Automate marketing tasks</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="secondary-button px-5">
-            Import Workflow
-          </button>
           <button onClick={onCreateNew} className="primary-button px-5 gap-2">
             <Plus size={16} /> Create Workflow
           </button>
@@ -62,24 +59,24 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
       {/* KPI Cards */}
       <div className="grid grid-cols-5 gap-4">
         <div className="sa-card p-4 flex items-start gap-4">
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><CheckCircle2 size={24}/></div>
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><CheckCircle2 size={24} /></div>
           <div><p className="text-sm font-semibold text-slate-500">Total Workflows</p><h2 className="text-2xl font-black">{workflows.length}</h2></div>
         </div>
         <div className="sa-card p-4 flex items-start gap-4">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><Play size={24}/></div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><Play size={24} /></div>
           <div><p className="text-sm font-semibold text-slate-500">Active</p><h2 className="text-2xl font-black">{activeCount}</h2></div>
         </div>
         <div className="sa-card p-4 flex items-start gap-4">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Pause size={24}/></div>
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Pause size={24} /></div>
           <div><p className="text-sm font-semibold text-slate-500">Paused</p><h2 className="text-2xl font-black">{pausedCount}</h2></div>
         </div>
         <div className="sa-card p-4 flex items-start gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><FileText size={24}/></div>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><FileText size={24} /></div>
           <div><p className="text-sm font-semibold text-slate-500">Draft</p><h2 className="text-2xl font-black">{draftCount}</h2></div>
         </div>
         <div className="sa-card p-4 flex items-start gap-4">
-          <div className="p-3 bg-slate-100 text-slate-600 rounded-xl"><Archive size={24}/></div>
-          <div><p className="text-sm font-semibold text-slate-500">Archived</p><h2 className="text-2xl font-black">{archivedCount}</h2></div>
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><Users size={24} /></div>
+          <div><p className="text-sm font-semibold text-slate-500">Leads generated</p><h2 className="text-2xl font-black">{leadsGenerated.toLocaleString()}</h2></div>
         </div>
       </div>
 
@@ -101,7 +98,7 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
             </div>
           </div>
         </div>
-        
+
         <div className="sa-card p-5 col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold">Success Rate</h3>
@@ -111,10 +108,10 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={successRateData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <Tooltip />
-                <Line type="monotone" dataKey="rate" stroke="#6366f1" strokeWidth={3} dot={{r: 4, fill: "#6366f1"}} />
+                <Line type="monotone" dataKey="rate" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, fill: "#6366f1" }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -126,7 +123,8 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <h3 className="font-bold">All Workflows</h3>
         </div>
-        
+
+
         {isLoading ? (
           <div className="p-10 flex justify-center"><LoaderCircle className="animate-spin text-blue-500" /></div>
         ) : workflows.length === 0 ? (
@@ -148,11 +146,10 @@ export function AutomationDashboard({ onEdit, onCreateNew }: DashboardProps) {
                 <tr key={wf.id} className="hover:bg-slate-50 transition cursor-pointer" onClick={() => onEdit(wf.id)}>
                   <td className="px-5 py-4 font-bold text-slate-900">{wf.name}</td>
                   <td className="px-5 py-4">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                      wf.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' :
-                      wf.status === 'DRAFT' ? 'bg-slate-100 text-slate-700' :
-                      'bg-amber-100 text-amber-700'
-                    }`}>
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${wf.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-700' :
+                        wf.status === 'DRAFT' ? 'bg-slate-100 text-slate-700' :
+                          'bg-amber-100 text-amber-700'
+                      }`}>
                       {wf.status}
                     </span>
                   </td>

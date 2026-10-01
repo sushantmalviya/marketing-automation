@@ -10,7 +10,7 @@ class SendWhatsAppAction:
         message = config.get("customBody") or config.get("message", "")
         
         rendered_to = TemplateRenderer.render(to, context) if to else ""
-        rendered_message = TemplateRenderer.render(message, context)
+        rendered_message = TemplateRenderer.render_for_channel(message, context, channel="WHATSAPP")
 
         send_whatsapp(
             to=rendered_to,
