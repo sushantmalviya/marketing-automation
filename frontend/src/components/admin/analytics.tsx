@@ -17,6 +17,10 @@ import { useMemo, useRef, useEffect, useState } from "react";
 import { apiClient, parseApiError } from "@/services/api-client";
 import { superAdminService, type AnalyticsData } from "@/services/super-admin.service";
 import { useDateRange } from "@/components/ui/date-range-picker";
+import { InstagramAnalyticsTab } from "./instagram-analytics-tab";
+import { LinkedInAnalyticsTab } from "./linkedin-analytics-tab";
+import { FacebookAnalyticsTab } from "./facebook-analytics-tab";
+import { XAnalyticsTab } from "./x-analytics-tab";
 
 /* ─── Types ─────────────────────────────────────────────── */
 type SocialPlatform = "INSTAGRAM" | "X" | "FACEBOOK" | "LINKEDIN";
@@ -109,8 +113,10 @@ function RateBar({ label, value, color }: { label: string; value: number; color:
 /* ─── Main component ─────────────────────────────────────── */
 export function AdminAnalytics() {
   const { startDate, endDate, picker } = useDateRange();
+  const [activeView, setActiveView] = useState<"OVERVIEW" | "INSTAGRAM" | "LINKEDIN" | "FACEBOOK" | "X">("OVERVIEW");
   const [socialTab, setSocialTab] = useState<SocialPlatform>("INSTAGRAM");
   const [channelTab, setChannelTab] = useState<CampaignChannel>("EMAIL");
+
 
   const [analyticsQ, draftsQ, campaignsQ] = useQueries({ queries: [
     {
@@ -289,6 +295,81 @@ export function AdminAnalytics() {
           </button>
         </div>
       </div>
+
+      {/* ── Sub-Navigation Bar ── */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
+        <button
+          onClick={() => setActiveView("OVERVIEW")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeView === "OVERVIEW"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <BarChart3 size={16} />
+          Overview Analytics
+        </button>
+
+        <button
+          onClick={() => setActiveView("INSTAGRAM")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeView === "INSTAGRAM"
+              ? "bg-gradient-to-r from-pink-500 via-rose-500 to-purple-600 text-white shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <Instagram size={16} />
+          Instagram Insights & Feed
+        </button>
+
+        <button
+          onClick={() => setActiveView("LINKEDIN")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeView === "LINKEDIN"
+              ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-800 text-white shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <Linkedin size={16} />
+          LinkedIn Analytics & Comments
+        </button>
+
+        <button
+          onClick={() => setActiveView("FACEBOOK")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeView === "FACEBOOK"
+              ? "bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 text-white shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <Facebook size={16} />
+          Facebook Insights & Feed
+        </button>
+
+        <button
+          onClick={() => setActiveView("X")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            activeView === "X"
+              ? "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 text-white shadow-sm"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          }`}
+        >
+          <Twitter size={16} />
+          X (Twitter) Insights & Feed
+        </button>
+      </div>
+
+      {activeView === "INSTAGRAM" ? (
+        <InstagramAnalyticsTab />
+      ) : activeView === "LINKEDIN" ? (
+        <LinkedInAnalyticsTab />
+      ) : activeView === "FACEBOOK" ? (
+        <FacebookAnalyticsTab />
+      ) : activeView === "X" ? (
+        <XAnalyticsTab />
+      ) : (
+        <>
+
 
       {/* ── KPI row ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
@@ -626,6 +707,8 @@ export function AdminAnalytics() {
           </div>
         </div>
       </motion.section>
+        </>
+      )}
     </div>
   );
 }

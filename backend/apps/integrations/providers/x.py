@@ -44,9 +44,10 @@ class XProvider(BaseSocialProvider):
         
         access_token = resp_data.get("access_token")
         
-        # Fetch user profile
+        # Fetch user profile with public_metrics
         me_headers = {"Authorization": f"Bearer {access_token}"}
-        me_resp = requests.get(self.ME_URL, headers=me_headers)
+        me_url = f"{self.ME_URL}?user.fields=public_metrics,profile_image_url,description"
+        me_resp = requests.get(me_url, headers=me_headers)
         me_resp.raise_for_status()
         me_data = me_resp.json().get("data", {})
         
@@ -57,7 +58,9 @@ class XProvider(BaseSocialProvider):
             "account_id": me_data.get("id"),
             "account_name": me_data.get("username"),
             "metadata": {
-                "name": me_data.get("name")
+                "name": me_data.get("name"),
+                "profile_image_url": me_data.get("profile_image_url"),
+                "public_metrics": me_data.get("public_metrics", {}),
             }
         }
 
@@ -141,13 +144,7 @@ class XProvider(BaseSocialProvider):
             "text": content
         }
         
-        # Twitter v2 requires media_ids which must be uploaded via v1.1 endpoint first.
-        # This requires OAuth 1.0a or specific user contexts which adds significant complexity
-        # for a basic implementation. For this Phase, we'll append the image_url to the text
-        # if media upload isn't natively supported easily via v2 OAuth2.
-        # Alternatively, we could do a binary upload here, but appending URL works for Twitter cards.
         if image_url:
-            # Append URL so Twitter generates a preview card
             payload["text"] = f"{content}\n\n{image_url}"
             
         try:
@@ -163,3 +160,58 @@ class XProvider(BaseSocialProvider):
             if e.response is not None:
                 error_msg = e.response.text
             return {"success": False, "error": error_msg}
+
+    def get_user_analytics(self, connection) -> dict:
+        """Fetches X User Account Metrics (followers_count, following_count, tweet_count, listed_count)."""
+        access_token = connection.get_access_token()
+        if not access_token:
+            return {"success": False, "error": "No access token available."}
+
+        try:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            me_url = f"{self.ME_URL}?user.fields=public_metrics,profile_image_url,description"
+            resp = requests.get(me_url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+            return {
+                "success": True,
+                "user": data,
+                "public_metrics": data.get("public_metrics", {}),
+            }
+        except requests.exceptions.RequestException as e:
+            # Fallback to connection metadata if live request rate limited
+            cached_metrics = connection.metadata.get("public_metrics", {}) if connection.metadata else {}
+            return {
+                "success": True,
+                "user": {"username": connection.account_name},
+                "public_metrics": cached_metrics,
+                "note": "Using cached metrics."
+            }
+
+    def get_recent_tweets(self, connection, limit: int = 25) -> dict:
+        """Fetches User Recent Tweets with public performance metrics."""
+        access_token = connection.get_access_token()
+        if not access_token:
+            return {"success": False, "error": "No access token available."}
+
+        user_id = connection.platform_account_id
+        if not user_id:
+            return {"success": False, "error": "Missing X user account ID."}
+
+        try:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"https://api.twitter.com/2/users/{user_id}/tweets"
+            params = {
+                "max_results": limit,
+                "tweet.fields": "created_at,public_metrics,entities"
+            }
+            resp = requests.get(url, headers=headers, params=params)
+            resp.raise_for_status()
+            return {
+                "success": True,
+                "tweets": resp.json().get("data", []),
+                "username": connection.account_name,
+            }
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "error": str(e)}
+
