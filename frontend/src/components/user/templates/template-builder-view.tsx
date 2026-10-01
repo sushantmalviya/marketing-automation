@@ -19,8 +19,6 @@ import { EmailBlock } from "./types";
 import { getDefaultBlocks, serializeBlocksToHtml, parseHtmlToBlocks } from "./html-serializer";
 import { EmailBuilder } from "./email-builder";
 import { EmailPreviewModal } from "./email-builder/email-preview-modal";
-import { SMSEditor } from "./channel-editors/sms-editor";
-import { VariableDropdown } from "./email-builder/variable-dropdown";
 import { WhatsAppTemplateBuilder } from "./whatsapp-builder";
 import {
   WhatsAppTemplateData,
@@ -31,6 +29,15 @@ import {
   compileWhatsAppMessage,
   parseWhatsAppTemplate,
 } from "./whatsapp-builder/whatsapp-serializer";
+import {
+  SmsTemplateBuilder,
+  SmsPreviewModal,
+  SmsTemplateData,
+  DEFAULT_SMS_TEMPLATE,
+  serializeSmsMetadata,
+  compileSmsMessage,
+  parseSmsTemplate,
+} from "./sms-builder";
 
 interface Channel {
   id: number;
@@ -86,7 +93,7 @@ export function TemplateBuilderView({
     return getDefaultBlocks();
   });
 
-  // Plain text body state for SMS
+  // Plain text body state for generic fallback
   const [textBody, setTextBody] = useState<string>(() => {
     if (initialData?.body) return initialData.body;
     return "";
@@ -118,8 +125,31 @@ export function TemplateBuilderView({
     return { ...DEFAULT_WHATSAPP_TEMPLATE, name: initialData?.name || "" };
   });
 
+  // SMS structured template state
+  const [smsData, setSmsData] = useState<SmsTemplateData>(() => {
+    if (initialData) {
+      const chName = (
+        initialData.channel_name ||
+        channels.find((c) => String(c.id) === String(initialData.channel))?.name ||
+        ""
+      ).toUpperCase();
+      if (chName.includes("SMS")) {
+        return parseSmsTemplate(initialData.subject, initialData.body, initialData.name);
+      }
+    }
+    return { ...DEFAULT_SMS_TEMPLATE, name: initialData?.name || "" };
+  });
+
   const handleWhatsAppChange = (updated: WhatsAppTemplateData) => {
     setWhatsappData(updated);
+    if (updated.name !== name) {
+      setName(updated.name);
+    }
+    setIsDirty(true);
+  };
+
+  const handleSmsChange = (updated: SmsTemplateData) => {
+    setSmsData(updated);
     if (updated.name !== name) {
       setName(updated.name);
     }
@@ -129,15 +159,17 @@ export function TemplateBuilderView({
   useEffect(() => {
     if (isWhatsApp) {
       setWhatsappData((prev) => (prev.name !== name ? { ...prev, name } : prev));
+    } else if (isSMS) {
+      setSmsData((prev) => (prev.name !== name ? { ...prev, name } : prev));
     }
-  }, [name, isWhatsApp]);
+  }, [name, isWhatsApp, isSMS]);
 
   // Track if dirty for unsaved warning
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     setIsDirty(true);
-  }, [name, subject, blocks, textBody, whatsappData]);
+  }, [name, subject, blocks, textBody, whatsappData, smsData]);
 
   const handleClose = () => {
     if (isDirty) {
@@ -176,6 +208,13 @@ export function TemplateBuilderView({
       }
       finalSubject = serializeWhatsAppMetadata(whatsappData);
       finalBody = compileWhatsAppMessage(whatsappData);
+    } else if (isSMS) {
+      if (!smsData.body?.trim()) {
+        toast.error("Please enter SMS message body content");
+        return;
+      }
+      finalSubject = serializeSmsMetadata(smsData);
+      finalBody = compileSmsMessage(smsData);
     } else {
       if (!textBody.trim()) {
         toast.error("Please enter message body content");
@@ -195,7 +234,7 @@ export function TemplateBuilderView({
       };
 
       if (isEditing && initialData?.id) {
-        await apiClient.patch(`/api/templates/${initialData.id}`, payload);
+        await apiClient.patch(`/api/templates/${initialData.id}/`, payload);
         toast.success("Template updated successfully");
       } else {
         await apiClient.post("/api/templates/create/", payload);
@@ -235,7 +274,7 @@ export function TemplateBuilderView({
 
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
               <Sparkles size={13} />
-              <span>{isEmail ? "Email Builder" : isWhatsApp ? "WhatsApp Builder" : isSMS ? "SMS Editor" : "Template Editor"}</span>
+              <span>{isEmail ? "Email Builder" : isWhatsApp ? "WhatsApp Builder" : isSMS ? "SMS Builder" : "Template Editor"}</span>
             </span>
           </div>
 
@@ -257,14 +296,16 @@ export function TemplateBuilderView({
               </select>
             </div>
 
-            {/* Email Preview Button */}
-            {isEmail && (
+            {/* Email / SMS Preview Button */}
+            {(isEmail || isSMS) && (
               <button
                 type="button"
                 onClick={() => setPreviewOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-blue-300 transition shadow-xs"
+                className={`flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs ${
+                  isSMS ? "hover:border-indigo-300" : "hover:border-blue-300"
+                }`}
               >
-                <Eye size={15} className="text-blue-600" />
+                <Eye size={15} className={isSMS ? "text-indigo-600" : "text-blue-600"} />
                 <span>Full Preview</span>
               </button>
             )}
@@ -286,7 +327,7 @@ export function TemplateBuilderView({
       {/* Main Workspace Area according to Channel */}
       <main className="flex-1 p-4 sm:p-6 w-full max-w-full">
         {isEmail ? (
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="w-full max-w-7xl 2xl:max-w-[1560px] mx-auto space-y-6">
             {/* Clean Page Title & Subtitle */}
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
@@ -302,7 +343,7 @@ export function TemplateBuilderView({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 1. Template Name Field */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1 h-5">
                     <span>Template Name</span>
                     <span className="text-red-500">*</span>
                   </label>
@@ -320,17 +361,11 @@ export function TemplateBuilderView({
 
                 {/* 2. Email Subject Field with Variable Tag Support */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                      <Mail size={13} className="text-blue-600" />
-                      <span>Email Subject</span>
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <VariableDropdown
-                      size="sm"
-                      onInsert={(tag) => setSubject((prev) => (prev ? `${prev} ${tag}` : tag))}
-                    />
-                  </div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1 h-5">
+                    <Mail size={13} className="text-blue-600" />
+                    <span>Email Subject</span>
+                    <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={subject}
@@ -385,25 +420,11 @@ export function TemplateBuilderView({
             isEditing={isEditing}
           />
         ) : isSMS ? (
-          <div className="sa-card p-6 sm:p-8 max-w-5xl mx-auto shadow-sm space-y-5">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 mb-1">
-                {isEditing ? "Edit SMS Template" : "Create SMS Template"}
-              </h2>
-              <p className="text-xs text-slate-500">Configure your SMS marketing message</p>
-            </div>
-            <div className="field">
-              <label>Template Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Flash Sale SMS"
-                className="sa-input"
-              />
-            </div>
-            <SMSEditor value={textBody} onChange={setTextBody} />
-          </div>
+          <SmsTemplateBuilder
+            data={smsData}
+            onChange={handleSmsChange}
+            isEditing={isEditing}
+          />
         ) : (
           <div className="sa-card p-8 max-w-3xl mx-auto space-y-4">
             <div className="field">
@@ -430,10 +451,22 @@ export function TemplateBuilderView({
       </main>
 
       {/* Full Email Preview Modal */}
-      {previewOpen && (
+      {previewOpen && isEmail && (
         <EmailPreviewModal
           subject={subject}
           blocks={blocks}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+
+      {/* Full SMS Preview Modal */}
+      {previewOpen && isSMS && (
+        <SmsPreviewModal
+          template={{
+            name,
+            subject: serializeSmsMetadata(smsData),
+            body: compileSmsMessage(smsData),
+          }}
           onClose={() => setPreviewOpen(false)}
         />
       )}

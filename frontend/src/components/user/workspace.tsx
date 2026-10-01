@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, ExternalLink, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Phone, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Tag, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
+import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, ExternalLink, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Phone, Play, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Tag, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
 import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +18,11 @@ import { TemplatePickerModal } from "@/components/modules/template-picker";
 import { WhatsAppPreview } from "@/components/user/templates/whatsapp-builder/whatsapp-preview";
 import { parseWhatsAppTemplate, serializeWhatsAppMetadata, compileWhatsAppMessage } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
 import type { WhatsAppTemplateData } from "@/components/user/templates/whatsapp-builder/whatsapp-types";
+import { SmsPreview } from "@/components/user/templates/sms-builder/sms-preview";
+import { parseSmsTemplate, serializeSmsMetadata, cleanSmsContent, compileSmsMessage } from "@/components/user/templates/sms-builder/sms-serializer";
+import { analyzeSmsText } from "@/components/user/templates/sms-builder/sms-encoder";
+import type { SmsTemplateData } from "@/components/user/templates/sms-builder/sms-types";
+import { EmailPhonePreview } from "@/components/user/templates/email-builder/email-phone-preview";
 
 type TaskInfo = { id: number; title: string; description: string; instructions: string; audience: number; audience_name: string; channels: number[]; priority: string; status: string; due_date: string; created_at?: string };
 type Assignment = { id: number; task: TaskInfo; status: string; remarks: string; created_at: string; updated_at: string; submitted_at: string | null };
@@ -1054,12 +1059,28 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
         const ct = form.channelTemplates[String(ch.id)];
         if (!ct?.body?.trim()) continue;
         let templateId: number;
+        const isSmsCh = ch.name.toUpperCase().includes("SMS");
+        let subjectVal = ct.subject?.trim() || "";
+        let bodyVal = ct.body;
+
+        if (isSmsCh) {
+          const parsedSms = parseSmsTemplate(ct.subject, ct.body, ct.template_name || `${form.name} - ${ch.name}`);
+          const cleanBody = cleanSmsContent(ct.body);
+          const fullSms: SmsTemplateData = {
+            ...parsedSms,
+            name: ct.template_name.trim() || `${form.name} - ${ch.name}`,
+            body: cleanBody,
+          };
+          subjectVal = serializeSmsMetadata(fullSms);
+          bodyVal = compileSmsMessage(fullSms);
+        }
+
         if (ct.template_id && !isNaN(Number(ct.template_id)) && Number(ct.template_id) > 0) {
           templateId = Number(ct.template_id);
           try {
             await apiClient.patch(`/api/templates/${templateId}/`, {
-              subject: ct.subject?.trim() || "",
-              body: ct.body,
+              subject: subjectVal,
+              body: bodyVal,
             });
           } catch (e) {
             console.warn("Failed to update template before assignment", e);
@@ -1068,8 +1089,8 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
           const res = await apiClient.post<Template>("/api/templates/create/", {
             name: ct.template_name.trim() || `${form.name} - ${ch.name}`,
             channel: ch.id,
-            subject: ct.subject?.trim() || "",
-            body: ct.body,
+            subject: subjectVal,
+            body: bodyVal,
             status: "ACTIVE"
           });
           templateId = res.data.id;
@@ -1114,8 +1135,30 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
       if (!currentCT.body.trim()) { toast.error("Enter the template body."); return; }
       if (!currentCT.template_id) {
         try {
-          const saved = await apiClient.post<Template>("/api/templates/create/", { name: currentCT.template_name.trim(), channel: currentChannel.id, subject: currentCT.subject?.trim() || "", body: currentCT.body, status: "ACTIVE" });
-          setCurrentCT({ template_id: String(saved.data.id) });
+          const isSmsCh = currentChannel.name.toUpperCase().includes("SMS");
+          let subjectVal = currentCT.subject?.trim() || "";
+          let bodyVal = currentCT.body;
+
+          if (isSmsCh) {
+            const parsedSms = parseSmsTemplate(currentCT.subject, currentCT.body, currentCT.template_name.trim());
+            const cleanBody = cleanSmsContent(currentCT.body);
+            const fullSms: SmsTemplateData = {
+              ...parsedSms,
+              name: currentCT.template_name.trim(),
+              body: cleanBody,
+            };
+            subjectVal = serializeSmsMetadata(fullSms);
+            bodyVal = compileSmsMessage(fullSms);
+          }
+
+          const saved = await apiClient.post<Template>("/api/templates/create/", {
+            name: currentCT.template_name.trim(),
+            channel: currentChannel.id,
+            subject: subjectVal,
+            body: bodyVal,
+            status: "ACTIVE"
+          });
+          setCurrentCT({ template_id: String(saved.data.id), subject: subjectVal, body: bodyVal });
           toast.success(`"${currentChannel.name}" template saved to My Templates`);
         } catch (err) { toast.error("Could not save template: " + parseApiError(err)); return; }
       }
@@ -1228,13 +1271,16 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
         {step === 2 && currentChannel && (() => {
           const isWhatsAppChannel = currentChannel.name.toUpperCase().includes("WHATS");
           const waData = isWhatsAppChannel ? parseWhatsAppTemplate(currentCT.subject, currentCT.body) : null;
+          const isSmsChannel = currentChannel.name.toUpperCase().includes("SMS");
+          const smsData = isSmsChannel ? parseSmsTemplate(currentCT.subject, currentCT.body, currentCT.template_name || form.name) : null;
+          const smsAnalysis = isSmsChannel ? analyzeSmsText(currentCT.body) : null;
 
           return (
             <motion.div key={`ch-${channelIndex}`} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold ${isEmail(currentChannel.name) ? "bg-blue-100 text-blue-700" : isWhatsAppChannel ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>{channelIndex + 1}</span>
+                    <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold ${isEmail(currentChannel.name) ? "bg-blue-100 text-blue-700" : isWhatsAppChannel ? "bg-emerald-100 text-emerald-700" : isSmsChannel ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700"}`}>{channelIndex + 1}</span>
                     <h2 className="text-2xl font-black">{currentChannel.name} Template</h2>
                   </div>
                   <p className="text-sm text-slate-500 ml-10">Template {channelIndex + 1} of {taskChannels.length} — auto-saved to My Templates on Next</p>
@@ -1348,6 +1394,131 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                       </div>
                     )}
                   </div>
+                ) : isSmsChannel && smsData && smsAnalysis ? (
+                  <div className="space-y-4">
+                    {/* SMS Meta & Category indicator */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 text-xs font-bold text-indigo-700 uppercase">
+                          <MessageSquare size={13} />
+                          SMS · {smsData.category}
+                        </span>
+                        {smsData.description && (
+                          <span className="text-xs text-slate-500 truncate max-w-sm" title={smsData.description}>
+                            {smsData.description}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                        <span className={`px-2 py-0.5 rounded-md ${smsAnalysis.encoding === "UCS-2" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-slate-100 text-slate-600 border border-slate-200"}`}>
+                          {smsAnalysis.encoding}
+                        </span>
+                        <span>
+                          {smsAnalysis.charCount} / {smsAnalysis.maxCharsPerSegment * Math.max(1, smsAnalysis.segments)} chars ({smsAnalysis.segments} {smsAnalysis.segments === 1 ? "segment" : "segments"})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Header Summary / Preview */}
+                    {smsData.headerType && smsData.headerType !== "NONE" && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                            <ImageIcon size={14} className="text-indigo-600" />
+                            Header ({smsData.headerType})
+                          </span>
+                        </div>
+                        {smsData.headerType === "IMAGE" && smsData.mediaUrl ? (
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-200">
+                              <img
+                                src={resolveApiUrl(smsData.mediaUrl)}
+                                alt="Header preview"
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = "none";
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 truncate max-w-md font-mono" title={smsData.mediaUrl}>
+                              {smsData.mediaName || smsData.mediaUrl}
+                            </span>
+                          </div>
+                        ) : smsData.headerType === "VIDEO" && smsData.mediaUrl ? (
+                          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                            <Play size={15} className="text-indigo-600" />
+                            <span className="truncate">{smsData.mediaName || smsData.mediaUrl}</span>
+                          </div>
+                        ) : smsData.headerType === "DOCUMENT" && smsData.mediaUrl ? (
+                          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                            <FileText size={15} className="text-amber-600" />
+                            <span className="truncate">{smsData.mediaName || smsData.mediaUrl}</span>
+                          </div>
+                        ) : smsData.headerType === "TEXT" && smsData.header ? (
+                          <p className="text-sm font-semibold text-slate-800">{smsData.header}</p>
+                        ) : (
+                          <p className="text-xs text-slate-500 font-mono truncate">{smsData.mediaUrl || "Media header configured"}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dedicated Plain-text Body Composer */}
+                    <label className="field">
+                      <div className="flex items-center justify-between mb-1">
+                        <span>Message Body <b className="text-red-500">*</b></span>
+                      </div>
+                      <textarea
+                        rows={6}
+                        className="w-full rounded-xl border border-slate-200 p-3.5 text-sm leading-relaxed text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 font-sans resize-y"
+                        placeholder="Enter SMS message body (supports links, emojis, {{first_name}})..."
+                        value={currentCT.body}
+                        onChange={(e) => {
+                          const newBody = e.target.value;
+                          setCurrentCT({
+                            body: newBody,
+                            template_id: "",
+                          });
+                        }}
+                      />
+                    </label>
+
+                    {/* Footer indicator */}
+                    {smsData.footer && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between text-xs">
+                        <span className="font-bold uppercase tracking-wider text-slate-500">Footer</span>
+                        <span className="italic text-slate-600 truncate max-w-md">{smsData.footer}</span>
+                      </div>
+                    )}
+
+                    {/* CTA indicator */}
+                    {smsData.cta && smsData.cta.enabled && smsData.cta.value && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-center justify-between text-xs">
+                        <span className="font-bold uppercase tracking-wider text-slate-500">CTA ({smsData.cta.type})</span>
+                        <span className="font-semibold text-slate-700 truncate max-w-md">
+                          {smsData.cta.label ? `${smsData.cta.label}: ${smsData.cta.value}` : smsData.cta.value}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Quick variable insertion chips */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-xs font-semibold text-slate-500 mr-1">Insert variable:</span>
+                      {["first_name", "last_name", "name", "company", "phone", "email"].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          className="inline-flex items-center px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition shadow-2xs"
+                          onClick={() => {
+                            const token = `{{${v}}}`;
+                            const newBody = currentCT.body ? `${currentCT.body} ${token}` : token;
+                            setCurrentCT({ body: newBody, template_id: "" });
+                          }}
+                        >
+                          + {`{{${v}}}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
                   <label className="field">
                     <span>Body <b className="text-red-500">*</b></span>
@@ -1433,6 +1604,17 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                     ...(waData.buttons || []).map(b => `${b.text} ${b.url || ""} ${b.phoneNumber || ""} ${b.couponCode || ""}`)
                   ].join(" ");
                   usedVars = Array.from(new Set([...waText.matchAll(/\{\{(.*?)\}\}/g)].map(m => m[1].trim())));
+                } else if ((activeCh?.name || "").toUpperCase().includes("SMS")) {
+                  const smsParsed = parseSmsTemplate(activeCT.subject, activeCT.body);
+                  const combinedSmsText = [
+                    smsParsed.header || "",
+                    smsParsed.body || "",
+                    smsParsed.footer || "",
+                    ...(smsParsed.buttons || []).map(b => `${b.text} ${b.url || ""} ${b.phoneNumber || ""} ${b.couponCode || ""}`),
+                    smsParsed.cta?.label || "",
+                    smsParsed.cta?.value || "",
+                  ].join(" ");
+                  usedVars = Array.from(new Set([...combinedSmsText.matchAll(/\{\{(.*?)\}\}/g)].map((m: RegExpMatchArray) => m[1].trim())));
                 } else {
                   const combinedText = (activeCT.subject || "") + (activeCT.body || "");
                   usedVars = Array.from(new Set([...combinedText.matchAll(/\{\{(.*?)\}\}/g)].map((m: RegExpMatchArray) => m[1].trim())));
@@ -1491,19 +1673,15 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                 const resolvedBody = resolveText(activeCT.body);
 
                 return (
-                  <div className="p-8 flex items-center justify-center bg-slate-50/50">
+                  <div className="p-4 sm:p-6 flex items-center justify-center bg-slate-50/50">
                     {isEmail && (
-                      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                        <div className="border-b border-slate-100 bg-slate-50 p-4">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Subject:</p>
-                          <p className="mt-1 text-sm font-bold text-slate-900">{resolvedSubject || <span className="italic text-slate-400">No subject</span>}</p>
-                        </div>
-                        <div className="p-6">
-                          <div
-                            className="text-sm leading-relaxed text-slate-800 [&_b]:font-bold [&_strong]:font-bold [&_em]:italic [&_i]:italic [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:rounded-lg"
-                            dangerouslySetInnerHTML={{ __html: resolvedBody || "<span style='color:#94a3b8'>No message body.</span>" }}
-                          />
-                        </div>
+                      <div className="w-full flex justify-center py-2">
+                        <EmailPhonePreview
+                          subject={resolvedSubject}
+                          html={resolvedBody}
+                          senderName={form.name || "Brand Email"}
+                          recipientEmail={testVariables["email"] || ((user.data as any)?.email) || "alex.morgan@example.com"}
+                        />
                       </div>
                     )}
 
@@ -1533,20 +1711,43 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                       );
                     })()}
 
-                    {isSms && (
-                      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden relative h-[600px] flex flex-col">
-                        <div className="bg-white border-b border-slate-100 px-4 py-3 flex flex-col items-center">
-                          <span className="grid h-14 w-14 place-items-center rounded-full bg-slate-200 text-slate-400 mb-2"><User size={32} /></span>
-                          <p className="text-xs font-medium text-slate-900">+1 (800) 555-0199</p>
+                    {isSms && (() => {
+                      const cleanBody = cleanSmsContent(activeCT.body);
+                      const smsData = parseSmsTemplate(
+                        activeCT.subject,
+                        cleanBody,
+                        activeCT.template_name || form.name || "Brand SMS"
+                      );
+                      const resolvedSms: SmsTemplateData = {
+                        ...smsData,
+                        name: activeCT.template_name || form.name || "Brand SMS",
+                        header: resolveText(smsData.header),
+                        body: resolveText(cleanBody || smsData.body),
+                        footer: resolveText(smsData.footer),
+                        buttons: (smsData.buttons || []).map((b) => ({
+                          ...b,
+                          text: resolveText(b.text),
+                          url: resolveText(b.url),
+                          phoneNumber: resolveText(b.phoneNumber),
+                          couponCode: resolveText(b.couponCode),
+                        })),
+                        cta: smsData.cta && smsData.cta.enabled ? {
+                          ...smsData.cta,
+                          label: resolveText(smsData.cta.label),
+                          value: resolveText(smsData.cta.value),
+                        } : undefined,
+                      };
+
+                      return (
+                        <div className="w-full flex justify-center py-2">
+                          <SmsPreview
+                            data={resolvedSms}
+                            senderName={form.name || resolvedSms.name}
+                            customSamples={testVariables}
+                          />
                         </div>
-                        <div className="flex-1 p-4 overflow-y-auto bg-white flex flex-col">
-                          <p className="text-center text-[10px] font-semibold text-slate-400 mb-4">Text Message<br />Today 11:30 AM</p>
-                          <div className="bg-[#e9e9eb] rounded-2xl rounded-bl-sm p-3 shadow-sm text-[15px] leading-snug text-black w-fit max-w-[85%] whitespace-pre-wrap">
-                            <div dangerouslySetInnerHTML={{ __html: resolvedBody.replace(/\n/g, "<br/>") || "<span style='color:#94a3b8'>No message...</span>" }} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -1607,11 +1808,14 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
           channelId={currentChannel.id}
           onClose={() => setPickerOpen(false)}
           onSelect={(template) => {
+            const isSmsCh = (currentChannel.name || "").toUpperCase().includes("SMS");
+            const parsedSms = isSmsCh ? parseSmsTemplate(template.subject, template.body, template.name) : null;
+            const bodyVal = parsedSms ? (parsedSms.body || cleanSmsContent(template.body)) : template.body;
             setCurrentCT({
               template_id: String(template.id),
               template_name: template.name,
               subject: template.subject,
-              body: template.body,
+              body: bodyVal,
             });
             setPickerOpen(false);
           }}

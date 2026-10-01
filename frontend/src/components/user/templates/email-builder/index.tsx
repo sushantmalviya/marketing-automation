@@ -265,7 +265,7 @@ export function EmailBuilder({ blocks, setBlocks }: EmailBuilderProps) {
   const activeBlock = blocks.find((b) => b.id === activeId) || null;
 
   return (
-    <div className="flex h-[calc(100vh-190px)] min-h-[580px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex h-[calc(100vh-190px)] min-h-[600px] 2xl:min-h-[700px] w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -311,3 +311,7 @@ export function EmailBuilder({ blocks, setBlocks }: EmailBuilderProps) {
     </div>
   );
 }
+
+export * from "./email-phone-preview";
+export * from "./email-preview-modal";
+
