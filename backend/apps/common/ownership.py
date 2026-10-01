@@ -33,12 +33,18 @@ def get_tenant_owner_profile(user):
 
 def get_managed_users_queryset(admin_user):
     """
-    Returns a queryset of User objects managed by this admin_user.
-    For ADMIN, it returns all users with role 'USER'.
+    Returns a queryset of User objects managed by this admin_user within their organization.
     """
-    if is_super_admin(admin_user):
-        return User.objects.filter(ma_users__role="USER", is_active=True).prefetch_related("ma_users")
-    
+    if not admin_user or not admin_user.is_authenticated:
+        return User.objects.none()
+
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
+        return User.objects.filter(is_active=True).prefetch_related("ma_users")
+
+    org_id = getattr(admin_user, 'organization_id', None)
+    if org_id:
+        return User.objects.filter(organization_id=org_id, is_active=True).prefetch_related("ma_users")
+
     return User.objects.none()
 
 def get_managed_user_ids(admin_user):
@@ -47,28 +53,42 @@ def get_managed_user_ids(admin_user):
 
 def is_managed_user(admin_user, target_user):
     """
-    Checks if target_user is managed by admin_user.
-    ADMIN manages everyone.
+    Checks if target_user is managed by admin_user within the same organization.
     """
-    if not target_user or not target_user.is_authenticated:
+    if not target_user or not target_user.is_authenticated or not admin_user or not admin_user.is_authenticated:
         return False
-    
-    return is_super_admin(admin_user)
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
+        return True
+    return getattr(admin_user, 'organization_id', None) == getattr(target_user, 'organization_id', None)
 
 def filter_users_for_admin(queryset, admin_user):
-    """Filters a queryset of User objects based on ownership."""
-    if is_super_admin(admin_user):
+    """Filters a queryset of User objects based on organization boundaries."""
+    if not admin_user or not admin_user.is_authenticated:
+        return queryset.none()
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
         return queryset
+    org_id = getattr(admin_user, 'organization_id', None)
+    if org_id:
+        return queryset.filter(organization_id=org_id)
     return queryset.none()
 
 def _filter_resource_for_admin(queryset, admin_user, user_field="created_by"):
     """
-    Core filter:
-    ADMIN -> all resources
-    USER -> own resources
+    Core tenant isolation filter:
+    1. Global superuser -> all resources
+    2. Tenant user -> resources in user's organization_id
     """
-    if is_super_admin(admin_user):
+    if not admin_user or not admin_user.is_authenticated:
+        return queryset.none()
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
         return queryset
+
+    org_id = getattr(admin_user, 'organization_id', None)
+    if org_id:
+        field_names = [f.name for f in queryset.model._meta.get_fields()]
+        if 'organization' in field_names:
+            return queryset.filter(organization_id=org_id)
+
     return queryset.filter(**{user_field: admin_user})
 
 def filter_by_tenant(queryset, user, user_field="created_by"):
@@ -87,18 +107,28 @@ def filter_audiences_for_admin(queryset, admin_user):
     return _filter_resource_for_admin(queryset, admin_user, "created_by")
 
 def can_manage_campaign(admin_user, campaign):
-    if is_super_admin(admin_user):
+    if not admin_user or not admin_user.is_authenticated:
+        return False
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
         return True
+    org_id = getattr(admin_user, 'organization_id', None)
+    if org_id and getattr(campaign, 'organization_id', None):
+        return campaign.organization_id == org_id
     return campaign.created_by_id == admin_user.id
 
 def can_manage_template(admin_user, template):
-    if is_super_admin(admin_user):
+    if not admin_user or not admin_user.is_authenticated:
+        return False
+    if admin_user.is_superuser and not getattr(admin_user, 'organization_id', None):
         return True
+    org_id = getattr(admin_user, 'organization_id', None)
+    if org_id and getattr(template, 'organization_id', None):
+        return template.organization_id == org_id
     return template.created_by_id == admin_user.id
 
 def filter_customer_records_for_admin(queryset, admin_user):
-    """For CustomerRecord which has upload__uploaded_by"""
+    """For CustomerRecord which has upload__uploaded_by or organization"""
     return _filter_resource_for_admin(queryset, admin_user, "upload__uploaded_by")
 
 def filter_customer_uploads_for_admin(queryset, admin_user):
-    return _filter_resource_for_admin(queryset, admin_user, "uploaded_by")
+    return _filter_resource_for_admin(queryset, admin_user, "uploaded_by")
