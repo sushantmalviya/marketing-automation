@@ -35,7 +35,7 @@ type DashboardSummary = { campaigns: { total: number; draft: number; scheduled: 
 type AudiencePreviewPage = { audience: { id: number; name: string }; total_customers: number; page: number; pages: number; preview: { id: number; data: Record<string, unknown> }[] };
 type CampaignDraft = { task: string; audience: string; selectedChannelIds: number[]; name: string; description: string; template_id: string; template_name: string; channel: string; subject: string; body: string; scheduled_at: string; channelTemplates: Record<string, ChannelTemplate> };
 type GeneratedContent = { id: string; content_type: string; platform: string; status: string; created_at: string; versions: { id: string; version_number: number; prompt: string; text_content: string; image_url: string | null; created_at: string }[] };
-type ContentPlatformData = { id: string; platform: string; status: string; approval_status: string; error_message?: string; scheduled_datetime: string | null; published_datetime: string | null; caption: { caption_text: string; hashtags: string; cta: string } | null; images: { asset_url?: string; asset_name?: string }[] };
+type ContentPlatformData = { id: string; platform: string; status: string; approval_status: string; error_message?: string; scheduled_datetime: string | null; published_datetime: string | null; caption_text?: string; hashtags?: string; cta?: string; location_id?: string; first_comment?: string; caption: { caption_text: string; hashtags: string; cta: string } | null; images: { asset_url?: string; asset_name?: string }[] };
 type ContentDraftData = { id: string; original_prompt: string; enhanced_prompt: string; workflow_state: string; platforms: ContentPlatformData[]; created_at: string; updated_at: string };
 
 const campaignTone: Record<string, string> = { DRAFT: "bg-slate-100 text-slate-700", PENDING_APPROVAL: "bg-amber-50 text-amber-700 ring-1 ring-amber-200", APPROVED: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200", SCHEDULED: "bg-blue-50 text-blue-700 ring-1 ring-blue-200", SENDING: "bg-violet-50 text-violet-700 ring-1 ring-violet-200", COMPLETED: "bg-green-50 text-green-700 ring-1 ring-green-200", FAILED: "bg-red-50 text-red-600 ring-1 ring-red-200", REJECTED: "bg-slate-100 text-slate-500" };
@@ -223,7 +223,7 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
   const [activeTab, setActiveTab] = useState<"GENERATOR" | "CALENDAR" | "DRAFTS" | "PUBLISHED">("GENERATOR");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
-  const history = useQuery({ queryKey: ["user-content-history"], queryFn: async () => (await apiClient.get<GeneratedContent[]>("/api/content/history/")).data });
+  const history = useQuery({ queryKey: ["user-content-history"], queryFn: async () => { const res = await apiClient.get<any>("/api/content/content-drafts/"); return Array.isArray(res.data) ? res.data : (res.data.results ?? []); } });
   const draftsQuery = useQuery({
     queryKey: ["user-content-drafts"], queryFn: async () => {
       const res = await apiClient.get<any>("/api/content/content-drafts/");
@@ -470,7 +470,7 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
       history.isError ? <ErrorState error={history.error} /> : history.isLoading ? <Skeleton /> : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {(history.data ?? []).map((item, index) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
+            {(history.data ?? []).map((item: any, index: number) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
           </div>
           {!history.isLoading && !history.data?.length && <Empty message="Generate your first post to see it here." />}
         </>
@@ -484,11 +484,17 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
 
 function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenerateNew }: { draft: ContentDraftData; generating: boolean; onChange: (draft: ContentDraftData) => void; onBack: () => void; onGenerateNew: () => void }) {
   const client = useQueryClient();
-  const [activeId, setActiveId] = useState(draft.platforms[0]?.id ?? ""); const [edits, setEdits] = useState<Record<string, string>>({}); const [scheduleAt, setScheduleAt] = useState(""); const [firstComment, setFirstComment] = useState(""); const [location, setLocation] = useState("Mumbai, India"); const [publishAs, setPublishAs] = useState("Feed Post"); const [busy, setBusy] = useState("");
+  const [activeId, setActiveId] = useState(draft.platforms[0]?.id ?? ""); const [edits, setEdits] = useState<Record<string, string>>({}); const [scheduleAt, setScheduleAt] = useState(""); const [firstComment, setFirstComment] = useState(""); const [location, setLocation] = useState(""); const [publishAs, setPublishAs] = useState("Feed Post"); const [busy, setBusy] = useState("");
   const active = draft.platforms.find(item => item.id === activeId) ?? draft.platforms[0]; const caption = active ? (edits[active.id] ?? [active.caption?.caption_text, active.caption?.hashtags, active.caption?.cta].filter(Boolean).join("\n\n")) : ""; const image = resolveApiUrl(active?.images[0]?.asset_url); const meta = contentPlatforms.find(item => item.value === active?.platform); const ActiveIcon = meta?.icon; const isFacebook = active?.platform === "FACEBOOK"; const isInstagram = active?.platform === "INSTAGRAM"; const isLinkedIn = active?.platform === "LINKEDIN"; const isX = active?.platform === "X"; const contentLimit = isX ? 280 : isLinkedIn ? 3000 : 2200; const firstCommentLimit = isFacebook ? 800 : 300;
+  useEffect(() => {
+    if (active) {
+      if (active.first_comment !== undefined) setFirstComment(active.first_comment || "");
+      if (active.location_id !== undefined) setLocation(active.location_id || "");
+    }
+  }, [active?.id]);
   const refresh = async () => { const updated = (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${draft.id}/`, { timeout: 60000 })).data; onChange(updated); return updated };
   const run = async (label: string, operation: () => Promise<void>) => { setBusy(label); try { await operation() } catch (error) { toast.error(parseApiError(error)) } finally { setBusy("") } };
-  const persist = async (showToast = true) => { if (!active) return; await apiClient.patch(`/api/content/content-drafts/${draft.id}/platforms/${active.id}/`, { caption_text: caption, hashtags: "", cta: "" }, { timeout: 60000 }); await refresh(); if (showToast) toast.success("Draft saved") };
+  const persist = async (showToast = true) => { if (!active) return; await apiClient.patch(`/api/content/content-drafts/${draft.id}/platforms/${active.id}/`, { caption_text: caption, hashtags: "", cta: "", first_comment: firstComment, location_id: location }, { timeout: 60000 }); await refresh(); if (showToast) toast.success("Draft saved") };
   const regenerate = async (images: boolean, captions: boolean) => run(images ? "image" : "caption", async () => { await apiClient.post(`/api/content/content-drafts/${draft.id}/regenerate/`, { reason: images ? "Replace post image" : "Improve caption", generate_images: images, generate_captions: captions }, { timeout: 180000 }); await refresh(); if (captions) { setEdits({}); } toast.success(images ? "Post image regenerated" : "Caption regenerated") });
   const schedule = () => run("schedule", async () => { if (!scheduleAt) throw new Error("Select a future date and time."); await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/schedule/`, { schedules: Object.fromEntries(draft.platforms.map(item => [item.platform, new Date(scheduleAt).toISOString()])) }, { timeout: 60000 }); await refresh(); toast.success("Content scheduled") });
   const approval = () => run("approval", async () => { await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/request_approval/`, {}, { timeout: 60000 }); await refresh(); toast.success("Sent to Admin for approval") });

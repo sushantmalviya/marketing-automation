@@ -37,7 +37,8 @@ class ContentPlatformSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'platform', 'image_size', 'status', 'approval_status',
             'scheduled_datetime', 'published_datetime', 'error_message',
-            'caption_text', 'hashtags', 'cta', 'is_manually_edited', 'images'
+            'caption_text', 'hashtags', 'cta', 'location_id', 'first_comment',
+            'is_manually_edited', 'images'
         ]
 
 

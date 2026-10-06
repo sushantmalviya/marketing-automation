@@ -165,13 +165,12 @@ urlpatterns = [
     path("api/v1/external/organizations/<str:external_company_id>/usage/", ExternalOrganizationUsageReportView.as_view(), name="external-org-usage-report"),
 ]
 
-import sys
-
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
+from django.urls import re_path
 
-# Serve generated media from Django during local development. The machine can
-# define DEBUG=False globally, so checking the runserver command keeps local
-# prompt previews working without enabling this behavior in production.
-if settings.DEBUG or "runserver" in sys.argv:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]
