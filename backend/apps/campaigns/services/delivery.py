@@ -254,9 +254,11 @@ class DeliveryService:
         # Render Template
         # -------------------------
 
-        message = TemplateRenderer.render(
+        channel_code = campaign_template.channel.code.upper() if campaign_template.channel else "GENERIC"
+        message = TemplateRenderer.render_for_channel(
             campaign_template.template.body,
             customer.data,
+            channel=channel_code,
         )
 
         # -------------------------

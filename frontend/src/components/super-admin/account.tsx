@@ -971,11 +971,10 @@ function ConnectSenderIDsPanel() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          d.status === "VERIFIED"
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${d.status === "VERIFIED"
                             ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                             : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
-                        }`}
+                          }`}
                       >
                         {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
                         {d.status}

@@ -368,4 +368,24 @@ class SmartColumnResolverTests(APITestCase):
 
         self.assertEqual(normalized_df["name"].tolist(), ["John Doe", "Jane Smith"])
 
-   
+
+class TemplateSanitizerTests(APITestCase):
+    def test_html_tag_stripping_and_formatting(self):
+        from apps.campaigns.services.renderer import TemplateRenderer
+        html_input = "<p>Hello <b>Carlos</b>!</p><br><p>Thank you for choosing &amp; trusting our service.</p>"
+        clean = TemplateRenderer.to_plain_text(html_input, channel="WHATSAPP")
+        self.assertEqual(clean, "Hello *Carlos*!\n\nThank you for choosing & trusting our service.")
+
+    def test_json_template_payload_parsing(self):
+        from apps.campaigns.services.renderer import TemplateRenderer
+        import json
+        json_input = json.dumps({"version": 1, "cleanBody": "<div>Special Offer: <b>50% OFF</b></div>"})
+        clean = TemplateRenderer.to_plain_text(json_input, channel="WHATSAPP")
+        self.assertEqual(clean, "Special Offer: *50% OFF*")
+
+    def test_render_for_channel_plain_text(self):
+        from apps.campaigns.services.renderer import TemplateRenderer
+        template = "<p>Hi {{ name }}, your order <b>#{{ order_id }}</b> is ready.</p>"
+        context = {"name": "Carlos", "order_id": "1001"}
+        rendered = TemplateRenderer.render_for_channel(template, context, channel="WHATSAPP")
+        self.assertEqual(rendered, "Hi Carlos, your order *#1001* is ready.")
