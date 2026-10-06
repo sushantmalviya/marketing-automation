@@ -228,6 +228,57 @@ button, a { -webkit-tap-highlight-color: transparent; }
 html.dark .sa-card { background: #0c1222; border-color: rgba(255, 255, 255, 0.05); }
 .sa-title { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; color: #0f172a; line-height: 1.2; }
 .sa-subtitle { margin-top: 0.25rem; color: #64748b; font-size: 14px; font-weight: 500; }
+
+/* ── sa-input — shared form controls across templates and views ── */
+:where(.sa-input) {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.sa-input {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.sa-input:hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+.sa-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+.sa-input:disabled {
+  background-color: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+.sa-input::placeholder {
+  color: #94a3b8;
+}
+html.dark .sa-input {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+html.dark .sa-input:hover:not(:disabled) {
+  border-color: #475569;
+}
+html.dark .sa-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+html.dark .sa-input:disabled {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #64748b;
+}
+html.dark .sa-input::placeholder {
+  color: #64748b;
+}
 .bi-question { border-bottom:1px solid #f1f5f9; padding-bottom:2rem; }
 .bi-question:last-child { border-bottom:none; padding-bottom:0; }
 .bi-label { display:block; font-size:.95rem; font-weight:700; color:#1e293b; margin-bottom:.35rem; }

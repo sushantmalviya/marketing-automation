@@ -53,11 +53,11 @@ function getInitialNames(u: AuthUser | null) {
   let last = u.last_name?.trim() || "";
 
   if (!first) {
-    const handle = (u.username || u.email?.split("@")[0] || "").trim().toLowerCase();
+    const handle = (u.username || (u.email ? u.email.split("@")[0] : "")).trim().toLowerCase();
     if (handle.startsWith("harsh")) {
       first = "Harsh";
     } else {
-      const token = handle.split(/[._\-\s]+/)[0].replace(/\d+/g, "");
+      const token = handle.split(/[._\-\s]+/)[0]?.replace(/\d+/g, "") || "";
       if (token) {
         first = token.charAt(0).toUpperCase() + token.slice(1);
       }
@@ -65,9 +65,17 @@ function getInitialNames(u: AuthUser | null) {
   }
 
   if (!last) {
-    const handle = (u.username || u.email?.split("@")[0] || "").trim().toLowerCase();
+    const handle = (u.username || (u.email ? u.email.split("@")[0] : "")).trim().toLowerCase();
     if (handle.includes("shivhare")) {
       last = "Shivhare";
+    } else {
+      const parts = handle.split(/[._\-\s]+/);
+      if (parts.length > 1) {
+        const token = parts[1].replace(/\d+/g, "");
+        if (token) {
+          last = token.charAt(0).toUpperCase() + token.slice(1);
+        }
+      }
     }
   }
 
@@ -133,9 +141,15 @@ export function SuperAdminAccount() {
     save.mutate();
   };
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
-  const isAdminOrAbove = (user.role as string) === "ADMIN" || (user.role as string) === "SUPER_ADMIN";
+  const isAdminOrAbove = Boolean(user.role && ((user.role as string) === "ADMIN" || (user.role as string) === "SUPER_ADMIN"));
 
   const tabs = [
     { id: "profile", label: "Profile", icon: UserRound },
@@ -146,13 +160,17 @@ export function SuperAdminAccount() {
     { id: "connect-sender-ids", label: "Connect Sender IDs", icon: Mail },
   ];
 
+  const formattedDateJoined = user.date_joined
+    ? new Date(user.date_joined).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
+    : "15 Apr 2024";
+
   return (
     <div>
       <div className="flex items-start justify-between">
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
           <h1 className="sa-title mt-2 normal-case">Account Settings</h1>
-          <p className="sa-subtitle mt-1">{user.role.replaceAll("_", " ")} · {user.email}</p>
+          <p className="sa-subtitle mt-1">{(user.role || "USER").replaceAll("_", " ")} · {user.email || ""}</p>
         </div>
         <DarkModeToggle />
       </div>
@@ -226,7 +244,7 @@ export function SuperAdminAccount() {
                 <ProfileField
                   icon={Calendar}
                   label="Date of Joining"
-                  value="15 Apr 2024"
+                  value={formattedDateJoined}
                   isEditingMode={isEditingMode}
                   isEditable={false}
                 />
@@ -247,7 +265,7 @@ export function SuperAdminAccount() {
                 <ProfileField
                   icon={ShieldCheck}
                   label="Role"
-                  value={user.role.replaceAll("_", " ")}
+                  value={(user.role || "USER").replaceAll("_", " ")}
                   isEditingMode={isEditingMode}
                   isEditable={false}
                 />
@@ -953,11 +971,10 @@ function ConnectSenderIDsPanel() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          d.status === "VERIFIED"
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${d.status === "VERIFIED"
                             ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                             : "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
-                        }`}
+                          }`}
                       >
                         {d.status === "VERIFIED" ? <CheckCircle2 size={12} /> : null}
                         {d.status}

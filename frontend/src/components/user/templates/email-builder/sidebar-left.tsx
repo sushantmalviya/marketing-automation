@@ -110,7 +110,7 @@ interface SidebarLeftProps {
 
 export function SidebarLeft({ onAddBlock }: SidebarLeftProps) {
   return (
-    <aside className="w-72 shrink-0 border-r border-slate-200 bg-white p-5 overflow-y-auto flex flex-col gap-5 select-none">
+    <aside className="w-64 xl:w-72 2xl:w-80 shrink-0 border-r border-slate-200 bg-white p-4 sm:p-5 overflow-y-auto flex flex-col gap-5 select-none">
       <div>
         <div className="flex items-center gap-2">
           <span className="grid h-6 w-6 place-items-center rounded-md bg-blue-50 text-blue-600">
