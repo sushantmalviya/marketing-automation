@@ -42,7 +42,9 @@ import {
   RefreshCw,
   MoreVertical,
   Check,
-  ChevronLeft
+  ChevronLeft,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -56,7 +58,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend
+  Legend,
+  Brush
 } from "recharts";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
@@ -91,6 +94,48 @@ const CAMPAIGNS_DATA = [
   { id: 7, name: "Weekend Special Discount", channel: "SMS", status: "Draft", sent: 0, delivered: 0, opened: 0, clicked: 0, createdOn: "Jul 29, 2025" },
 ];
 
+const CHANNEL_METRICS_MAP: Record<string, {
+  totalCampaigns: { val: string; change: string };
+  sent: { val: string; change: string };
+  delivered: { val: string; change: string };
+  opened: { val: string; change: string };
+  clicked: { val: string; change: string };
+  failed: { val: string; change: string };
+}> = {
+  All: {
+    totalCampaigns: { val: "42", change: "+18%" },
+    sent: { val: "125,430", change: "+24%" },
+    delivered: { val: "118,920", change: "+22%" },
+    opened: { val: "32,140", change: "+12%" },
+    clicked: { val: "8,420", change: "+18%" },
+    failed: { val: "1,320", change: "-6%" },
+  },
+  Email: {
+    totalCampaigns: { val: "18", change: "+12%" },
+    sent: { val: "68,420", change: "+19%" },
+    delivered: { val: "64,800", change: "+18%" },
+    opened: { val: "19,440", change: "+14%" },
+    clicked: { val: "4,860", change: "+10%" },
+    failed: { val: "780", change: "-4%" },
+  },
+  WhatsApp: {
+    totalCampaigns: { val: "14", change: "+25%" },
+    sent: { val: "42,750", change: "+32%" },
+    delivered: { val: "40,280", change: "+30%" },
+    opened: { val: "12,700", change: "+22%" },
+    clicked: { val: "1,720", change: "+28%" },
+    failed: { val: "360", change: "-10%" },
+  },
+  SMS: {
+    totalCampaigns: { val: "10", change: "+8%" },
+    sent: { val: "14,260", change: "+10%" },
+    delivered: { val: "13,840", change: "+9%" },
+    opened: { val: "0", change: "0%" },
+    clicked: { val: "1,840", change: "+15%" },
+    failed: { val: "180", change: "-2%" },
+  },
+};
+
 const AUTOMATIONS_DATA = [
   { id: 1, name: "Welcome Series Flow", type: "Lead Generation", status: "Active", entered: 2450, inProgress: 840, completed: 2190, leads: 410, convRate: 16.7 },
   { id: 2, name: "Lead Nurturing Sequence", type: "Nurturing", status: "Active", entered: 4200, inProgress: 1840, completed: 2960, leads: 620, convRate: 14.8 },
@@ -123,6 +168,109 @@ const RECENT_ACTIVITIES = [
   { id: 4, title: "WhatsApp campaign \"Festival Offer\" completed", time: "3 hours ago", icon: Megaphone, color: "text-green-600 bg-green-50 dark:bg-green-950/40" },
   { id: 5, title: "New lead converted via Welcome Series", time: "4 hours ago", icon: CheckCircle2, color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40" },
 ];
+
+// Helper to generate dynamic performance data based on current date & grouping
+const generatePerformanceData = (groupBy: "Daily" | "Weekly" | "Monthly", channelFilter: string) => {
+  const now = new Date();
+
+  const multiplier =
+    channelFilter === "Email" ? 0.54 :
+    channelFilter === "WhatsApp" ? 0.34 :
+    channelFilter === "SMS" ? 0.12 : 1.0;
+
+  const isSMS = channelFilter === "SMS";
+
+  if (groupBy === "Daily") {
+    // Generate 30 consecutive daily data points ending on current date
+    const data = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const label = d.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+
+      const factor = 0.75 + (29 - i) * 0.01 + Math.sin(i * 0.8) * 0.12;
+      const baseSent = Math.round(18000 * factor);
+      const baseDelivered = Math.round(baseSent * 0.94);
+      const baseOpened = isSMS ? 0 : Math.round(baseSent * 0.28);
+      const baseClicked = Math.round(baseSent * 0.08);
+
+      data.push({
+        date: i === 0 ? `${label} (Today)` : label,
+        Sent: Math.round(baseSent * multiplier),
+        Delivered: Math.round(baseDelivered * multiplier),
+        Opened: isSMS ? 0 : Math.round(baseOpened * multiplier),
+        Clicked: Math.round(baseClicked * multiplier),
+      });
+    }
+    return data;
+  }
+
+  if (groupBy === "Weekly") {
+    // 12 Weeks strictly aligned Monday to Sunday
+    const currentDay = now.getDay(); // 0 is Sun, 1 is Mon...
+    const daysFromMon = currentDay === 0 ? 6 : currentDay - 1;
+    const currentWeekMon = new Date(now);
+    currentWeekMon.setDate(now.getDate() - daysFromMon);
+
+    const elapsedDaysInCurrentWeek = daysFromMon + 1; // e.g. 1 for Mon, 3 for Wed
+
+    const data = [];
+    for (let w = 11; w >= 0; w--) {
+      const mon = new Date(currentWeekMon);
+      mon.setDate(currentWeekMon.getDate() - w * 7);
+
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+
+      const monStr = mon.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const sunStr = sun.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+      let daysCount = 7;
+      let labelSuffix = "";
+      if (w === 0) {
+        daysCount = elapsedDaysInCurrentWeek;
+        labelSuffix = ` (${elapsedDaysInCurrentWeek}d)`;
+      }
+
+      const dailyAvgSent = 18500;
+      const baseSent = Math.round(dailyAvgSent * daysCount * (0.85 + (11 - w) * 0.015));
+      const baseDelivered = Math.round(baseSent * 0.94);
+      const baseOpened = isSMS ? 0 : Math.round(baseSent * 0.27);
+      const baseClicked = Math.round(baseSent * 0.075);
+
+      data.push({
+        date: `${monStr} - ${sunStr}${labelSuffix}`,
+        Sent: Math.round(baseSent * multiplier),
+        Delivered: Math.round(baseDelivered * multiplier),
+        Opened: isSMS ? 0 : Math.round(baseOpened * multiplier),
+        Clicked: Math.round(baseClicked * multiplier),
+      });
+    }
+    return data;
+  }
+
+  // Monthly: 12 consecutive months ending at current month
+  const data = [];
+  for (let m = 11; m >= 0; m--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
+    const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+    const factor = 0.75 + (11 - m) * 0.025;
+    const baseSent = Math.round(118000 * factor);
+    const baseDelivered = Math.round(baseSent * 0.94);
+    const baseOpened = isSMS ? 0 : Math.round(baseSent * 0.26);
+    const baseClicked = Math.round(baseSent * 0.07);
+
+    data.push({
+      date: m === 0 ? `${label} (Current)` : label,
+      Sent: Math.round(baseSent * multiplier),
+      Delivered: Math.round(baseDelivered * multiplier),
+      Opened: isSMS ? 0 : Math.round(baseOpened * multiplier),
+      Clicked: Math.round(baseClicked * multiplier),
+    });
+  }
+  return data;
+};
 
 // Time series charts data
 const PERFORMANCE_TIMESERIES = [
@@ -192,6 +340,111 @@ export function UserDashboard() {
   const [campaignGroupBy, setCampaignGroupBy] = useState<"Daily" | "Weekly" | "Monthly">("Daily");
   const [campaignSearch, setCampaignSearch] = useState("");
   const [campaignStatusFilter, setCampaignStatusFilter] = useState("All");
+
+  // Smart Auto-Escalating Chart Zoom State
+  const [dailySpan, setDailySpan] = useState<number>(7); // 7, 14, 30
+  const [weeklySpan, setWeeklySpan] = useState<number>(4); // 4, 8, 12
+  const [monthlySpan, setMonthlySpan] = useState<number>(4); // 4, 8, 12
+
+  const currentMetrics = useMemo(() => {
+    return CHANNEL_METRICS_MAP[campaignChannelFilter] || CHANNEL_METRICS_MAP.All;
+  }, [campaignChannelFilter]);
+
+  const campaignChartData = useMemo(() => {
+    return generatePerformanceData(campaignGroupBy as "Daily" | "Weekly" | "Monthly", campaignChannelFilter);
+  }, [campaignGroupBy, campaignChannelFilter]);
+
+  // Dynamically slice chart data based on active mode span
+  const visibleChartData = useMemo(() => {
+    const total = campaignChartData.length;
+    let span = 7;
+    if (campaignGroupBy === "Daily") span = dailySpan;
+    if (campaignGroupBy === "Weekly") span = weeklySpan;
+    if (campaignGroupBy === "Monthly") span = monthlySpan;
+
+    const startIndex = Math.max(0, total - span);
+    return campaignChartData.slice(startIndex);
+  }, [campaignChartData, campaignGroupBy, dailySpan, weeklySpan, monthlySpan]);
+
+  // Channel Breakdown metric calculation based on Global Date Preset
+  const channelBreakdownData = useMemo(() => {
+    let factor = 1.0;
+    if (datePreset === "Today") factor = 0.08;
+    else if (datePreset === "Yesterday") factor = 0.09;
+    else if (datePreset === "Last 7 Days") factor = 0.28;
+    else if (datePreset === "Last 30 Days" || datePreset === "This Month") factor = 1.0;
+    else if (datePreset === "Last Month") factor = 0.88;
+    else if (datePreset === "Custom") factor = 0.65;
+
+    const totalSent = Math.round(114830 * factor);
+    const emailSent = Math.round(68420 * factor);
+    const whatsappSent = Math.round(32150 * factor);
+    const smsSent = Math.max(0, totalSent - emailSent - whatsappSent);
+
+    const emailPct = totalSent > 0 ? Math.round((emailSent / totalSent) * 100) : 0;
+    const whatsappPct = totalSent > 0 ? Math.round((whatsappSent / totalSent) * 100) : 0;
+    const smsPct = totalSent > 0 ? Math.max(0, 100 - emailPct - whatsappPct) : 0;
+
+    return [
+      { name: "Email", count: emailSent.toLocaleString(), pct: `${emailPct}%`, color: "bg-purple-600", icon: Send },
+      { name: "WhatsApp", count: whatsappSent.toLocaleString(), pct: `${whatsappPct}%`, color: "bg-emerald-600", icon: Megaphone },
+      { name: "SMS", count: smsSent.toLocaleString(), pct: `${smsPct}%`, color: "bg-amber-600", icon: Zap },
+    ];
+  }, [datePreset]);
+
+  const handleGroupByChange = (g: "Daily" | "Weekly" | "Monthly") => {
+    setCampaignGroupBy(g);
+  };
+
+  const handleSmartZoomOut = () => {
+    if (campaignGroupBy === "Daily") {
+      if (dailySpan < 7) setDailySpan(7);
+      else if (dailySpan === 7) setDailySpan(14);
+      else if (dailySpan === 14) setDailySpan(30);
+      else if (dailySpan >= 30) {
+        // Switch to Weekly
+        setCampaignGroupBy("Weekly");
+        setWeeklySpan(4);
+      }
+    } else if (campaignGroupBy === "Weekly") {
+      if (weeklySpan < 4) setWeeklySpan(4);
+      else if (weeklySpan === 4) setWeeklySpan(8);
+      else if (weeklySpan === 8) setWeeklySpan(12);
+      else if (weeklySpan >= 12) {
+        // Switch to Monthly
+        setCampaignGroupBy("Monthly");
+        setMonthlySpan(4);
+      }
+    } else if (campaignGroupBy === "Monthly") {
+      if (monthlySpan < 4) setMonthlySpan(4);
+      else if (monthlySpan === 4) setMonthlySpan(8);
+      else if (monthlySpan >= 8) setMonthlySpan(12);
+    }
+  };
+
+  const handleSmartZoomIn = () => {
+    if (campaignGroupBy === "Monthly") {
+      if (monthlySpan > 8) setMonthlySpan(8);
+      else if (monthlySpan === 8) setMonthlySpan(4);
+      else if (monthlySpan <= 4) {
+        // Switch to Weekly
+        setCampaignGroupBy("Weekly");
+        setWeeklySpan(12);
+      }
+    } else if (campaignGroupBy === "Weekly") {
+      if (weeklySpan > 8) setWeeklySpan(8);
+      else if (weeklySpan === 8) setWeeklySpan(4);
+      else if (weeklySpan <= 4) {
+        // Switch to Daily
+        setCampaignGroupBy("Daily");
+        setDailySpan(30);
+      }
+    } else if (campaignGroupBy === "Daily") {
+      if (dailySpan > 14) setDailySpan(14);
+      else if (dailySpan === 14) setDailySpan(7);
+      else if (dailySpan <= 7) setDailySpan(3);
+    }
+  };
 
   // Automations tab filters
   const [autoFilter, setAutoFilter] = useState("All Automations");
@@ -764,22 +1017,41 @@ export function UserDashboard() {
       {/* ========================================================================= */}
       {activeTab === "Campaigns" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Campaigns Dashboard</h2>
               <p className="text-xs text-slate-500">Track key metrics and engagement across Email, WhatsApp & SMS</p>
+            </div>
+
+            {/* Channel Selection Dropdown placed at top right above cards */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs font-bold text-slate-500 hidden sm:inline">Channel:</span>
+              <div className="relative">
+                <select
+                  value={campaignChannelFilter}
+                  onChange={(e) => setCampaignChannelFilter(e.target.value)}
+                  className="appearance-none rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0c1222] pl-9 pr-9 py-2 text-xs font-bold text-slate-800 dark:text-white shadow-sm outline-none focus:border-blue-500 cursor-pointer transition hover:border-blue-400"
+                >
+                  <option value="All">All Channels</option>
+                  <option value="Email">Email</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="SMS">SMS</option>
+                </select>
+                <Filter size={14} className="absolute left-3 top-2.5 text-blue-600 dark:text-blue-400 pointer-events-none" />
+                <ChevronDown size={14} className="absolute right-2.5 top-2.5 text-slate-400 pointer-events-none" />
+              </div>
             </div>
           </div>
 
           {/* Campaign Overview 6 Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
-              { label: "Total Campaigns", val: "42", change: "+18%", icon: Megaphone, bg: "bg-blue-50 text-blue-600" },
-              { label: "Sent", val: "125,430", change: "+24%", icon: Send, bg: "bg-indigo-50 text-indigo-600" },
-              { label: "Delivered", val: "118,920", change: "+22%", icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600" },
-              { label: "Opened", val: "32,140", change: "+12%", icon: Eye, bg: "bg-purple-50 text-purple-600" },
-              { label: "Clicked", val: "8,420", change: "+18%", icon: MousePointerClick, bg: "bg-amber-50 text-amber-600" },
-              { label: "Failed / Bounced", val: "1,320", change: "-6%", icon: XCircle, bg: "bg-red-50 text-red-600" },
+              { label: "Total Campaigns", val: currentMetrics.totalCampaigns.val, change: currentMetrics.totalCampaigns.change, icon: Megaphone, bg: "bg-blue-50 text-blue-600" },
+              { label: "Sent", val: currentMetrics.sent.val, change: currentMetrics.sent.change, icon: Send, bg: "bg-indigo-50 text-indigo-600" },
+              { label: "Delivered", val: currentMetrics.delivered.val, change: currentMetrics.delivered.change, icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600" },
+              { label: "Opened", val: currentMetrics.opened.val, change: currentMetrics.opened.change, icon: Eye, bg: "bg-purple-50 text-purple-600" },
+              { label: "Clicked", val: currentMetrics.clicked.val, change: currentMetrics.clicked.change, icon: MousePointerClick, bg: "bg-amber-50 text-amber-600" },
+              { label: "Failed / Bounced", val: currentMetrics.failed.val, change: currentMetrics.failed.change, icon: XCircle, bg: "bg-red-50 text-red-600" },
             ].map((c) => {
               const Icon = c.icon;
               return (
@@ -796,7 +1068,14 @@ export function UserDashboard() {
                     </span>
                   </div>
                   <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3">{c.val}</strong>
-                  <p className="text-xs font-semibold text-slate-500 mt-0.5">{c.label}</p>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <p className="text-xs font-semibold text-slate-500">{c.label}</p>
+                    {campaignChannelFilter !== "All" && (
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">
+                        {campaignChannelFilter}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -838,7 +1117,7 @@ export function UserDashboard() {
                     {(["Daily", "Weekly", "Monthly"] as const).map((g) => (
                       <button
                         key={g}
-                        onClick={() => setCampaignGroupBy(g)}
+                        onClick={() => handleGroupByChange(g)}
                         className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
                           campaignGroupBy === g ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-900"
                         }`}
@@ -847,12 +1126,30 @@ export function UserDashboard() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Zoom Controls Bar */}
+                  <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 dark:border-white/10 p-0.5 bg-slate-50/50 dark:bg-white/5">
+                    <button
+                      onClick={handleSmartZoomIn}
+                      title="Zoom In"
+                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 transition"
+                    >
+                      <ZoomIn size={14} />
+                    </button>
+                    <button
+                      onClick={handleSmartZoomOut}
+                      title="Zoom Out"
+                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 transition"
+                    >
+                      <ZoomOut size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={PERFORMANCE_TIMESERIES}>
+                  <AreaChart data={visibleChartData}>
                     <defs>
                       <linearGradient id="campGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3} />
@@ -861,8 +1158,13 @@ export function UserDashboard() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="date" fontSize={11} tickLine={false} />
-                    <YAxis fontSize={11} tickLine={false} axisLine={false} />
-                    <Tooltip />
+                    <YAxis
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val: number) => (val >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`)}
+                    />
+                    <Tooltip formatter={(val: any) => [val != null ? Number(val).toLocaleString() : "0", campaignMetricFilter]} />
                     <Area type="monotone" dataKey={campaignMetricFilter} stroke="#2563eb" strokeWidth={3} fill="url(#campGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -876,11 +1178,7 @@ export function UserDashboard() {
                 <p className="text-xs text-slate-500 mb-4">Volume dispatches per marketing channel</p>
 
                 <div className="space-y-4">
-                  {[
-                    { name: "Email", count: "68,420", pct: "54%", color: "bg-purple-600", icon: Send },
-                    { name: "WhatsApp", count: "32,150", pct: "26%", color: "bg-emerald-600", icon: Megaphone },
-                    { name: "SMS", count: "14,260", pct: "20%", color: "bg-amber-600", icon: Zap },
-                  ].map((ch) => (
+                  {channelBreakdownData.map((ch) => (
                     <div key={ch.name} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
@@ -894,13 +1192,6 @@ export function UserDashboard() {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="mt-6 p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-300 block">Pro Tip</span>
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                  WhatsApp campaigns yield 3.2x higher open rates than standard Email pushes this month.
-                </p>
               </div>
             </div>
           </div>
