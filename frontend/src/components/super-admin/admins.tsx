@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { accountService } from "@/services/account.service";
 import { apiClient, parseApiError } from "@/services/api-client";
 import { superAdminService, type AdminRecord } from "@/services/super-admin.service";
+import { useAuth } from "@/providers/auth-provider";
 
 type Kind = "admins" | "users";
 type Row = {
@@ -39,6 +40,7 @@ type Row = {
 const emptyForm = { first_name: "", last_name: "", email: "", mobile_no: "", password: "" };
 
 export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
+  const { user: currentUser } = useAuth();
   const client = useQueryClient();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -69,8 +71,12 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
   });
 
   const remove = useMutation({
-    mutationFn: (id: number) =>
-      kind === "admins" ? accountService.deleteAdmin(id) : accountService.deleteUser(id),
+    mutationFn: (id: number) => {
+      if (id === currentUser?.id) {
+        throw new Error("You cannot delete your own account.");
+      }
+      return kind === "admins" ? accountService.deleteAdmin(id) : accountService.deleteUser(id);
+    },
     onSuccess: () => {
       toast.success("Account removed");
       void client.invalidateQueries({ queryKey: ["sa-accounts", kind] });
@@ -89,7 +95,8 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
   });
 
   const data = query.data as { count?: number; results?: Row[] } | undefined;
-  const rows = data?.results ?? [];
+  const rawRows = data?.results ?? [];
+  const rows = rawRows.filter((r) => r.id !== currentUser?.id && r.email !== currentUser?.email);
   const personLabel = "User";
 
   function getDisplayName(row: Row) {
@@ -209,10 +216,20 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
                           {/* Toggle status button — only for admins */}
                           {kind === "admins" && (
                             <button
-                              title={row.is_active ? "Deactivate account" : "Activate account"}
-                              disabled={isToggling}
+                              title={
+                                row.id === currentUser?.id
+                                  ? "You cannot deactivate your own account"
+                                  : row.is_active
+                                  ? "Deactivate account"
+                                  : "Activate account"
+                              }
+                              disabled={isToggling || row.id === currentUser?.id}
                               className={`icon-button ${
-                                row.is_active ? "text-emerald-600" : "text-amber-500"
+                                row.id === currentUser?.id
+                                  ? "cursor-not-allowed opacity-40 text-slate-400"
+                                  : row.is_active
+                                  ? "text-emerald-600"
+                                  : "text-amber-500"
                               } disabled:opacity-50`}
                               onClick={() =>
                                 toggleStatus.mutate({ id: row.id, is_active: !row.is_active })
@@ -227,15 +244,25 @@ export function SuperAdminAdmins({ kind = "admins" }: { kind?: Kind }) {
                           )}
 
                           {/* Delete button */}
-                          <button
-                            title="Delete account"
-                            className="icon-button text-red-500"
-                            onClick={() => {
-                              if (confirm(`Delete ${row.email}?`)) remove.mutate(row.id);
-                            }}
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {row.id === currentUser?.id ? (
+                            <button
+                              title="You cannot delete your own account"
+                              disabled
+                              className="icon-button cursor-not-allowed text-slate-300 dark:text-slate-600"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          ) : (
+                            <button
+                              title="Delete account"
+                              className="icon-button text-red-500"
+                              onClick={() => {
+                                if (confirm(`Delete ${row.email}?`)) remove.mutate(row.id);
+                              }}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </motion.tr>

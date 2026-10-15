@@ -214,6 +214,9 @@ class DeleteAdminView(APIView):
     permission_classes = [IsAuthenticated, IsSuperAdmin]
 
     def delete(self, request, user_id):
+        if str(request.user.id) == str(user_id):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": "You cannot delete your own account."})
         UserManagementService.delete_admin(request.user, user_id)
         return Response(
             {"message": "Admin deleted successfully."},
@@ -253,6 +256,9 @@ class DeleteUserView(APIView):
         return Response(UserListSerializer(user).data)
 
     def delete(self, request, user_id):
+        if str(request.user.id) == str(user_id):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": "You cannot delete your own account."})
         UserManagementService.delete_user(request.user, user_id)
         return Response(
             {"message": "User deleted successfully."},
@@ -271,7 +277,7 @@ class ListAdminsView(generics.ListAPIView):
     ordering_fields = ["first_name", "email", "date_joined"]
     
     def get_queryset(self):
-        return UserManagementService.get_admins_queryset()
+        return UserManagementService.get_admins_queryset(self.request.user)
 
 
 class AdminDetailView(APIView):
@@ -283,8 +289,11 @@ class AdminDetailView(APIView):
 
     def _get_admin(self, user_id):
         user = get_object_or_404(User.objects.prefetch_related("ma_users"), id=user_id)
+        if getattr(self.request.user, "organization_id", None) and user.organization_id != self.request.user.organization_id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to access this user.")
         ma_user = user.ma_users.first()
-        if not ma_user or ma_user.role != "ADMIN":
+        if not ma_user or ma_user.role not in ["ADMIN", "USER"]:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({"detail": "This endpoint only manages Admin accounts."})
         return user
@@ -295,6 +304,9 @@ class AdminDetailView(APIView):
 
     def patch(self, request, user_id):
         user = self._get_admin(user_id)
+        if str(request.user.id) == str(user_id) and "is_active" in request.data and not request.data["is_active"]:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": "You cannot deactivate your own account."})
         # Only allow toggling is_active through this endpoint
         if "is_active" in request.data:
             user.is_active = bool(request.data["is_active"])

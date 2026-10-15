@@ -82,10 +82,18 @@ class UserManagementService:
         if not is_super_admin(request_user):
             raise PermissionDenied("You do not have permission to perform this action.")
 
+        # Prevent self-deletion
+        if str(request_user.id) == str(target_id):
+            raise ValidationError({"detail": "You cannot delete your own account."})
+
         try:
             target_user = User.objects.get(id=target_id)
         except User.DoesNotExist:
             raise Http404("User not found.")
+
+        # Enforce organization boundaries
+        if getattr(request_user, "organization_id", None) and target_user.organization_id != request_user.organization_id:
+            raise PermissionDenied("You do not have permission to delete users from another organization.")
 
         target_ma_user = MAUser.objects.filter(user=target_user).first()
         if not target_ma_user or target_ma_user.role not in ["ADMIN", "USER"]:
@@ -96,12 +104,27 @@ class UserManagementService:
         logger.info(f"User {target_email} deleted by Admin {request_user.email}.")
 
     @classmethod
-    def get_users_queryset(cls, request_user=None):
-        return User.objects.filter(ma_users__role__in=["USER", "ADMIN"]).prefetch_related("ma_users").order_by("-date_joined")
+    @transaction.atomic
+    def delete_user(cls, request_user, target_id):
+        return cls.delete_admin(request_user, target_id)
 
     @classmethod
-    def get_admins_queryset(cls):
-        return cls.get_users_queryset()
+    def get_users_queryset(cls, request_user=None):
+        qs = User.objects.filter(ma_users__role__in=["USER", "ADMIN"]).prefetch_related("ma_users").order_by("-date_joined")
+        if request_user and request_user.is_authenticated:
+            # Exclude current admin so only subordinate users are shown
+            qs = qs.exclude(id=request_user.id)
+            if request_user.is_superuser and not getattr(request_user, "organization_id", None):
+                return qs
+            org_id = getattr(request_user, "organization_id", None)
+            if org_id:
+                return qs.filter(organization_id=org_id)
+            return qs.none()
+        return qs
+
+    @classmethod
+    def get_admins_queryset(cls, request_user=None):
+        return cls.get_users_queryset(request_user=request_user)
 
 
 class InsufficientWalletBalanceError(Exception):
