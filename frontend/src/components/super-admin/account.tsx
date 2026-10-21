@@ -16,6 +16,7 @@ import { useAuth } from "@/providers/auth-provider";
 import type { AuthUser } from "@/types/auth";
 import { parseApiError, apiClient } from "@/services/api-client";
 import { superAdminService } from "@/services/super-admin.service";
+import { authService } from "@/services/auth.service";
 import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
 
 import { ConnectEmailModal } from "@/components/admin/account/connect-email-modal";
@@ -28,23 +29,36 @@ function ProfileField({ icon: Icon, label, value, isEditingMode, isEditable, onC
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50/80 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
         <Icon size={18} />
       </div>
-      <div className="w-[160px] shrink-0 text-sm font-medium text-slate-500 dark:text-slate-400">
+      <div className="w-[180px] sm:w-[240px] shrink-0 text-sm font-medium text-slate-500 dark:text-slate-400">
         {label}
       </div>
-      <div className="flex flex-1 items-center gap-3">
+      <div className="flex flex-1 items-center gap-3 min-w-0">
         {isEditingMode && isEditable ? (
           <input
+            type={label === "Mobile Number" ? "tel" : "text"}
+            placeholder={`Enter ${label.toLowerCase()}`}
             className="w-full max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
             value={value}
             onChange={onChange}
             readOnly={!onChange}
           />
         ) : (
-          <div className="font-medium text-slate-900 dark:text-white">{value}</div>
+          <div className="font-medium text-slate-900 dark:text-white break-words">{value}</div>
         )}
       </div>
     </div>
   );
+}
+
+function formatSubscriptionDate(dateVal?: string | Date | null): string {
+  if (!dateVal) return "—";
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return "—";
+  }
 }
 
 function getInitialNames(u: AuthUser | null) {
@@ -84,6 +98,7 @@ function getInitialNames(u: AuthUser | null) {
 
 export function SuperAdminAccount() {
   const { user, setUser } = useAuth();
+  const queryClient = useQueryClient();
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
@@ -91,36 +106,83 @@ export function SuperAdminAccount() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const initialNames = useMemo(() => getInitialNames(user), [user]);
-  const [form, setForm] = useState(initialNames);
+  const profileQuery = useQuery({
+    queryKey: ["auth-profile", user?.id],
+    queryFn: authService.profile,
+    enabled: !!user?.id,
+    staleTime: 30000,
+  });
 
+  const currentUser = (profileQuery.data && profileQuery.data.id === user?.id)
+    ? profileQuery.data
+    : user;
+
+  // Sync mobile number to auth state if enriched from users API for the current user
   useEffect(() => {
-    setForm(initialNames);
+    if (
+      profileQuery.data &&
+      user &&
+      profileQuery.data.id === user.id &&
+      profileQuery.data.mobile_no &&
+      user.mobile_no !== profileQuery.data.mobile_no
+    ) {
+      setUser(prev => (prev && prev.id === profileQuery.data.id ? { ...prev, mobile_no: profileQuery.data.mobile_no } : prev));
+    }
+  }, [profileQuery.data, user, setUser]);
+
+  const initialNames = useMemo(() => getInitialNames(currentUser), [currentUser]);
+  const initialFullName = useMemo(() => {
+    return [initialNames.first_name, initialNames.last_name].filter(Boolean).join(" ").trim();
   }, [initialNames]);
 
+  const initialMobile = useMemo(() => {
+    if (!currentUser) return "";
+    return (
+      currentUser.mobile_no ||
+      (currentUser as any).phone_no ||
+      (currentUser as any).phone ||
+      (currentUser as any).mobile_number ||
+      (currentUser as any).mobile ||
+      ""
+    );
+  }, [currentUser]);
+
+  const [form, setForm] = useState({
+    fullName: initialFullName,
+    mobile_no: initialMobile,
+  });
+
+  useEffect(() => {
+    setForm({
+      fullName: initialFullName,
+      mobile_no: initialMobile,
+    });
+  }, [initialFullName, initialMobile]);
+
   const hasChanges = useMemo(() => {
-    const currFirst = form.first_name.trim();
-    const currLast = form.last_name.trim();
-    const origFirst = initialNames.first_name.trim();
-    const origLast = initialNames.last_name.trim();
-    return currFirst !== origFirst || currLast !== origLast;
-  }, [form.first_name, form.last_name, initialNames]);
+    return (
+      form.fullName.trim() !== initialFullName ||
+      form.mobile_no.trim() !== initialMobile
+    );
+  }, [form.fullName, form.mobile_no, initialFullName, initialMobile]);
 
   const save = useMutation({
-    mutationFn: () => {
-      const payload: { first_name: string; last_name: string } = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim()
-      };
+    mutationFn: (payload: { first_name: string; last_name: string; mobile_no?: string }) => {
       return superAdminService.updateProfile(payload);
     },
-    onSuccess: (updatedProfile) => {
+    onSuccess: (updatedProfile, variables) => {
       if (updatedProfile) {
-        setUser(updatedProfile);
-        setForm({
-          first_name: updatedProfile.first_name || form.first_name.trim(),
-          last_name: updatedProfile.last_name || form.last_name.trim()
-        });
+        const mergedUser: AuthUser = {
+          ...currentUser,
+          ...updatedProfile,
+          mobile_no: variables.mobile_no ?? updatedProfile.mobile_no ?? currentUser?.mobile_no,
+        };
+        setUser(mergedUser);
+        queryClient.setQueryData(["auth-profile", user?.id], mergedUser);
+        const names = getInitialNames(mergedUser);
+        const newFull = [names.first_name, names.last_name].filter(Boolean).join(" ").trim();
+        const newMobile = mergedUser.mobile_no || "";
+        setForm({ fullName: newFull, mobile_no: newMobile });
       }
       toast.success("Profile updated successfully");
       setIsEditingMode(false);
@@ -134,14 +196,30 @@ export function SuperAdminAccount() {
       toast.info("No changes to save");
       return;
     }
-    if (!form.first_name.trim()) {
-      toast.error("First name cannot be empty");
+    const trimmed = form.fullName.trim();
+    if (!trimmed) {
+      toast.error("Full name cannot be empty");
       return;
     }
-    save.mutate();
+    const trimmedMobile = form.mobile_no.trim();
+    if (trimmedMobile) {
+      const phoneRegex = /^[0-9+() -]{7,20}$/;
+      if (!phoneRegex.test(trimmedMobile)) {
+        toast.error("Please enter a valid mobile number (7-20 digits).");
+        return;
+      }
+    }
+    const parts = trimmed.split(/\s+/);
+    const firstName = parts[0] || "";
+    const lastName = parts.slice(1).join(" ");
+    save.mutate({
+      first_name: firstName,
+      last_name: lastName,
+      mobile_no: trimmedMobile,
+    });
   };
 
-  if (!user) {
+  if (!user || !currentUser) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -149,7 +227,7 @@ export function SuperAdminAccount() {
     );
   }
 
-  const isAdminOrAbove = Boolean(user.role && ((user.role as string) === "ADMIN" || (user.role as string) === "SUPER_ADMIN"));
+  const isAdminOrAbove = Boolean(currentUser.role && ((currentUser.role as string) === "ADMIN" || (currentUser.role as string) === "SUPER_ADMIN"));
 
   const tabs = [
     { id: "profile", label: "Profile", icon: UserRound },
@@ -160,9 +238,37 @@ export function SuperAdminAccount() {
     { id: "connect-sender-ids", label: "Connect Sender IDs", icon: Mail },
   ];
 
-  const formattedDateJoined = user.date_joined
-    ? new Date(user.date_joined).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
-    : "15 Apr 2024";
+  const subscriptionStartDate = useMemo(() => {
+    const raw =
+      currentUser.rent_start_date ??
+      currentUser.organization?.subscription?.rent_start_date ??
+      currentUser.subscription?.rent_start_date ??
+      (currentUser as any).rentStartDate;
+    return formatSubscriptionDate(raw);
+  }, [currentUser]);
+
+  const subscriptionExpireDate = useMemo(() => {
+    const raw =
+      currentUser.rent_end_date ??
+      currentUser.organization?.subscription?.rent_end_date ??
+      currentUser.subscription?.rent_end_date ??
+      (currentUser as any).rentEndDate;
+    return formatSubscriptionDate(raw);
+  }, [currentUser]);
+
+  const organizationName =
+    currentUser.organization_name ||
+    (currentUser as any).organizationName ||
+    (currentUser as any).organization?.name ||
+    "";
+
+  const mobileNumber =
+    currentUser.mobile_no ||
+    (currentUser as any).phone_no ||
+    (currentUser as any).phone ||
+    (currentUser as any).mobile_number ||
+    (currentUser as any).mobile ||
+    "";
 
   return (
     <div>
@@ -170,7 +276,7 @@ export function SuperAdminAccount() {
         <div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span>
           <h1 className="sa-title mt-2 normal-case">Account Settings</h1>
-          <p className="sa-subtitle mt-1">{(user.role || "USER").replaceAll("_", " ")} · {user.email || ""}</p>
+          <p className="sa-subtitle mt-1">{(currentUser.role || "USER").replaceAll("_", " ")} · {currentUser.email || ""}</p>
         </div>
         <DarkModeToggle />
       </div>
@@ -206,89 +312,54 @@ export function SuperAdminAccount() {
               <div className="border border-slate-200 dark:border-white/10 rounded-2xl px-5">
                 <ProfileField
                   icon={UserIcon}
-                  label="First Name"
-                  value={form.first_name}
+                  label="Full Name"
+                  value={isEditingMode ? form.fullName : (initialFullName || "—")}
                   isEditingMode={isEditingMode}
                   isEditable
-                  onChange={(e: any) => setForm({ ...form, first_name: e.target.value })}
-                />
-                <ProfileField
-                  icon={UserIcon}
-                  label="Last Name"
-                  value={form.last_name}
-                  isEditingMode={isEditingMode}
-                  isEditable
-                  onChange={(e: any) => setForm({ ...form, last_name: e.target.value })}
-                />
-                <ProfileField
-                  icon={UserRound}
-                  label="Username"
-                  value={user.username || user.email.split("@")[0]}
-                  isEditingMode={isEditingMode}
-                  isEditable={false}
+                  onChange={(e: any) => setForm({ ...form, fullName: e.target.value })}
                 />
                 <ProfileField
                   icon={Mail}
                   label="Email Address"
-                  value={user.email}
+                  value={currentUser.email || "—"}
                   isEditingMode={isEditingMode}
                   isEditable={false}
                 />
                 <ProfileField
                   icon={Phone}
                   label="Mobile Number"
-                  value="+91 98765 43210"
+                  value={isEditingMode ? form.mobile_no : (mobileNumber || "—")}
                   isEditingMode={isEditingMode}
                   isEditable
-                />
-                <ProfileField
-                  icon={Calendar}
-                  label="Date of Joining"
-                  value={formattedDateJoined}
-                  isEditingMode={isEditingMode}
-                  isEditable={false}
-                />
-                <ProfileField
-                  icon={Calendar}
-                  label="Date of Birth"
-                  value="12 Jan 1998"
-                  isEditingMode={isEditingMode}
-                  isEditable
-                />
-                <ProfileField
-                  icon={Building2}
-                  label="Department"
-                  value="Marketing"
-                  isEditingMode={isEditingMode}
-                  isEditable
+                  onChange={(e: any) => setForm({ ...form, mobile_no: e.target.value })}
                 />
                 <ProfileField
                   icon={ShieldCheck}
                   label="Role"
-                  value={(user.role || "USER").replaceAll("_", " ")}
+                  value={(currentUser.role || "USER").replaceAll("_", " ")}
                   isEditingMode={isEditingMode}
                   isEditable={false}
                 />
                 <ProfileField
-                  icon={UserCircle2}
-                  label="Admin"
-                  value="Rohit Sharma"
+                  icon={Calendar}
+                  label="Subscription Start Date"
+                  value={subscriptionStartDate}
                   isEditingMode={isEditingMode}
                   isEditable={false}
                 />
                 <ProfileField
-                  icon={Briefcase}
-                  label="Position"
-                  value="Marketing Executive"
+                  icon={Calendar}
+                  label="Subscription Expire Date"
+                  value={subscriptionExpireDate}
                   isEditingMode={isEditingMode}
-                  isEditable
+                  isEditable={false}
                 />
                 <ProfileField
-                  icon={UserPlus}
-                  label="Gender"
-                  value="Male"
+                  icon={Building2}
+                  label="Organization Name"
+                  value={organizationName || "—"}
                   isEditingMode={isEditingMode}
-                  isEditable
+                  isEditable={false}
                 />
               </div>
 
@@ -324,7 +395,7 @@ export function SuperAdminAccount() {
                     <button
                       type="button"
                       onClick={() => {
-                        setForm(initialNames);
+                        setForm({ fullName: initialFullName, mobile_no: initialMobile });
                         setIsEditingMode(false);
                       }}
                       className="rounded-xl px-5 py-2.5 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
@@ -420,7 +491,7 @@ export function SuperAdminAccount() {
               </div>
 
               <div className="space-y-6">
-                {user.role === "USER" ? (
+                {currentUser.role === "USER" ? (
                   <div className="border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-5">
                     <h3 className="font-semibold text-slate-900 dark:text-white">Tasks & Assignments</h3>
 

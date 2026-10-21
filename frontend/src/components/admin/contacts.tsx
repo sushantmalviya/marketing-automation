@@ -596,7 +596,7 @@ export function AdminContacts() {
                       {col.replace(/_/g, " ")}
                     </th>
                   ))}
-                  <th className="sticky right-0 bg-slate-50/50 px-4 py-3.5 text-center shadow-[-8px_0_12px_-4px_rgba(15,23,42,.06)]">Actions</th>
+                  <th className="sticky right-0 z-20 w-[140px] min-w-[140px] border-l border-slate-200 bg-slate-50 px-4 py-3.5 text-center shadow-[-8px_0_12px_-4px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-slate-900">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -632,7 +632,11 @@ export function AdminContacts() {
                         </td>
                       );
                     })}
-                    <td className="sticky right-0 bg-white px-3 py-4 shadow-[-8px_0_12px_-4px_rgba(15,23,42,.06)] group-hover:bg-blue-50/40">
+                    <td className={`sticky right-0 z-10 w-[140px] min-w-[140px] border-l border-slate-200 px-3 py-4 shadow-[-8px_0_12px_-4px_rgba(15,23,42,.08)] dark:border-white/10 ${
+                      selected.has(row.id)
+                        ? "bg-[#eef4ff] group-hover:bg-[#e0edff] dark:bg-slate-800 dark:group-hover:bg-slate-700"
+                        : "bg-white group-hover:bg-[#f0f7ff] dark:bg-slate-900 dark:group-hover:bg-slate-800"
+                    }`}>
                       <div className="flex justify-center gap-2">
                         <button className="tbl-action tbl-action-view" title="View contact" onClick={() => setViewing({ row, contact })}><Eye size={17} /></button>
                         <button className="tbl-action" title="Edit contact" onClick={() => beginEdit(row)}

@@ -32,5 +32,12 @@ export const superAdminService = {
   getAdmin: async (id: number) => (await apiClient.get<AdminRecord>(`/api/admins/${id}/`)).data,
   toggleAdminStatus: async (id: number, is_active: boolean) => (await apiClient.patch<AdminRecord>(`/api/admins/${id}/`, { is_active })).data,
   billing: async () => (await apiClient.get<BillingData>("/api/billing/summary/")).data,
-  updateProfile: async (data: { first_name: string; last_name: string }) => (await apiClient.patch<AuthUser>("/api/auth/profile/", data)).data,
+  updateProfile: async (data: { first_name?: string; last_name?: string; mobile_no?: string }) => {
+    const res = await apiClient.patch<AuthUser>("/api/auth/profile/", data);
+    const updated = res.data;
+    if (updated && data.mobile_no !== undefined) {
+      updated.mobile_no = data.mobile_no;
+    }
+    return updated;
+  },
 };

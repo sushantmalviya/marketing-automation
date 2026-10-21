@@ -7,10 +7,11 @@ import {
   Pencil, Plus, RefreshCw, Save, Search, Target, Trash2,
   UserRound, UsersRound, X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { apiClient, parseApiError } from "@/services/api-client";
+import { useSidebar } from "@/components/layout/portal-shell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -561,10 +562,12 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                   );
                 })}
               </div>
-              {count > previewContacts.length && (
+              {count > 0 && (
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <p className="text-xs text-slate-400">
-                    + {(count - previewContacts.length).toLocaleString()} more contacts
+                    {count > previewContacts.length
+                      ? `+ ${(count - previewContacts.length).toLocaleString()} more contacts`
+                      : `${count.toLocaleString()} matching ${count === 1 ? "contact" : "contacts"}`}
                   </p>
                   <button
                     onClick={onFetchFull}
@@ -640,15 +643,45 @@ function FullContactsModal({ contacts, total, conditions, onClose }: {
   conditions: Condition[];
   onClose: () => void;
 }) {
+  const { collapsed, sidebarWidth } = useSidebar();
   const [search, setSearch] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Derive columns from first contact
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Derive columns from contacts with __col_order__ preference and collecting all attributes
   const columns = useMemo(() => {
-    const first = contacts[0];
-    if (!first) return [];
-    const order = first.data.__col_order__ as string[] | undefined;
-    const keys = order ?? Object.keys(first.data);
-    return keys.filter(k => !k.startsWith("__"));
+    if (!contacts.length) return [];
+    const firstWithOrder = contacts.find(c => Array.isArray(c.data?.__col_order__));
+    if (firstWithOrder && Array.isArray(firstWithOrder.data.__col_order__)) {
+      const orderCols = (firstWithOrder.data.__col_order__ as string[]).filter(k => !k.startsWith("__"));
+      const keySet = new Set(orderCols);
+      for (const c of contacts) {
+        if (c?.data) {
+          Object.keys(c.data).forEach(k => {
+            if (!k.startsWith("__") && !keySet.has(k)) {
+              keySet.add(k);
+              orderCols.push(k);
+            }
+          });
+        }
+      }
+      return orderCols;
+    }
+    const keySet = new Set<string>();
+    for (const c of contacts) {
+      if (c?.data) {
+        Object.keys(c.data).forEach(k => {
+          if (!k.startsWith("__")) keySet.add(k);
+        });
+      }
+    }
+    return Array.from(keySet);
   }, [contacts]);
 
   const filtered = useMemo(() => {
@@ -661,90 +694,96 @@ function FullContactsModal({ contacts, total, conditions, onClose }: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col bg-white"
-      initial={{ opacity: 0, y: 24 }}
+      className="fixed top-0 bottom-0 right-0 left-0 md:left-[var(--sidebar-width,280px)] z-30 flex flex-col bg-white dark:bg-[#0c1222] transition-[left] duration-300 shadow-2xl overflow-hidden"
+      style={{
+        left: isMobile ? 0 : (sidebarWidth ?? (collapsed ? 76 : 280)),
+      }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 24 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
-        <div>
-          <h2 className="text-xl font-black text-slate-900">Full Contact List</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-white/10 dark:bg-[#0c1222]">
+        <div className="min-w-0 pr-4">
+          <h2 className="text-xl font-black text-slate-900 dark:text-white truncate">Full Contact List</h2>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400 line-clamp-1">
             {total.toLocaleString()} contacts match ·{" "}
             {conditions.map(c => `${c.field} ${operatorLabel(c.operator)} "${c.value}"`).join(", ")}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {/* Search within results */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
-              className="h-10 w-64 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-48 sm:w-64 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-blue-500"
               placeholder="Search within results…"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-700">
+          <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/40 px-3 py-1 text-sm font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
             {filtered.length.toLocaleString()} shown
           </span>
-          <button className="icon-button" onClick={onClose}><X size={20} /></button>
+          <button className="icon-button" onClick={onClose} aria-label="Close contact preview"><X size={20} /></button>
         </div>
       </div>
 
       {/* Scrollable table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto overscroll-contain">
         {contacts.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-slate-400">No contacts found.</div>
+          <div className="flex h-full items-center justify-center text-slate-400 dark:text-slate-500">No contacts found.</div>
         ) : (
-          <table className="w-full text-left text-sm" style={{ minWidth: Math.max(800, columns.length * 180) }}>
-            <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-[.12em] text-slate-500">
-              <tr>
-                <th className="px-5 py-3 text-slate-400">#</th>
-                {columns.map(col => (
-                  <th key={col} className="px-4 py-3 whitespace-nowrap">
-                    {col.replace(/_/g, " ")}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c, idx) => (
-                <tr
-                  key={c.id}
-                  className="border-b border-slate-100 transition hover:bg-blue-50/40"
-                >
-                  <td className="px-5 py-3 text-xs text-slate-400">{idx + 1}</td>
-                  {columns.map(col => {
-                    const raw = c.data[col];
-                    const isTags = col.toLowerCase() === "tags";
-                    const tags = isTags
-                      ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
-                      : [];
-                    return (
-                      <td key={col} className="px-4 py-3 max-w-[220px]">
-                        {isTags ? (
-                          <div className="flex flex-wrap gap-1">
-                            {tags.map(t => <span key={t} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{t}</span>)}
-                          </div>
-                        ) : (
-                          <span className="block truncate text-slate-700" title={String(raw ?? "")}>
-                            {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
+          <div className="min-w-full inline-block align-middle">
+            <table className="w-full text-left text-sm" style={{ minWidth: Math.max(800, columns.length * 180) }}>
+              <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#0c1222] text-[11px] font-bold uppercase tracking-[.12em] text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-5 py-3 text-slate-400 dark:text-slate-500 w-12 sticky left-0 bg-slate-50 dark:bg-[#0c1222] z-20">#</th>
+                  {columns.map(col => (
+                    <th key={col} className="px-4 py-3 whitespace-nowrap">
+                      {col.replace(/_/g, " ")}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {filtered.map((c, idx) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-slate-100 dark:border-white/5 transition hover:bg-blue-50/40 dark:hover:bg-white/5"
+                  >
+                    <td className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-[#0c1222]">{idx + 1}</td>
+                    {columns.map(col => {
+                      const raw = c.data[col];
+                      const isTags = col.toLowerCase() === "tags";
+                      const tags = isTags
+                        ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
+                        : [];
+                      return (
+                        <td key={col} className="px-4 py-3 max-w-[220px]">
+                          {isTags ? (
+                            <div className="flex flex-wrap gap-1">
+                              {tags.map(t => <span key={t} className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-400">{t}</span>)}
+                            </div>
+                          ) : (
+                            <span className="block truncate text-slate-700 dark:text-slate-200" title={String(raw ?? "")}>
+                              {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 text-center text-xs text-slate-400">
+      <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 text-center text-xs text-slate-400 dark:border-white/10 dark:bg-[#0c1222] dark:text-slate-500">
         Showing {filtered.length.toLocaleString()} of {total.toLocaleString()} matched contacts
       </div>
     </motion.div>
