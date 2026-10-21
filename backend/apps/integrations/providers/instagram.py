@@ -148,6 +148,7 @@ class InstagramProvider(BaseSocialProvider):
         share_to_feed: bool = True,
         audio_name: Optional[str] = None,
         collaborators: Optional[List[str]] = None,
+        first_comment: Optional[str] = None,
     ) -> dict:
         access_token = connection.get_access_token()
         if not access_token:
@@ -161,6 +162,9 @@ class InstagramProvider(BaseSocialProvider):
 
             if 'res.cloudinary.com' in image_url and '/upload/' in image_url:
                 image_url = image_url.replace('/upload/', '/upload/c_pad,w_1080,h_1080,b_auto/')
+
+            if image_url and image_url.startswith('http://') and '127.0.0.1' not in image_url and 'localhost' not in image_url:
+                image_url = image_url.replace('http://', 'https://')
 
             is_video = image_url.lower().endswith(('.mp4', '.mov'))
             media_type = 'REELS' if is_video else 'IMAGE'
@@ -185,7 +189,12 @@ class InstagramProvider(BaseSocialProvider):
                 payload["image_url"] = image_url
 
             if location_id:
-                payload["location_id"] = location_id
+                clean_loc = str(location_id).strip()
+                if clean_loc.isdigit():
+                    payload["location_id"] = clean_loc
+                else:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Ignoring non-numeric location_id '{location_id}'. Instagram requires a numeric Facebook Location Page ID.")
 
             if user_tags and isinstance(user_tags, list):
                 payload["user_tags"] = json.dumps(user_tags)
@@ -200,7 +209,22 @@ class InstagramProvider(BaseSocialProvider):
             if not self._wait_for_media_processing(creation_id, access_token):
                 return {"success": False, "error": "Instagram media processing failed or timed out."}
 
-            return self._publish_container(ig_user_id, creation_id, access_token)
+            res = self._publish_container(ig_user_id, creation_id, access_token)
+            if res.get("success") and first_comment:
+                media_id = res.get("platform_post_id")
+                try:
+                    comment_resp = requests.post(f"{self.GRAPH_URL}/{media_id}/comments", data={
+                        "message": first_comment,
+                        "access_token": access_token
+                    })
+                    comment_resp.raise_for_status()
+                    res["first_comment_id"] = comment_resp.json().get("id")
+                except Exception as comment_err:
+                    import logging
+                    logging.getLogger(__name__).error(f"Failed to post Instagram first comment on media {media_id}: {str(comment_err)}")
+                    res["first_comment_error"] = str(comment_err)
+
+            return res
 
         except requests.exceptions.RequestException as e:
             error_msg = str(e)

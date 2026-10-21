@@ -235,7 +235,7 @@ class ContentDraftViewSet(viewsets.ModelViewSet):
 
         draft = self.get_object()
         platform = get_object_or_404(draft.platforms.all(), id=platform_id)
-        for field in ('caption_text', 'hashtags', 'cta'):
+        for field in ('caption_text', 'hashtags', 'cta', 'location_id', 'first_comment'):
             if field in request.data:
                 setattr(platform, field, request.data[field])
         platform.is_manually_edited = True

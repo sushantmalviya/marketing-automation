@@ -174,6 +174,8 @@ class ContentPlatform(TimeStampedUUIDModel):
     caption_text = models.TextField(blank=True)
     hashtags = models.TextField(blank=True)
     cta = models.CharField(max_length=255, blank=True)
+    location_id = models.CharField(max_length=255, blank=True)
+    first_comment = models.TextField(blank=True)
     is_manually_edited = models.BooleanField(default=False)
 
     class Meta:
