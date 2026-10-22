@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from apps.communications.models import WhatsAppConnection, CommunicationEvent
+from apps.communications.models import WhatsAppConnection, CommunicationEvent, SenderIdentity
 from apps.communications.services.whatsapp import (
     send_whatsapp,
     get_whatsapp_provider,
@@ -16,7 +16,6 @@ from apps.communications.services.whatsapp import (
 from apps.communications.serializers import WhatsAppConnectionSerializer
 from apps.campaigns.models import Campaign, Channel, CustomerUpload, CustomerRecord, CampaignDelivery
 from apps.campaigns.services.dispatcher import Dispatcher
-from apps.tasks.models import Task
 
 User = get_user_model()
 
@@ -281,13 +280,7 @@ class WhatsAppIntegrationTests(TestCase):
         channel, _ = Channel.objects.get_or_create(code="WHATSAPP", defaults={"name": "WhatsApp"})
         upload = CustomerUpload.objects.create(file_name="leads.csv", uploaded_by=self.user_a)
         audience = Audience.objects.create(name="All Customers", customer_upload=upload, created_by=self.user_a)
-        task = Task.objects.create(
-            title="Test Task",
-            due_date=timezone.now(),
-            audience=audience,
-            created_by=self.user_a,
-        )
-        campaign = Campaign.objects.create(name="Festive Promo", task=task, created_by=self.user_a)
+        campaign = Campaign.objects.create(name="Festive Promo", target_audience=audience, created_by=self.user_a)
         record = CustomerRecord.objects.create(
             upload=upload,
             data={"phone": "919999999999", "name": "John"},
@@ -313,3 +306,152 @@ class WhatsAppIntegrationTests(TestCase):
         self.assertIsNotNone(event)
         self.assertEqual(event.recipient, "919999999999")
         self.assertEqual(event.provider_message_id, "wamid.CAMPAIGN_DISPATCH_1")
+
+
+class WhatsAppEmbeddedSignupTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="test_org_admin",
+            email="admin@example.com",
+            password="securepassword123",
+        )
+        self.other_user = User.objects.create_user(
+            username="other_org_admin",
+            email="other@example.com",
+            password="securepassword123",
+        )
+        self.client = APIClient()
+
+    def test_public_config_endpoint_no_secrets(self):
+        """Public config endpoint returns public app details and never leaks app secret."""
+        self.client.force_authenticate(user=self.user)
+        with override_settings(
+            META_APP_ID="123456789012345",
+            META_APP_SECRET="super_confidential_secret",
+            META_CONFIG_ID="999888777",
+            NEXT_PUBLIC_META_CONFIG_ID="999888777",
+            META_EMBEDDED_SIGNUP_CONFIG_ID="999888777",
+            META_GRAPH_API_VERSION="v19.0",
+        ):
+            response = self.client.get("/api/communications/whatsapp/config/")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data["app_id"], "123456789012345")
+            self.assertEqual(response.data["config_id"], "999888777")
+            self.assertEqual(response.data["api_version"], "v19.0")
+            self.assertTrue(response.data["is_configured"])
+            self.assertNotIn("secret", json.dumps(response.data).lower())
+            self.assertNotIn("super_confidential_secret", json.dumps(response.data))
+
+    @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")
+    @patch("apps.communications.services.meta_api.MetaAPIService.get_waba_phone_numbers")
+    @patch("apps.communications.services.meta_api.MetaAPIService.debug_token")
+    def test_embedded_signup_callback_success_dual_persistence(
+        self, mock_debug_token, mock_get_phone_numbers, mock_exchange_token
+    ):
+        """
+        Verify that a valid Embedded Signup callback:
+        1. Exchanges code for token
+        2. Persists to SenderIdentity
+        3. Persists to WhatsAppConnection with Fernet encryption
+        4. Isolates data to the authenticated user/organization
+        """
+        self.client.force_authenticate(user=self.user)
+        mock_exchange_token.return_value = {
+            "access_token": "EAA_TEST_ACCESS_TOKEN_12345",
+            "token_type": "bearer",
+        }
+        mock_get_phone_numbers.return_value = [
+            {"id": "phone_id_999", "display_phone_number": "+1 555-0199"}
+        ]
+        mock_debug_token.return_value = {
+            "is_valid": True,
+            "granular_scopes": [{"scope": "whatsapp_business_management", "target_ids": ["waba_id_888"]}],
+        }
+
+        payload = {
+            "code": "AQB_AUTH_CODE_FROM_META_POPUP",
+            "waba_id": "waba_id_888",
+            "phone_number_id": "phone_id_999",
+        }
+
+        with override_settings(
+            META_APP_ID="123456789012345",
+            META_APP_SECRET="test_app_secret",
+            META_GRAPH_API_VERSION="v19.0",
+        ):
+            response = self.client.post(
+                "/api/communications/whatsapp/embedded-signup/callback/",
+                data=payload,
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data["status"], "CONNECTED")
+            self.assertEqual(response.data["waba_id"], "waba_id_888")
+            self.assertEqual(response.data["phone_number_id"], "phone_id_999")
+
+            # Check SenderIdentity record
+            identity = SenderIdentity.objects.get(user=self.user, waba_id="waba_id_888")
+            self.assertEqual(identity.connection_type, "OAUTH")
+            self.assertEqual(identity.phone_number_id, "phone_id_999")
+            self.assertEqual(identity.status, "CONNECTED")
+
+            # Check WhatsAppConnection record (Dual Persistence)
+            connection = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_id_999")
+            self.assertTrue(connection.is_active)
+            self.assertEqual(connection.get_access_token(), "EAA_TEST_ACCESS_TOKEN_12345")
+            self.assertNotEqual(connection.encrypted_access_token, "EAA_TEST_ACCESS_TOKEN_12345")
+
+    @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")
+    @patch("apps.communications.services.meta_api.MetaAPIService.get_waba_phone_numbers")
+    @patch("apps.communications.services.meta_api.MetaAPIService.debug_token")
+    def test_embedded_signup_callback_autonomous_id_resolution(
+        self, mock_debug_token, mock_get_phone_numbers, mock_exchange_token
+    ):
+        """
+        When the popup postMessage drops waba_id / phone_number_id,
+        the backend autonomously discovers them using debug_token and get_waba_phone_numbers.
+        """
+        self.client.force_authenticate(user=self.user)
+        mock_exchange_token.return_value = {
+            "access_token": "EAA_AUTONOMOUS_TOKEN_54321",
+        }
+        mock_debug_token.return_value = {
+            "is_valid": True,
+            "granular_scopes": [{"scope": "whatsapp_business_management", "target_ids": ["waba_auto_777"]}],
+        }
+        mock_get_phone_numbers.return_value = [
+            {"id": "phone_auto_888", "display_phone_number": "+1 555-0777"}
+        ]
+
+        # Payload only contains code (popup postMessage failed)
+        payload = {
+            "code": "AQB_CODE_ONLY_POPUP_DROPPED_IDS",
+        }
+
+        with override_settings(
+            META_APP_ID="123456789012345",
+            META_APP_SECRET="test_app_secret",
+            META_GRAPH_API_VERSION="v19.0",
+        ):
+            response = self.client.post(
+                "/api/communications/whatsapp/embedded-signup/callback/",
+                data=payload,
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data["waba_id"], "waba_auto_777")
+            self.assertEqual(response.data["phone_number_id"], "phone_auto_888")
+
+            # Verified persisted WhatsAppConnection
+            connection = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_auto_888")
+            self.assertEqual(connection.get_access_token(), "EAA_AUTONOMOUS_TOKEN_54321")
+
+    def test_embedded_signup_unauthenticated_forbidden(self):
+        """Unauthenticated requests must be rejected."""
+        response = self.client.post(
+            "/api/communications/whatsapp/embedded-signup/callback/",
+            data={"code": "dummy_code"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+

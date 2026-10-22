@@ -3,6 +3,33 @@
 from django.db import migrations, models
 
 
+def add_domain_auth_columns(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute("""
+            ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_records jsonb DEFAULT '[]'::jsonb;
+            ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_status varchar(30) DEFAULT 'PENDING';
+            ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS mail_from_domain varchar(255) DEFAULT '';
+        """)
+    elif schema_editor.connection.vendor == "sqlite":
+        cursor = schema_editor.connection.cursor()
+        cursor.execute("PRAGMA table_info(domain_authentication);")
+        cols = [r[1] for r in cursor.fetchall()]
+        if "dkim_records" not in cols:
+            schema_editor.execute("ALTER TABLE domain_authentication ADD COLUMN dkim_records text DEFAULT '[]';")
+        if "dkim_status" not in cols:
+            schema_editor.execute("ALTER TABLE domain_authentication ADD COLUMN dkim_status varchar(30) DEFAULT 'PENDING';")
+        if "mail_from_domain" not in cols:
+            schema_editor.execute("ALTER TABLE domain_authentication ADD COLUMN mail_from_domain varchar(255) DEFAULT '';")
+
+def remove_domain_auth_columns(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute("""
+            ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_records;
+            ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_status;
+            ALTER TABLE domain_authentication DROP COLUMN IF EXISTS mail_from_domain;
+        """)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -29,18 +56,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_records jsonb DEFAULT '[]'::jsonb;
-                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS dkim_status varchar(30) DEFAULT 'PENDING';
-                    ALTER TABLE domain_authentication ADD COLUMN IF NOT EXISTS mail_from_domain varchar(255) DEFAULT '';
-                    """,
-                    reverse_sql="""
-                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_records;
-                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS dkim_status;
-                    ALTER TABLE domain_authentication DROP COLUMN IF EXISTS mail_from_domain;
-                    """,
-                ),
+                migrations.RunPython(add_domain_auth_columns, remove_domain_auth_columns),
             ],
         ),
         migrations.AlterField(

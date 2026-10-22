@@ -148,3 +148,47 @@ class MetaAPIService:
         except Exception as exc:
             logger.error(f"Error registering phone number {phone_number_id}: {exc}")
             return False
+
+    def get_waba_phone_numbers(self, waba_id: str, access_token: str) -> list:
+        """
+        Fetch all phone numbers registered under a WABA.
+        GET /{waba_id}/phone_numbers
+        """
+        url = f"{self.base_url}/{waba_id}/phone_numbers"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params = {"fields": "id,display_phone_number,verified_name,quality_rating,code_verification_status,account_review_status"}
+
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            data = response.json()
+            if response.ok and "data" in data:
+                return data["data"]
+            logger.warning(f"Failed to fetch phone numbers for WABA {waba_id}: {data}")
+            return []
+        except Exception as exc:
+            logger.error(f"Error fetching phone numbers for WABA {waba_id}: {exc}")
+            return []
+
+    def debug_token(self, input_token: str) -> dict:
+        """
+        Inspect an access token to discover granted scopes and target WABA IDs.
+        GET /debug_token?input_token={input_token}&access_token={app_id}|{app_secret}
+        """
+        if not self.app_id or not self.app_secret:
+            return {}
+
+        url = f"{self.base_url}/debug_token"
+        params = {
+            "input_token": input_token,
+            "access_token": f"{self.app_id}|{self.app_secret}",
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            data = response.json()
+            if response.ok and "data" in data:
+                return data["data"]
+            return {}
+        except Exception as exc:
+            logger.error(f"Error inspecting Meta token: {exc}")
+            return {}

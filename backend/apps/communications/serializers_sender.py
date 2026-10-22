@@ -105,8 +105,8 @@ class ConnectSMTPSerializer(serializers.Serializer):
 
 class WhatsAppEmbeddedSignupSerializer(serializers.Serializer):
     code = serializers.CharField(required=False, allow_blank=True, default="")
-    waba_id = serializers.CharField(required=True)
-    phone_number_id = serializers.CharField(required=True)
+    waba_id = serializers.CharField(required=False, allow_blank=True, default="")
+    phone_number_id = serializers.CharField(required=False, allow_blank=True, default="")
     access_token = serializers.CharField(required=False, allow_blank=True, default="", write_only=True)
 
 
