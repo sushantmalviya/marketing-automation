@@ -56,6 +56,24 @@ export interface MetaLead {
   custom_questions?: Record<string, string | string[]>;
 }
 
+export interface MetaPage {
+  id: string;
+  name: string;
+  access_token?: string;
+  category?: string;
+  tasks?: string[];
+  instagram_business_account?: { id: string; username?: string };
+}
+
+export interface MetaLeadForm {
+  id: string;
+  name: string;
+  status: string;
+  created_time?: string;
+  leads_count?: number;
+  questions?: Array<{ key: string; label: string; type: string }>;
+}
+
 export interface MetaInsights {
   date_start?: string;
   date_stop?: string;
@@ -65,6 +83,9 @@ export interface MetaInsights {
   clicks: number | string;
   cpc?: number | string;
   ctr?: number | string;
+  leads?: number;
+  conversions?: number;
+  roas?: number | string;
   actions?: Array<{ action_type: string; value: string }>;
   cost_per_action_type?: Array<{ action_type: string; value: string }>;
   [key: string]: unknown;
@@ -78,10 +99,11 @@ export interface CreateMetaCampaignPayload {
   daily_budget: number;
   start_time?: string;
   end_time?: string;
-  location: string;
+  location?: string;
   age_min?: number;
   age_max?: number;
-  interests?: string[];
+  gender?: string;
+  interests?: string | string[];
   image_hash?: string;
   video_id?: string;
   ad_text: string;
@@ -92,9 +114,21 @@ export interface CreateMetaCampaignPayload {
   page_id?: string;
   link?: string;
   geo_locations?: {
-    location_type: string;
+    location_type?: string;
     lat: number;
     lng: number;
     radius: number;
   };
+}
+
+export interface WebhookLead {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  source?: string;
+  campaign_name?: string;
+  form_id?: string;
+  custom_answers?: Record<string, string>;
+  created_at: string;
 }

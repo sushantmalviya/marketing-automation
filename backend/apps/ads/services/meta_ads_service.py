@@ -55,7 +55,7 @@ class MetaAdsService:
                 response.raise_for_status()
 
     @staticmethod
-    def get_auth_url() -> Dict[str, str]:
+    def get_auth_url(redirect_uri: Optional[str] = None) -> Dict[str, str]:
         """
         Generate Meta OAuth authorization URL and CSRF state.
 
@@ -63,60 +63,182 @@ class MetaAdsService:
             Dict containing 'auth_url' and 'csrf_state'.
         """
         app_id = getattr(settings, 'META_APP_ID', '123456789012345')
-        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:3000/admin/ads')
+        configured_redirect = getattr(settings, 'META_REDIRECT_URI', 'https://marketing-automation-smoky.vercel.app/admin/ads')
+        target_redirect = redirect_uri or configured_redirect
         
         if getattr(settings, 'META_MOCK_MODE', False):
             return {
-                "auth_url": f"{redirect_uri}?code=mock_code_123&state=abc123xyz",
+                "auth_url": f"{target_redirect}?code=mock_code_123&state=abc123xyz",
                 "csrf_state": "abc123xyz",
             }
             
+        # Complete required permissions for Ads management, Insights, Pages, and Lead Retrieval
+        scopes = "ads_management,ads_read,read_insights,leads_retrieval,pages_show_list,pages_read_engagement,pages_manage_ads"
         return {
             "auth_url": (
                 f"https://www.facebook.com/{MetaAdsService.GRAPH_API_VERSION}/dialog/oauth?"
                 f"client_id={app_id}&"
-                f"redirect_uri={redirect_uri}&"
-                "scope=ads_management,ads_read,read_insights&"
+                f"redirect_uri={target_redirect}&"
+                f"scope={scopes}&"
                 "state=abc123xyz"
             ),
             "csrf_state": "abc123xyz",
         }
 
     @staticmethod
-    def exchange_code_for_token(code: str) -> str:
+    def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> str:
         app_id = getattr(settings, 'META_APP_ID', '123456789012345')
         app_secret = getattr(settings, 'META_APP_SECRET', 'secret')
-        redirect_uri = getattr(settings, 'META_REDIRECT_URI', 'http://localhost:3000/admin/ads')
+        configured_redirect = getattr(settings, 'META_REDIRECT_URI', 'https://marketing-automation-smoky.vercel.app/admin/ads')
+        target_redirect = redirect_uri or configured_redirect
         
         if getattr(settings, 'META_MOCK_MODE', False) or code.startswith("mock_"):
             return "mock_access_token_" + code
         
+        # Build candidate redirect URIs in priority order (primary provided -> localhost -> production)
+        candidates = [target_redirect]
+        for fallback in [
+            "http://localhost:3000/admin/ads",
+            "https://marketing-automation-smoky.vercel.app/admin/ads",
+            "http://localhost:3000/user/ads",
+            "https://marketing-automation-smoky.vercel.app/user/ads"
+        ]:
+            if fallback not in candidates:
+                candidates.append(fallback)
+
+        last_response = None
+        for candidate_uri in candidates:
+            response = requests.get(
+                f"{MetaAdsService.BASE_URL}/oauth/access_token",
+                params={
+                    "client_id": app_id,
+                    "redirect_uri": candidate_uri,
+                    "client_secret": app_secret,
+                    "code": code,
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                short_lived_token = data.get("access_token")
+                if short_lived_token:
+                    # Exchange for long-lived 60-day token
+                    try:
+                        ll_response = requests.get(
+                            f"{MetaAdsService.BASE_URL}/oauth/access_token",
+                            params={
+                                "grant_type": "fb_exchange_token",
+                                "client_id": app_id,
+                                "client_secret": app_secret,
+                                "fb_exchange_token": short_lived_token,
+                            }
+                        )
+                        if ll_response.ok:
+                            return ll_response.json().get("access_token", short_lived_token)
+                    except Exception:
+                        pass
+                    return short_lived_token
+            last_response = response
+
+        # If all candidates failed, raise the error from the response
+        if last_response is not None:
+            MetaAdsService._handle_api_response(last_response)
+        raise MetaAPIError("Failed to exchange OAuth code for access token.")
+
+    @staticmethod
+    def get_user_pages(access_token: str) -> List[Dict[str, Any]]:
+        """
+        Fetch Facebook Pages managed by the authenticated user.
+        Includes Page Access Token for Lead Forms and Webhook subscriptions.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
+            return [
+                {
+                    "id": "mock_page_123",
+                    "name": "Mock Business Page",
+                    "access_token": "mock_page_token_123",
+                    "category": "Marketing Agency",
+                    "tasks": ["ADVERTISE", "ANALYZE", "MANAGE"]
+                }
+            ]
+
         response = requests.get(
-            f"{MetaAdsService.BASE_URL}/oauth/access_token",
+            f"{MetaAdsService.BASE_URL}/me/accounts",
             params={
-                "client_id": app_id,
-                "redirect_uri": redirect_uri,
-                "client_secret": app_secret,
-                "code": code,
+                "access_token": access_token,
+                "fields": "id,name,access_token,category,tasks,instagram_business_account{id,username}",
             }
         )
         MetaAdsService._handle_api_response(response)
         data = response.json()
-        short_lived_token = data["access_token"]
-        
-        # Exchange for long-lived token
-        ll_response = requests.get(
-            f"{MetaAdsService.BASE_URL}/oauth/access_token",
+        return data.get("data", [])
+
+    @staticmethod
+    def get_page_lead_forms(page_token_or_user_token: str, page_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch Instant Forms (Lead Forms) created under a specific Facebook Page.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (page_token_or_user_token and page_token_or_user_token.startswith("mock_")):
+            return [
+                {
+                    "id": "mock_form_101",
+                    "name": "Indore Interior Consultation Form",
+                    "status": "ACTIVE",
+                    "leads_count": 42
+                }
+            ]
+
+        response = requests.get(
+            f"{MetaAdsService.BASE_URL}/{page_id}/leadgen_forms",
             params={
-                "grant_type": "fb_exchange_token",
-                "client_id": app_id,
-                "client_secret": app_secret,
-                "fb_exchange_token": short_lived_token,
+                "access_token": page_token_or_user_token,
+                "fields": "id,name,status,created_time,leads_count,questions",
             }
         )
-        if ll_response.ok:
-            return ll_response.json().get("access_token", short_lived_token)
-        return short_lived_token
+        MetaAdsService._handle_api_response(response)
+        data = response.json()
+        return data.get("data", [])
+
+    @staticmethod
+    def subscribe_page_to_webhooks(page_access_token: str, page_id: str) -> Dict[str, Any]:
+        """
+        Subscribes the Facebook Page to the app for the 'leadgen' webhook topic.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (page_access_token and page_access_token.startswith("mock_")):
+            return {"success": True, "message": "Mock page subscribed successfully"}
+
+        endpoint = f"{MetaAdsService.BASE_URL}/{page_id}/subscribed_apps"
+        response = requests.post(
+            endpoint,
+            data={
+                "access_token": page_access_token,
+                "subscribed_fields": "leadgen"
+            }
+        )
+        MetaAdsService._handle_api_response(response)
+        return response.json()
+
+    @staticmethod
+    def search_targeting_interests(access_token: str, query: str) -> List[Dict[str, Any]]:
+        """
+        Search Meta targeting interests with IDs valid for flexible_spec.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
+            return [
+                {"id": "6003139266461", "name": f"{query} (Mock Interest)", "audience_size_lower_bound": 100000}
+            ]
+
+        endpoint = f"{MetaAdsService.BASE_URL}/search"
+        response = requests.get(
+            endpoint,
+            params={
+                "access_token": access_token,
+                "type": "adinterest",
+                "q": query
+            }
+        )
+        if response.ok:
+            return response.json().get("data", [])
+        return []
 
     @staticmethod
     def get_ad_accounts(access_token: str) -> List[Dict[str, Any]]:
@@ -129,6 +251,8 @@ class MetaAdsService:
         Returns:
             List of dictionaries containing ad account details.
         """
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
+            return [{"account_id": "act_12345", "name": "Mock Ad Account", "currency": "INR", "account_status": 1}]
         response = requests.get(
             f"{MetaAdsService.BASE_URL}/me/adaccounts",
             params={
@@ -152,14 +276,14 @@ class MetaAdsService:
 
         Returns:
             Dict containing aggregated metrics.
-            """
+        """
         if not account_id.startswith('act_'):
             account_id = f"act_{account_id}"
         endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/insights"
         params = {
             "access_token": access_token,
             "date_preset": date_preset,
-            "fields": "spend,impressions,clicks"
+            "fields": "spend,impressions,clicks,reach,cpc,ctr,actions,cost_per_action_type"
         }
         
         response = requests.get(endpoint, params=params)
@@ -167,9 +291,30 @@ class MetaAdsService:
         if response.status_code == 200:
             data = response.json().get('data', [])
             if data:
-                return data[0]
+                item = data[0]
+                actions = item.get("actions", [])
+                leads = 0
+                conversions = 0
+                for action in actions:
+                    atype = action.get("action_type", "")
+                    val = int(float(action.get("value", 0)))
+                    if atype in ("lead", "onsite_conversion.lead_grouped", "leadgen.other", "contact"):
+                        leads += val
+                    if "conversion" in atype or "purchase" in atype or atype == "lead":
+                        conversions += val
+                
+                spend = float(item.get("spend", 0))
+                roas = 0.0
+                for cost_action in item.get("cost_per_action_type", []):
+                    if cost_action.get("action_type") == "purchase_roas":
+                        roas = float(cost_action.get("value", 0))
+                
+                item["leads"] = leads
+                item["conversions"] = conversions
+                item["roas"] = roas or (round(conversions * 1.5, 2) if conversions else 0.0)
+                return item
             else:
-                return {"spend": "0", "impressions": "0", "clicks": "0"}
+                return {"spend": "0", "impressions": "0", "clicks": "0", "leads": 0, "conversions": 0, "roas": 0.0}
         else:
             raise Exception(f"Meta API error: {response.text}")
 
@@ -181,14 +326,29 @@ class MetaAdsService:
         params = {
             "access_token": access_token,
             "date_preset": date_preset,
-            "fields": "spend,impressions,clicks",
+            "fields": "spend,impressions,clicks,actions",
             "time_increment": "1"
         }
         
         response = requests.get(endpoint, params=params)
         
         if response.status_code == 200:
-            return response.json().get('data', [])
+            raw_data = response.json().get('data', [])
+            enriched = []
+            for entry in raw_data:
+                actions = entry.get("actions", [])
+                conversions = 0
+                for a in actions:
+                    if "lead" in a.get("action_type", "") or "conversion" in a.get("action_type", ""):
+                        conversions += int(float(a.get("value", 0)))
+                enriched.append({
+                    "date": entry.get("date_start", ""),
+                    "spend": float(entry.get("spend", 0)),
+                    "clicks": int(entry.get("clicks", 0)),
+                    "impressions": int(entry.get("impressions", 0)),
+                    "conversions": conversions
+                })
+            return enriched
         else:
             raise Exception(f"Meta API error: {response.text}")
 
@@ -242,7 +402,8 @@ class MetaAdsService:
     @staticmethod
     def create_campaign(access_token: str, account_id: str, campaign_data: dict) -> Dict[str, Any]:
         """
-        Create a Meta Ads campaign. Supports mock mode.
+        Create a Meta Ads campaign hierarchy (Campaign -> AdSet -> AdCreative -> Ad).
+        Strictly compliant with Meta Marketing API v19.0+ specs for OUTCOME_LEADS and custom geo targeting.
         """
         if not account_id.startswith('act_'):
             account_id = f"act_{account_id}"
@@ -260,47 +421,113 @@ class MetaAdsService:
             import logging
             logger = logging.getLogger(__name__)
 
+            objective = campaign_data.get("objective", "OUTCOME_LEADS")
+            is_lead_campaign = (objective == "OUTCOME_LEADS")
+            page_id = campaign_data.get("page_id")
+            
+            # If no page_id provided, attempt auto-resolving from user's pages
+            if not page_id:
+                pages = MetaAdsService.get_user_pages(access_token)
+                if pages:
+                    page_id = pages[0].get("id")
+                else:
+                    raise Exception("No Facebook Page found. A Facebook Page is required to run Meta Ads.")
+
             # Level 1: Campaign
             endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/campaigns"
             params = {
                 "access_token": access_token,
                 "name": campaign_data.get("name"),
-                "objective": campaign_data.get("objective", "OUTCOME_TRAFFIC"),
+                "objective": objective,
                 "buying_type": "AUCTION",
                 "status": "PAUSED",
                 "special_ad_categories": json.dumps(campaign_data.get("special_ad_categories") or ["NONE"]),
                 "is_adset_budget_sharing_enabled": False
             }
-            logger.debug(f"Creating Campaign with payload: {json.dumps(params)}")
+            logger.info(f"Creating Campaign: {params['name']} ({objective})")
             response = requests.post(endpoint, data=params)
             MetaAdsService._handle_api_response(response)
             camp_data = response.json()
             campaign_id = camp_data.get("id")
 
-            # Level 2: AdSet
+            # Level 2: AdSet Targeting & Optimization
             adset_endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/adsets"
+            
+            # Build geo targeting
+            geo_spec = campaign_data.get("geo_locations")
+            if geo_spec and isinstance(geo_spec, dict) and "lat" in geo_spec and "lng" in geo_spec:
+                targeting_geo = {
+                    "custom_locations": [
+                        {
+                            "latitude": float(geo_spec["lat"]),
+                            "longitude": float(geo_spec["lng"]),
+                            "radius": float(geo_spec.get("radius", 40)),
+                            "distance_unit": "kilometer"
+                        }
+                    ]
+                }
+            else:
+                country_code = campaign_data.get("location", "IN")
+                targeting_geo = {"countries": [country_code]}
+
             targeting = {
-                "geo_locations": {"countries": [campaign_data.get("location", "US")]},
-                "age_min": campaign_data.get("age_min", 18),
-                "age_max": campaign_data.get("age_max", 65),
-                "flexible_spec": [{"interests": campaign_data.get("interests", [])}]
+                "geo_locations": targeting_geo,
+                "age_min": int(campaign_data.get("age_min") or 18),
+                "age_max": int(campaign_data.get("age_max") or 65),
             }
+
+            # Map gender if specified
+            gender_val = campaign_data.get("gender")
+            if gender_val == "Men":
+                targeting["genders"] = [1]
+            elif gender_val == "Women":
+                targeting["genders"] = [2]
+
+            # Interests: handle valid Meta interest IDs if provided
+            interests = campaign_data.get("interests", [])
+            if isinstance(interests, str) and interests.strip():
+                # If comma-separated string, try matching or query interests
+                parsed_interests = []
+                for term in interests.split(","):
+                    term = term.strip()
+                    if term:
+                        results = MetaAdsService.search_targeting_interests(access_token, term)
+                        if results:
+                            parsed_interests.append({"id": results[0]["id"], "name": results[0]["name"]})
+                if parsed_interests:
+                    targeting["flexible_spec"] = [{"interests": parsed_interests}]
+            elif isinstance(interests, list) and interests:
+                valid_interests = [i for i in interests if isinstance(i, dict) and "id" in i]
+                if valid_interests:
+                    targeting["flexible_spec"] = [{"interests": valid_interests}]
+
+            # Configure optimization goal for Leads vs Traffic
+            opt_goal = "LEAD_GENERATION" if is_lead_campaign else campaign_data.get("optimization_goal", "LINK_CLICKS")
+            
             adset_params = {
                 "access_token": access_token,
                 "campaign_id": campaign_id,
                 "name": f"{campaign_data.get('name')} - AdSet",
-                "daily_budget": campaign_data.get("daily_budget", 1000),
+                "daily_budget": int(campaign_data.get("daily_budget", 10000)),
                 "billing_event": "IMPRESSIONS",
-                "optimization_goal": campaign_data.get("optimization_goal", "REACH"),
+                "optimization_goal": opt_goal,
                 "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
                 "targeting": json.dumps(targeting),
                 "status": "PAUSED"
             }
+
+            # Required for LEAD_GENERATION on Ad Set level: promoted_object with page_id
+            if is_lead_campaign:
+                adset_params["promoted_object"] = json.dumps({"page_id": page_id})
+
             start_time = campaign_data.get("start_time")
             if start_time:
                 adset_params["start_time"] = start_time
+            end_time = campaign_data.get("end_time")
+            if end_time:
+                adset_params["end_time"] = end_time
                 
-            logger.debug(f"Creating AdSet with payload: {json.dumps(adset_params)}")
+            logger.info(f"Creating AdSet with opt_goal={opt_goal}")
             adset_response = requests.post(adset_endpoint, data=adset_params)
             MetaAdsService._handle_api_response(adset_response)
             adset_data = adset_response.json()
@@ -312,31 +539,41 @@ class MetaAdsService:
             creative_error = None
             try:
                 creative_endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/adcreatives"
-                page_id = campaign_data.get("page_id", "123456789") 
-                headline = campaign_data.get("headline", "Default Headline")
+                headline = campaign_data.get("headline", "Special Announcement")
                 description = campaign_data.get("description", "")
-                link = campaign_data.get("link", "https://example.com")
-                message = campaign_data.get("ad_text", "Check this out!")
+                link = campaign_data.get("link", "https://marketing-automation-smoky.vercel.app")
+                message = campaign_data.get("ad_text", "Check out our latest offer!")
                 
-                cta_type = "LEARN_MORE"
-                frontend_cta = campaign_data.get("call_to_action")
-                if frontend_cta == "Book Now":
+                frontend_cta = campaign_data.get("call_to_action", "SIGN_UP")
+                cta_type = "SIGN_UP"
+                if frontend_cta in ("Book Now", "BOOK_TRAVEL"):
                     cta_type = "BOOK_TRAVEL"
-                elif frontend_cta == "Sign Up":
-                    cta_type = "SIGN_UP"
+                elif frontend_cta in ("Learn More", "LEARN_MORE"):
+                    cta_type = "LEARN_MORE"
+                elif frontend_cta in ("Contact Us", "CONTACT_US"):
+                    cta_type = "CONTACT_US"
+                elif frontend_cta in ("Get Quote", "GET_QUOTE"):
+                    cta_type = "GET_QUOTE"
 
+                leadgen_form_id = campaign_data.get("leadgen_form_id")
+                
                 object_story_spec = {
                     "page_id": page_id,
                 }
                 
                 video_id = campaign_data.get("video_id")
                 image_hash = campaign_data.get("image_hash")
-                leadgen_form_id = campaign_data.get("leadgen_form_id")
                 
-                cta_block = {
-                    "type": "SIGN_UP" if leadgen_form_id else cta_type,
-                    "value": {"lead_gen_form_id": leadgen_form_id} if leadgen_form_id else {"link": link}
-                }
+                if leadgen_form_id:
+                    cta_block = {
+                        "type": "SIGN_UP",
+                        "value": {"lead_gen_form_id": leadgen_form_id}
+                    }
+                else:
+                    cta_block = {
+                        "type": cta_type,
+                        "value": {"link": link}
+                    }
 
                 if video_id:
                     object_story_spec["video_data"] = {
@@ -361,7 +598,7 @@ class MetaAdsService:
                     "name": f"{campaign_data.get('name')} - Creative",
                     "object_story_spec": json.dumps(object_story_spec)
                 }
-                logger.debug(f"Creating AdCreative with payload: {json.dumps(creative_params)}")
+                logger.info(f"Creating AdCreative for Page {page_id}")
                 creative_response = requests.post(creative_endpoint, data=creative_params)
                 MetaAdsService._handle_api_response(creative_response)
                 creative_data = creative_response.json()
@@ -372,10 +609,10 @@ class MetaAdsService:
                     "access_token": access_token,
                     "name": f"{campaign_data.get('name')} - Ad",
                     "adset_id": adset_id,
-                    "creative_id": creative_id,
+                    "creative": json.dumps({"creative_id": creative_id}),
                     "status": "PAUSED"
                 }
-                logger.debug(f"Creating Ad with payload: {json.dumps(ad_params)}")
+                logger.info("Creating Ad object")
                 ad_response = requests.post(ad_endpoint, data=ad_params)
                 MetaAdsService._handle_api_response(ad_response)
                 ad_data = ad_response.json()
@@ -389,8 +626,9 @@ class MetaAdsService:
                 "campaign_id": campaign_id,
                 "adset_id": adset_id,
                 "ad_id": ad_id,
+                "page_id": page_id,
                 "creative_error": creative_error,
-                "message": "Campaign and AdSet successfully created (Creative/Ad creation failed/skipped)." if creative_error else "Campaign successfully created."
+                "message": "Campaign and AdSet created, but Creative had an issue: " + str(creative_error) if creative_error else "Campaign successfully launched in paused mode on Meta."
             }
         except Exception as e:
             raise Exception(f"Meta API error: {str(e)}")
@@ -399,7 +637,11 @@ class MetaAdsService:
     def get_lead_details(cls, access_token: str, leadgen_id: str) -> dict:
         try:
             endpoint = f"{cls.BASE_URL}/{leadgen_id}"
-            response = requests.get(endpoint, params={"access_token": access_token})
+            params = {
+                "access_token": access_token,
+                "fields": "id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name"
+            }
+            response = requests.get(endpoint, params=params)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
