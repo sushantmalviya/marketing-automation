@@ -73,7 +73,9 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
         }
         
         if message_type == "text":
-            payload["text"] = {"preview_url": False, "body": str(message)}
+            from apps.campaigns.services.renderer import TemplateRenderer
+            clean_body = TemplateRenderer.to_plain_text(message, channel="WHATSAPP")
+            payload["text"] = {"preview_url": False, "body": clean_body}
         elif message_type == "template":
             payload["template"] = metadata.get("template", {})
         else:

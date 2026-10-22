@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { apiClient } from "@/services/api-client";
 import { parseWhatsAppTemplate } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
+import { parseSmsTemplate } from "@/components/user/templates/sms-builder/sms-serializer";
 
 type Template = {
   id: number;
@@ -85,9 +86,13 @@ export function TemplatePickerModal({
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((tpl) => {
+                const channelName = (tpl.channel_name || "").toUpperCase();
                 const isWhatsApp =
-                  tpl.channel_name?.toUpperCase().includes("WHATS") ||
-                  (tpl.subject && tpl.subject.trim().startsWith("{"));
+                  channelName.includes("WHATS") ||
+                  (!channelName.includes("SMS") && !channelName.includes("EMAIL") && (tpl.subject || "").includes('"buttons"'));
+                const isSms =
+                  channelName.includes("SMS") ||
+                  (!channelName.includes("WHATS") && !channelName.includes("EMAIL") && (tpl.subject || "").includes('"category"') && !(tpl.subject || "").includes('"buttons"'));
 
                 if (isWhatsApp) {
                   const wa = parseWhatsAppTemplate(tpl.subject, tpl.body);
@@ -146,7 +151,48 @@ export function TemplatePickerModal({
                   );
                 }
 
-                // Default rendering for Email, SMS, and other channels
+                if (isSms) {
+                  const sms = parseSmsTemplate(tpl.subject, tpl.body, tpl.name);
+                  return (
+                    <div
+                      key={tpl.id}
+                      className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg"
+                    >
+                      <div className="p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-bold text-slate-900 truncate" title={tpl.name}>
+                            {tpl.name}
+                          </h3>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 text-[10px] font-bold text-indigo-700 uppercase">
+                            SMS · {sms.category}
+                          </span>
+                          {sms.description && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 truncate max-w-[200px]" title={sms.description}>
+                              {sms.description}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 text-xs leading-relaxed text-slate-600 line-clamp-4 overflow-hidden text-ellipsis whitespace-pre-wrap font-sans">
+                          {sms.body || "No message content."}
+                        </div>
+                      </div>
+                      <div className="border-t border-slate-50 bg-slate-50 p-4">
+                        <button
+                          className="w-full rounded-xl bg-indigo-600 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700"
+                          onClick={() => onSelect(tpl)}
+                        >
+                          Use This Template
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Default rendering for Email and other channels
                 return (
                   <div
                     key={tpl.id}

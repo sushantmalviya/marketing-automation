@@ -109,7 +109,7 @@ export function WhatsAppButtonsSection({ buttons, onChange }: WhatsAppButtonsSec
             className="primary-button text-xs px-4 py-2 !bg-emerald-600 hover:!bg-emerald-700 flex items-center gap-1.5 shadow-sm disabled:opacity-50"
           >
             <Plus size={15} />
-            <span>Add Button ({buttons.length}/10)</span>
+            <span>Add Button</span>
           </button>
 
           {dropdownOpen && (

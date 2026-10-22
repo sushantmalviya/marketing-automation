@@ -24,6 +24,7 @@ import { EmailPreviewModal } from "@/components/user/templates/email-builder/ema
 import { WhatsAppPreviewModal } from "@/components/user/templates/whatsapp-builder/whatsapp-preview-modal";
 import { parseHtmlToBlocks } from "@/components/user/templates/html-serializer";
 import { parseWhatsAppTemplate } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
+import { SmsPreviewModal, parseSmsTemplate } from "@/components/user/templates/sms-builder";
 
 interface Template {
   id: number;
@@ -61,12 +62,12 @@ export function TemplatesManager() {
 
   const templates = useQuery({
     queryKey: ["templates-list"],
-    queryFn: async () => (await apiClient.get<Template[]>("/api/templates")).data,
+    queryFn: async () => (await apiClient.get<Template[]>("/api/templates/")).data,
   });
 
   const channels = useQuery({
     queryKey: ["channels-list"],
-    queryFn: async () => (await apiClient.get<Channel[]>("/api/channels")).data,
+    queryFn: async () => (await apiClient.get<Channel[]>("/api/channels/")).data,
   });
 
   const rows = (templates.data ?? []).filter((tpl) =>
@@ -88,7 +89,7 @@ export function TemplatesManager() {
         status: "ACTIVE",
       };
       if (editTarget) {
-        return apiClient.patch(`/api/templates/${editTarget.id}`, payload);
+        return apiClient.patch(`/api/templates/${editTarget.id}/`, payload);
       } else {
         return apiClient.post("/api/templates/create/", payload);
       }
@@ -105,7 +106,7 @@ export function TemplatesManager() {
 
   const remove = useMutation({
     mutationFn: async (id: number) => {
-      return apiClient.delete(`/api/templates/${id}/delete`);
+      return apiClient.delete(`/api/templates/${id}/delete/`);
     },
     onSuccess: () => {
       toast.success("Template deleted");
@@ -231,6 +232,7 @@ export function TemplatesManager() {
               const isTplWhatsApp = tpl.channel_name.toUpperCase().includes("WHATSAPP");
               const isTplSMS = tpl.channel_name.toUpperCase().includes("SMS");
               const waData = isTplWhatsApp ? parseWhatsAppTemplate(tpl.subject, tpl.body) : null;
+              const smsData = isTplSMS ? parseSmsTemplate(tpl.subject, tpl.body, tpl.name) : null;
 
               return (
                 <motion.article
@@ -259,6 +261,11 @@ export function TemplatesManager() {
                         {isTplWhatsApp && waData?.category && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 uppercase">
                             {waData.category}
+                          </span>
+                        )}
+                        {isTplSMS && smsData?.category && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase">
+                            {smsData.category}
                           </span>
                         )}
                         <Badge
@@ -323,17 +330,35 @@ export function TemplatesManager() {
                       {formatDate(tpl.created_at)}
                     </span>
                     <div className="flex gap-1.5">
-                      {/* Preview Action - Available for Email and WhatsApp */}
-                      {(isTplEmail || isTplWhatsApp) && (
+                      {/* Preview Action - Available for Email, WhatsApp, and SMS */}
+                      {(isTplEmail || isTplWhatsApp || isTplSMS) && (
                         <button
                           type="button"
-                          className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 transition"
+                          className={`p-1.5 rounded-lg transition ${
+                            isTplWhatsApp
+                              ? "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                              : isTplSMS
+                              ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                              : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                          }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setQuickPreviewTarget(tpl);
                           }}
-                          title={isTplWhatsApp ? "Preview WhatsApp Template" : "Preview Email"}
-                          aria-label={isTplWhatsApp ? "Preview WhatsApp Template" : "Preview Email"}
+                          title={
+                            isTplWhatsApp
+                              ? "Preview WhatsApp Template"
+                              : isTplSMS
+                              ? "Preview SMS Template"
+                              : "Preview Email"
+                          }
+                          aria-label={
+                            isTplWhatsApp
+                              ? "Preview WhatsApp Template"
+                              : isTplSMS
+                              ? "Preview SMS Template"
+                              : "Preview Email"
+                          }
                         >
                           <Eye size={16} />
                         </button>
@@ -475,6 +500,16 @@ export function TemplatesManager() {
                 openEdit(target);
               }}
             />
+          ) : quickPreviewTarget.channel_name.toUpperCase().includes("SMS") ? (
+            <SmsPreviewModal
+              template={quickPreviewTarget}
+              onClose={() => setQuickPreviewTarget(null)}
+              onEdit={() => {
+                const target = quickPreviewTarget;
+                setQuickPreviewTarget(null);
+                openEdit(target);
+              }}
+            />
           ) : (
             <EmailPreviewModal
               subject={quickPreviewTarget.subject || ""}
@@ -599,15 +634,17 @@ function SearchInput({
   placeholder: string;
 }) {
   return (
-    <label className="relative block">
-      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} />
+    <div className="relative flex items-center w-full">
+      <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 select-none" size={18} />
       <input
-        className="sa-input w-full pl-11"
+        type="text"
+        className="sa-input w-full pl-11 pr-4 py-2.5 text-sm"
+        style={{ paddingLeft: "2.75rem" }}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </label>
+    </div>
   );
 }
 

@@ -46,9 +46,20 @@ class PublishingService:
                 logger.info(f"Scheduled for {platform.scheduled_datetime}")
             else:
                 from django.conf import settings
-                if getattr(settings, 'TESTING', False) or getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+                import sys
+                is_testing = getattr(settings, 'TESTING', False) or 'test' in sys.argv
+                if is_testing:
                     publish_social_post_task.apply(args=[str(platform.id), user_id_str])
                     logger.info("Executed task synchronously in testing mode")
+                elif getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+                    import threading
+                    t = threading.Thread(
+                        target=publish_social_post_task.apply,
+                        kwargs={'args': [str(platform.id), user_id_str]}
+                    )
+                    t.daemon = True
+                    t.start()
+                    logger.info("Executed eager task in background thread to prevent HTTP proxy timeout")
                 else:
                     publish_social_post_task.delay(str(platform.id), user_id_str)
                     logger.info("Dispatched immediately to background queue")

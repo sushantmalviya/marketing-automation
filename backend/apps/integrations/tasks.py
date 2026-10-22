@@ -79,8 +79,22 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
             if not refreshed:
                 raise ValueError(f"Access token is expired and could not be refreshed for {connection.platform}.")
 
-        # Determine content and image
-        content = platform_record.caption.caption_text if hasattr(platform_record, 'caption') else draft.enhanced_prompt
+        # Determine content, hashtags, CTA, and image
+        caption_parts = []
+        if getattr(platform_record, 'caption_text', None):
+            caption_parts.append(platform_record.caption_text)
+        elif draft.enhanced_prompt:
+            caption_parts.append(draft.enhanced_prompt)
+        elif draft.original_prompt:
+            caption_parts.append(draft.original_prompt)
+
+        if getattr(platform_record, 'hashtags', None):
+            caption_parts.append(platform_record.hashtags)
+
+        if getattr(platform_record, 'cta', None):
+            caption_parts.append(platform_record.cta)
+
+        content = "\n\n".join(caption_parts)
         
         image_url = None
         img_ref = platform_record.images.first()
@@ -91,8 +105,17 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
                 backend_url = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
                 image_url = f"{backend_url}{image_url}"
 
+        location_id = getattr(platform_record, 'location_id', None) or None
+        first_comment = getattr(platform_record, 'first_comment', None) or None
+
         # Publish
-        response = provider.publish_post(connection, content, image_url)
+        publish_kwargs = {}
+        if location_id:
+            publish_kwargs['location_id'] = location_id
+        if first_comment:
+            publish_kwargs['first_comment'] = first_comment
+
+        response = provider.publish_post(connection, content, image_url, **publish_kwargs)
         log.response_payload = response
         
         if response.get("success"):

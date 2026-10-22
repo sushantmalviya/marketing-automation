@@ -55,7 +55,7 @@ export function SidebarRight({ block, onUpdate, onClose }: SidebarRightProps) {
 
   if (!block) {
     return (
-      <aside className="w-80 shrink-0 border-l border-slate-200 bg-white p-6 overflow-y-auto flex flex-col justify-between select-none">
+      <aside className="w-72 xl:w-80 2xl:w-[340px] shrink-0 border-l border-slate-200 bg-white p-5 sm:p-6 overflow-y-auto flex flex-col justify-between select-none">
         <div className="flex flex-col items-center justify-center text-center py-16 gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
             <Sliders size={22} />
@@ -86,7 +86,7 @@ export function SidebarRight({ block, onUpdate, onClose }: SidebarRightProps) {
   };
 
   return (
-    <aside className="w-80 shrink-0 border-l border-slate-200 bg-white p-5 overflow-y-auto flex flex-col gap-5 select-none">
+    <aside className="w-72 xl:w-80 2xl:w-[340px] shrink-0 border-l border-slate-200 bg-white p-4 sm:p-5 overflow-y-auto flex flex-col gap-5 select-none">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>

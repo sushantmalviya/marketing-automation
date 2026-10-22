@@ -68,7 +68,14 @@ export function Canvas({
       onClick={() => onSelect(null)}
     >
       {/* Top Canvas Toolbar: Mode Switch + Device Switch + Reset */}
-      <div className="w-full max-w-2xl mb-4 shrink-0 flex flex-wrap items-center justify-between gap-3">
+      <div
+        style={{
+          width: deviceView === "desktop" ? "600px" : "375px",
+          maxWidth: "100%",
+          transition: "width 0.25s ease-in-out",
+        }}
+        className="w-full mb-3 shrink-0 flex flex-wrap items-center justify-between gap-2.5"
+      >
         {/* Edit / Preview Switcher */}
         <div className="flex items-center gap-1 rounded-xl bg-white p-1 border border-slate-200 shadow-xs">
           <button
