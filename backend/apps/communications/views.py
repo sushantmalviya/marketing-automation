@@ -278,7 +278,7 @@ class WhatsAppWebhookView(APIView):
                                         ).update(status=new_status)
 
                 # 4. Inbound Customer Messages Handling
-                if "messages" in value:
+                if "messages" in value and field != "history":
                     for msg_obj in value["messages"]:
                         sender_phone = msg_obj.get("from", "")
                         message_id = msg_obj.get("id", "")
@@ -311,6 +311,100 @@ class WhatsAppWebhookView(APIView):
                                     "timestamp": timestamp,
                                     "tenant_user_id": str(identity.user_id) if identity else None,
                                 }
+                            )
+
+                # 5. Coexistence: WhatsApp Business App Outbound Message Echoes (smb_message_echoes)
+                if field == "smb_message_echoes" or "message_echoes" in value:
+                    for echo_obj in value.get("message_echoes", []):
+                        sender_phone = echo_obj.get("from") or display_phone_number
+                        recipient_phone = echo_obj.get("to", "")
+                        message_id = echo_obj.get("id", "")
+                        timestamp = echo_obj.get("timestamp", "")
+                        msg_type = echo_obj.get("type", "text")
+
+                        text_body = ""
+                        if msg_type == "text":
+                            text_body = echo_obj.get("text", {}).get("body", "")
+                        elif msg_type == "button":
+                            text_body = echo_obj.get("button", {}).get("text", "")
+                        elif msg_type == "interactive":
+                            text_body = echo_obj.get("interactive", {}).get("button_reply", {}).get("title", "")
+
+                        existing_event = CommunicationEvent.objects.filter(provider_message_id=message_id).exists()
+                        if not existing_event and message_id and recipient_phone:
+                            whatsapp_conn = None
+                            if receiving_phone_id:
+                                whatsapp_conn = WhatsAppConnection.objects.filter(phone_number_id=receiving_phone_id).first()
+
+                            CommunicationEvent.objects.create(
+                                whatsapp_connection=whatsapp_conn,
+                                channel="WHATSAPP",
+                                event_name="WHATSAPP_SENT",
+                                recipient=recipient_phone,
+                                status="SENT",
+                                provider_message_id=message_id,
+                                metadata={
+                                    "source": "smb_app_echo",
+                                    "receiving_phone_id": receiving_phone_id,
+                                    "display_phone_number": display_phone_number,
+                                    "waba_id": entry_waba_id,
+                                    "type": msg_type,
+                                    "text": text_body,
+                                    "from": sender_phone,
+                                    "timestamp": timestamp,
+                                    "tenant_user_id": str(identity.user_id) if identity else None,
+                                },
+                            )
+
+                # 6. Coexistence: SMB App State Synchronization (smb_app_state_sync)
+                if field == "smb_app_state_sync":
+                    logger.info(
+                        f"Received smb_app_state_sync webhook for WABA {entry_waba_id} (phone: {receiving_phone_id})."
+                    )
+
+                # 7. Coexistence: Chat History Synchronization (history)
+                if field == "history":
+                    history_phase = value.get("phase")
+                    history_chunk = value.get("chunk_order")
+                    history_progress = value.get("progress")
+                    logger.info(
+                        f"Received history sync webhook for WABA {entry_waba_id} (phase={history_phase}, chunk={history_chunk}, progress={history_progress}%)."
+                    )
+                    # Process historical messages idempotently if present in chunk
+                    for hist_msg in value.get("messages", []):
+                        hist_id = hist_msg.get("id", "")
+                        hist_from = hist_msg.get("from", "")
+                        hist_to = hist_msg.get("to", "")
+                        hist_ts = hist_msg.get("timestamp", "")
+                        hist_type = hist_msg.get("type", "text")
+                        hist_body = ""
+                        if hist_type == "text":
+                            hist_body = hist_msg.get("text", {}).get("body", "")
+
+                        if hist_id and not CommunicationEvent.objects.filter(provider_message_id=hist_id).exists():
+                            is_outbound = (hist_from == display_phone_number or hist_from == receiving_phone_id)
+                            whatsapp_conn = None
+                            if receiving_phone_id:
+                                whatsapp_conn = WhatsAppConnection.objects.filter(phone_number_id=receiving_phone_id).first()
+
+                            CommunicationEvent.objects.create(
+                                whatsapp_connection=whatsapp_conn,
+                                channel="WHATSAPP",
+                                event_name="WHATSAPP_SENT" if is_outbound else "WHATSAPP_RECEIVED",
+                                recipient=hist_to if is_outbound else hist_from,
+                                status="SENT" if is_outbound else "RECEIVED",
+                                provider_message_id=hist_id,
+                                metadata={
+                                    "source": "history_sync",
+                                    "phase": history_phase,
+                                    "receiving_phone_id": receiving_phone_id,
+                                    "display_phone_number": display_phone_number,
+                                    "waba_id": entry_waba_id,
+                                    "type": hist_type,
+                                    "text": hist_body,
+                                    "timestamp": hist_ts,
+                                    "tenant_user_id": str(identity.user_id) if identity else None,
+                                },
                             )
 
         return Response(status=status.HTTP_200_OK)

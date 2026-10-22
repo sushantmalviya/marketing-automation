@@ -455,3 +455,215 @@ class WhatsAppEmbeddedSignupTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")
+    @patch("apps.communications.services.meta_api.MetaAPIService.get_waba_phone_numbers")
+    @patch("apps.communications.services.meta_api.MetaAPIService.debug_token")
+    @patch("apps.communications.services.meta_api.MetaAPIService.subscribe_waba_to_app")
+    @patch("apps.communications.services.meta_api.MetaAPIService.register_phone_number")
+    @patch("apps.communications.services.meta_api.MetaAPIService.get_phone_number_details")
+    def test_coexistence_embedded_signup_skips_registration(
+        self, mock_get_details, mock_register_phone, mock_subscribe_waba, mock_debug, mock_get_phones, mock_exchange
+    ):
+        """
+        Coexistence test:
+        1. When is_coexistence is True, register_phone_number must NOT be called.
+        2. subscribe_waba_to_app must be called.
+        3. is_coexistence must be persisted into SenderIdentity encrypted_credentials.
+        """
+        self.client.force_authenticate(user=self.user)
+        mock_exchange.return_value = {"access_token": "EAA_COEX_TOKEN"}
+        mock_subscribe_waba.return_value = True
+        mock_get_details.return_value = {
+            "display_phone_number": "+1 555-0100",
+            "verified_name": "Coexistence Business",
+            "quality_rating": "GREEN",
+            "code_verification_status": "VERIFIED",
+            "account_review_status": "APPROVED",
+        }
+
+        payload = {
+            "code": "AUTH_CODE_COEX",
+            "waba_id": "waba_coex_111",
+            "phone_number_id": "phone_coex_222",
+            "is_coexistence": True,
+        }
+
+        with override_settings(
+            META_APP_ID="123456789012345",
+            META_APP_SECRET="test_app_secret",
+            META_GRAPH_API_VERSION="v19.0",
+        ):
+            response = self.client.post(
+                "/api/communications/whatsapp/embedded-signup/callback/",
+                data=payload,
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            mock_subscribe_waba.assert_called_once_with("waba_coex_111", "EAA_COEX_TOKEN")
+            # CRITICAL: Verify register_phone_number was NEVER called for coexistence
+            mock_register_phone.assert_not_called()
+
+            # Check SenderIdentity
+            identity = SenderIdentity.objects.get(user=self.user, phone_number_id="phone_coex_222")
+            self.assertTrue(identity.encrypted_credentials.get("is_coexistence"))
+
+            # Check WhatsAppConnection
+            conn = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_coex_222")
+            self.assertTrue(conn.is_active)
+
+    @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")
+    @patch("apps.communications.services.meta_api.MetaAPIService.subscribe_waba_to_app")
+    @patch("apps.communications.services.meta_api.MetaAPIService.register_phone_number")
+    @patch("apps.communications.services.meta_api.MetaAPIService.get_phone_number_details")
+    def test_standard_embedded_signup_registers_phone(
+        self, mock_get_details, mock_register_phone, mock_subscribe_waba, mock_exchange
+    ):
+        """Standard signup (is_coexistence=False) still calls register_phone_number."""
+        self.client.force_authenticate(user=self.user)
+        mock_exchange.return_value = {"access_token": "EAA_STD_TOKEN"}
+        mock_subscribe_waba.return_value = True
+        mock_register_phone.return_value = True
+        mock_get_details.return_value = {
+            "display_phone_number": "+1 555-0200",
+            "verified_name": "Standard Business",
+        }
+
+        payload = {
+            "code": "AUTH_CODE_STD",
+            "waba_id": "waba_std_333",
+            "phone_number_id": "phone_std_444",
+            "is_coexistence": False,
+        }
+
+        with override_settings(
+            META_APP_ID="123456789012345",
+            META_APP_SECRET="test_app_secret",
+            META_GRAPH_API_VERSION="v19.0",
+        ):
+            response = self.client.post(
+                "/api/communications/whatsapp/embedded-signup/callback/",
+                data=payload,
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            mock_register_phone.assert_called_once_with("phone_std_444", "EAA_STD_TOKEN")
+
+    def test_webhook_coexistence_smb_message_echoes(self):
+        """Verify that smb_message_echoes creates a CommunicationEvent and deduplicates."""
+        url = "/api/communications/webhooks/whatsapp/"
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "waba_id_888",
+                    "changes": [
+                        {
+                            "field": "smb_message_echoes",
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {
+                                    "display_phone_number": "15550100",
+                                    "phone_number_id": "100012345678901",
+                                },
+                                "message_echoes": [
+                                    {
+                                        "from": "15550100",
+                                        "to": "919876543210",
+                                        "id": "wamid.echo.12345",
+                                        "timestamp": "1700000000",
+                                        "type": "text",
+                                        "text": {"body": "Reply from WhatsApp Business mobile app"},
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+
+        # Send webhook
+        response = self.client.post(url, data=payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify CommunicationEvent created
+        event = CommunicationEvent.objects.get(provider_message_id="wamid.echo.12345")
+        self.assertEqual(event.channel, "WHATSAPP")
+        self.assertEqual(event.event_name, "WHATSAPP_SENT")
+        self.assertEqual(event.recipient, "919876543210")
+        self.assertEqual(event.status, "SENT")
+        self.assertEqual(event.metadata["source"], "smb_app_echo")
+        self.assertEqual(event.metadata["text"], "Reply from WhatsApp Business mobile app")
+
+        # Idempotency: replay the same echo webhook
+        response_dup = self.client.post(url, data=payload, format="json")
+        self.assertEqual(response_dup.status_code, status.HTTP_200_OK)
+        self.assertEqual(CommunicationEvent.objects.filter(provider_message_id="wamid.echo.12345").count(), 1)
+
+    def test_webhook_coexistence_history_and_state_sync(self):
+        """Verify that history and smb_app_state_sync webhooks are safely handled."""
+        url = "/api/communications/webhooks/whatsapp/"
+
+        # 1. State sync
+        sync_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "waba_id_888",
+                    "changes": [
+                        {
+                            "field": "smb_app_state_sync",
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {"phone_number_id": "100012345678901"},
+                                "contacts": [{"wa_id": "919876543210"}],
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        res_sync = self.client.post(url, data=sync_payload, format="json")
+        self.assertEqual(res_sync.status_code, status.HTTP_200_OK)
+
+        # 2. History sync with messages
+        history_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "waba_id_888",
+                    "changes": [
+                        {
+                            "field": "history",
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {
+                                    "display_phone_number": "15550100",
+                                    "phone_number_id": "100012345678901",
+                                },
+                                "phase": 0,
+                                "chunk_order": 1,
+                                "progress": 100,
+                                "messages": [
+                                    {
+                                        "id": "wamid.hist.999",
+                                        "from": "919876543210",
+                                        "timestamp": "1699999999",
+                                        "type": "text",
+                                        "text": {"body": "Historical customer message"},
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        res_hist = self.client.post(url, data=history_payload, format="json")
+        self.assertEqual(res_hist.status_code, status.HTTP_200_OK)
+
+        hist_event = CommunicationEvent.objects.get(provider_message_id="wamid.hist.999")
+        self.assertEqual(hist_event.channel, "WHATSAPP")
+        self.assertEqual(hist_event.status, "RECEIVED")
+        self.assertEqual(hist_event.metadata["source"], "history_sync")
+
