@@ -21,6 +21,7 @@ import { getDefaultBlocks, serializeBlocksToHtml, parseHtmlToBlocks } from "./ht
 import { EmailBuilder } from "./email-builder";
 import { EmailPreviewModal } from "./email-builder/email-preview-modal";
 import { WhatsAppTemplateBuilder } from "./whatsapp-builder";
+import { WhatsAppPreviewModal } from "./whatsapp-builder/whatsapp-preview-modal";
 import {
   WhatsAppTemplateData,
   DEFAULT_WHATSAPP_TEMPLATE,
@@ -311,10 +312,11 @@ export function TemplateBuilderView({
               </select>
             </div>
 
-            {/* Email / SMS Preview Button */}
-            {(isEmail || isSMS) && (
+            {/* Email / SMS / WhatsApp Preview Button */}
+            {(isEmail || isSMS || isWhatsApp) && (
               <button
                 type="button"
+                id="template-full-preview-btn"
                 onClick={() => setPreviewOpen(true)}
                 className={`flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs ${
                   isSMS ? "hover:border-indigo-300" : "hover:border-blue-300"
@@ -482,6 +484,18 @@ export function TemplateBuilderView({
         <EmailPreviewModal
           subject={subject}
           blocks={blocks}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+
+      {/* Full WhatsApp Preview Modal */}
+      {previewOpen && isWhatsApp && (
+        <WhatsAppPreviewModal
+          template={{
+            name,
+            subject: serializeWhatsAppMetadata(whatsappData),
+            body: compileWhatsAppMessage(whatsappData),
+          }}
           onClose={() => setPreviewOpen(false)}
         />
       )}
