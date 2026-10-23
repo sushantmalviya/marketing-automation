@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, MessageSquare, Loader2, ShieldCheck, ExternalLink, AlertTriangle, KeyRound } from "lucide-react";
+import { X, MessageSquare, Loader2, ShieldCheck, ExternalLink, AlertTriangle, KeyRound, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
 
@@ -21,6 +21,7 @@ interface ConnectWhatsAppModalProps {
 
 export function ConnectWhatsAppModal({ isOpen, onClose, onSuccess }: ConnectWhatsAppModalProps) {
   const [activeTab, setActiveTab] = useState<"oauth" | "manual">("oauth");
+  const [onboardingMode, setOnboardingMode] = useState<"coexistence" | "standard">("coexistence");
   const [loading, setLoading] = useState(false);
   const [sdkLoaded, setSdkLoaded] = useState(false);
 
@@ -140,14 +141,25 @@ export function ConnectWhatsAppModal({ isOpen, onClose, onSuccess }: ConnectWhat
 
     setLoading(true);
 
+    const isCoexistence = onboardingMode === "coexistence";
+
+    const extras: any = {
+      setup: {},
+      sessionInfoVersion: "3",
+      version: "v4",
+    };
+
+    if (isCoexistence) {
+      extras.featureType = "whatsapp_business_app_onboarding";
+    } else {
+      extras.feature = "whatsapp_embedded_signup";
+    }
+
     const loginOptions: any = {
       scope: "whatsapp_business_messaging,whatsapp_business_management",
       response_type: "code",
       override_default_response_type: true,
-      extras: {
-        feature: "whatsapp_embedded_signup",
-        setup: {},
-      },
+      extras: extras,
     };
 
     if (configId) {
@@ -163,14 +175,23 @@ export function ConnectWhatsAppModal({ isOpen, onClose, onSuccess }: ConnectWhat
             const phoneId = sessionDataRef.current.phone_number_id || response.authResponse.phone_number_id || "";
 
             try {
-              toast.info("Completing WhatsApp onboarding with Meta...");
+              toast.info(
+                isCoexistence
+                  ? "Linking WhatsApp Business App (Coexistence) with Meta..."
+                  : "Completing WhatsApp onboarding with Meta..."
+              );
               await apiClient.post("/api/communications/whatsapp/embedded-signup/callback/", {
                 code: code,
                 waba_id: wabaId,
                 phone_number_id: phoneId,
+                is_coexistence: isCoexistence,
               });
 
-              toast.success("WhatsApp Business Account connected successfully!");
+              toast.success(
+                isCoexistence
+                  ? "WhatsApp Business App linked successfully in Coexistence mode!"
+                  : "WhatsApp Business Account connected successfully!"
+              );
               onSuccess();
               onClose();
             } catch (err) {
@@ -305,22 +326,97 @@ export function ConnectWhatsAppModal({ isOpen, onClose, onSuccess }: ConnectWhat
                     </div>
                   )}
 
-                <div className="flex items-start gap-3 rounded-xl bg-emerald-50/70 p-4 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-500/20">
-                  <ShieldCheck size={20} className="shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-                  <div>
-                    <p className="font-semibold mb-1">Instant Self-Serve Meta Signup</p>
-                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                      Connect your existing Meta WhatsApp Business Account or create a new one in seconds using Meta&apos;s official OAuth popup dialog.
-                    </p>
+                {/* Onboarding Mode Selector */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Connection Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOnboardingMode("coexistence")}
+                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition cursor-pointer ${
+                        onboardingMode === "coexistence"
+                          ? "border-emerald-600 bg-emerald-50/50 dark:border-emerald-500 dark:bg-emerald-950/20"
+                          : "border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Smartphone size={16} className={onboardingMode === "coexistence" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                        <span className={`text-xs font-semibold ${onboardingMode === "coexistence" ? "text-emerald-900 dark:text-emerald-200" : "text-slate-800 dark:text-slate-200"}`}>
+                          Business App
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                        Coexistence: Keep number active on mobile app
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setOnboardingMode("standard")}
+                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition cursor-pointer ${
+                        onboardingMode === "standard"
+                          ? "border-emerald-600 bg-emerald-50/50 dark:border-emerald-500 dark:bg-emerald-950/20"
+                          : "border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck size={16} className={onboardingMode === "standard" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                        <span className={`text-xs font-semibold ${onboardingMode === "standard" ? "text-emerald-900 dark:text-emerald-200" : "text-slate-800 dark:text-slate-200"}`}>
+                          Cloud API Only
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                        Dedicated clean number for API campaigns
+                      </span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-850">
-                  <p className="font-medium text-slate-800 dark:text-slate-200">What happens next?</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    <li>Log in securely with your Meta Business Account.</li>
-                    <li>Select or verify your WhatsApp Phone Number.</li>
-                    <li>Credentials will be encrypted with AES/Fernet at rest.</li>
+                {onboardingMode === "coexistence" ? (
+                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50/70 p-3.5 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-500/20">
+                    <Smartphone size={20} className="shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-semibold text-emerald-950 dark:text-emerald-200">
+                        WhatsApp Business App Coexistence
+                      </p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                        Connect your active WhatsApp Business app number to Automarketer without deleting or disconnecting your mobile phone. Your 1-on-1 chats and mobile app remain active, and mobile sent replies synchronize to Automarketer.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50/70 p-3.5 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-500/20">
+                    <ShieldCheck size={20} className="shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                    <div>
+                      <p className="font-semibold mb-1 text-emerald-950 dark:text-emerald-200">Dedicated Cloud API Onboarding</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+                        Register a clean, unlinked phone number exclusively for Meta WhatsApp Cloud API messaging campaigns.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 space-y-1.5 text-xs text-slate-600 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-850">
+                  <p className="font-medium text-slate-800 dark:text-slate-200">
+                    {onboardingMode === "coexistence" ? "Coexistence Preparation Checklist:" : "What happens next?"}
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                    {onboardingMode === "coexistence" ? (
+                      <>
+                        <li>Ensure number is active on the <strong>WhatsApp Business App</strong> (not personal WhatsApp).</li>
+                        <li>Keep your mobile phone unlocked with WhatsApp Business open during the popup flow.</li>
+                        <li>Meta will present an in-app verification code or prompt to authorize Coexistence linking.</li>
+                        <li>Credentials are encrypted at rest with AES/Fernet.</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>Log in securely with your Meta Business Account.</li>
+                        <li>Select or verify your WhatsApp Phone Number.</li>
+                        <li>Credentials will be encrypted with AES/Fernet at rest.</li>
+                      </>
+                    )}
                   </ul>
                 </div>
 
@@ -337,7 +433,8 @@ export function ConnectWhatsAppModal({ isOpen, onClose, onSuccess }: ConnectWhat
                       </>
                     ) : (
                       <>
-                        <MessageSquare size={16} /> Connect with Meta WhatsApp
+                        {onboardingMode === "coexistence" ? <Smartphone size={16} /> : <MessageSquare size={16} />}
+                        {onboardingMode === "coexistence" ? "Connect WhatsApp Business App (Coexistence)" : "Connect Dedicated Cloud API"}
                       </>
                     )}
                   </button>

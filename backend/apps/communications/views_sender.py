@@ -411,12 +411,20 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        is_coexistence = bool(data.get("is_coexistence", False))
+
         # 1. Auto-subscribe WABA to webhook application (if waba_id is known)
         if waba_id:
             meta_api.subscribe_waba_to_app(waba_id, access_token)
 
-        # 2. Register Phone Number if required
-        meta_api.register_phone_number(phone_number_id, access_token)
+        # 2. Register Phone Number if required (Standard onboarding only; Coexistence numbers are already registered on mobile app)
+        if not is_coexistence:
+            meta_api.register_phone_number(phone_number_id, access_token)
+        else:
+            logger.info(
+                f"Skipping explicit phone number registration for coexistence phone number {phone_number_id} "
+                "(managed natively by WhatsApp Business App)."
+            )
 
         # 3. Fetch phone details & quality rating from Meta Graph API
         phone_info = meta_api.get_phone_number_details(phone_number_id, access_token)
@@ -432,6 +440,7 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
             "phone_number_id": phone_number_id,
             "waba_id": waba_id,
             "access_token": encrypted_token_val,
+            "is_coexistence": is_coexistence,
         }
 
         # 4. Save/Update SenderIdentity scoped to request.user (strict multi-tenant isolation)

@@ -121,7 +121,7 @@ class MetaAPIService:
             logger.error(f"Error subscribing WABA {waba_id} to webhooks: {exc}")
             return False
 
-    def register_phone_number(self, phone_number_id: str, access_token: str, pin: str = "123456") -> bool:
+    def register_phone_number(self, phone_number_id: str, access_token: str, pin: str | None = None) -> bool:
         """
         Register a phone number with Meta Cloud API.
         POST /{phone_number_id}/register
@@ -133,8 +133,9 @@ class MetaAPIService:
         }
         payload = {
             "messaging_product": "whatsapp",
-            "pin": pin,
         }
+        if pin:
+            payload["pin"] = pin
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=15)
