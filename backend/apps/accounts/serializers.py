@@ -43,6 +43,22 @@ class LoginSerializer(serializers.Serializer):
         )
 
         if not user:
+            try:
+                candidate = User.objects.get(email=email)
+                if candidate.check_password(password) and not candidate.is_active:
+                    ma_user = candidate.ma_users.first()
+                    if candidate.is_superuser or (ma_user and ma_user.role == "ADMIN"):
+                        candidate.is_active = True
+                        candidate.save(update_fields=["is_active"])
+                        user = authenticate(username=email, password=password)
+                    else:
+                        raise serializers.ValidationError(
+                            {"detail": "Your account has been deactivated."}
+                        )
+            except User.DoesNotExist:
+                pass
+
+        if not user:
             raise serializers.ValidationError(
                 {"detail": "Invalid email or password."}
             )

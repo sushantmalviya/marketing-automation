@@ -15,10 +15,10 @@ import { useSidebar } from "@/components/layout/portal-shell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Condition  = { id: string; field: string; operator: string; value: string; value_to?: string };
-type Group      = { id: string; operator: "AND" | "OR"; conditions: Condition[] };
+type Condition = { id: string; field: string; operator: string; value: string; value_to?: string };
+type Group = { id: string; operator: "AND" | "OR"; conditions: Condition[] };
 type Definition = { type?: string; description?: string; operator?: string; conditions?: Condition[]; groups_operator?: string; groups?: Group[]; static_ids?: number[]; is_group?: boolean; base_group_ids?: number[] };
-type Audience   = { id: number; name: string; customer_upload: number | null; customer_upload_name: string; definition: Definition; type: string; contacts_count: number; created_at: string; updated_at: string };
+type Audience = { id: number; name: string; customer_upload: number | null; customer_upload_name: string; definition: Definition; type: string; contacts_count: number; created_at: string; updated_at: string };
 type SegmentForm = { name: string; description: string; type: "DYNAMIC" | "STATIC"; groups_operator: "AND" | "OR"; groups: Group[]; base_group_ids: number[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ const operators: [string, string][] = [
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const newCondition = (): Condition => ({ id: uid(), field: "Name", operator: "contains", value: "" });
-const newGroup     = (): Group => ({ id: uid(), operator: "AND", conditions: [newCondition()] });
-const blankForm    = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()], base_group_ids: [] });
+const newGroup = (): Group => ({ id: uid(), operator: "AND", conditions: [newCondition()] });
+const blankForm = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()], base_group_ids: [] });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,13 +91,13 @@ export function AdminAudiences() {
     groups_operator: form.groups_operator,
     groups: (form.type === "DYNAMIC" || form.type === "STATIC")
       ? form.groups.map(g => ({
-          operator: g.operator,
-          conditions: g.conditions.map(c => ({ field: c.field, operator: c.operator, value: c.value, ...(c.value_to ? { value_to: c.value_to } : {}) })),
-        }))
+        operator: g.operator,
+        conditions: g.conditions.map(c => ({ field: c.field, operator: c.operator, value: c.value, ...(c.value_to ? { value_to: c.value_to } : {}) })),
+      }))
       : [],
   }), [form]);
 
-  
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (audiences.data ?? [])
@@ -157,7 +157,7 @@ export function AdminAudiences() {
     setViewing(null); setEditing(item.id); setPreviewCount(item.contacts_count);
     let base_group_ids: number[] = [];
     if (item.definition?.base_group_ids) {
-        base_group_ids = item.definition.base_group_ids;
+      base_group_ids = item.definition.base_group_ids;
     }
     setForm({
       name: item.name,
@@ -228,7 +228,7 @@ export function AdminAudiences() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/70 text-xs uppercase tracking-wide text-slate-600">
-                <tr><th className="px-6 py-5">Title</th><th>Type</th><th>Contacts</th><th>Created At</th><th className="text-center">Actions</th></tr>
+                <tr><th className="px-6 py-5">Title</th><th>Type</th><th>Contacts</th><th>Created At</th><th className="px-6 py-5 text-right">Actions</th></tr>
               </thead>
               <tbody>
                 {rows.map(item => (
@@ -237,8 +237,8 @@ export function AdminAudiences() {
                     <td><TypeBadge type={item.type} /></td>
                     <td className="font-medium text-slate-700">{item.contacts_count.toLocaleString()}</td>
                     <td className="text-slate-600">{formatDate(item.created_at)}</td>
-                    <td>
-                      <div className="flex justify-center gap-2">
+                    <td className="px-6 py-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <Action title="View" color="blue" onClick={() => setViewing(item)}><Eye size={17} /></Action>
                         {!["Imported contacts", "Form leads", "Meta leads"].includes(item.name) && (
                           <>
@@ -284,7 +284,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
   const count = previewCount ?? 0;
   const conditions = form.groups.flatMap(g => g.conditions);
 
-  const updateGroup     = (gid: string, patch: Partial<Group>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, ...patch } : g) });
+  const updateGroup = (gid: string, patch: Partial<Group>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, ...patch } : g) });
   const updateCondition = (gid: string, cid: string, patch: Partial<Condition>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, conditions: g.conditions.map(c => c.id === cid ? { ...c, ...patch } : c) } : g) });
   const removeCondition = (gid: string, cid: string) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, conditions: g.conditions.filter(c => c.id !== cid) } : g).filter(g => g.conditions.length) });
 
@@ -370,7 +370,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
               </div>
               <div className="absolute left-0 top-full z-10 mt-2 hidden w-full rounded-xl border border-slate-100 bg-white shadow-xl group-hover:block max-h-60 overflow-y-auto">
                 <div className="p-2 space-y-1">
-                  <button 
+                  <button
                     onClick={() => setForm({ ...form, base_group_ids: [] })}
                     className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${form.base_group_ids.length === 0 ? "bg-slate-100 font-semibold" : "hover:bg-slate-50"}`}
                   >
@@ -383,7 +383,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                       <button
                         key={group.id}
                         onClick={() => {
-                          const newIds = isSelected 
+                          const newIds = isSelected
                             ? form.base_group_ids.filter(id => id !== group.id)
                             : [...form.base_group_ids, group.id];
                           setForm({ ...form, base_group_ids: newIds });
@@ -456,7 +456,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={condition.operator} onChange={e => updateCondition(group.id, condition.id, { operator: e.target.value })}>
                             {/* Source field: only equality operators */}
                             {(condition.field === "Source"
-                              ? [["is", "is"], ["!=", "is not"]] as [string,string][]
+                              ? [["is", "is"], ["!=", "is not"]] as [string, string][]
                               : operators
                             ).map(([v, l]) => <option value={v} key={v}>{l}</option>)}
                           </select>
@@ -547,10 +547,10 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {previewContacts.map(c => {
                   const d = c.data;
-                  const name  = String(d.name ?? d.Name ?? d.full_name ?? "—");
+                  const name = String(d.name ?? d.Name ?? d.full_name ?? "—");
                   const email = String(d.email ?? d.Email ?? "");
                   const extra = Object.entries(d)
-                    .filter(([k]) => !["name","Name","email","Email","__col_order__","__source__"].includes(k))
+                    .filter(([k]) => !["name", "Name", "email", "Email", "__col_order__", "__source__"].includes(k))
                     .slice(0, 2)
                     .map(([k, v]) => `${k}: ${String(v)}`).join(" · ");
                   return (
@@ -584,10 +584,10 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
 
           {/* Meta */}
           <div className="space-y-3 p-5 text-sm">
-            <Meta icon={<RefreshCw size={15} />} label="Type"         value={title(form.type)} />
-            <Meta icon={<CalendarDays size={15} />} label="Updated"   value="Not saved yet" />
-            <Meta icon={<UserRound size={15} />} label="Created By"   value={[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Admin"} />
-            <Meta icon={<Target size={15} />} label="Used In"         value={editing ? "Existing campaigns" : "0 Campaigns"} />
+            <Meta icon={<RefreshCw size={15} />} label="Type" value={title(form.type)} />
+            <Meta icon={<CalendarDays size={15} />} label="Updated" value="Not saved yet" />
+            <Meta icon={<UserRound size={15} />} label="Created By" value={[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Admin"} />
+            <Meta icon={<Target size={15} />} label="Used In" value={editing ? "Existing campaigns" : "0 Campaigns"} />
           </div>
         </aside>
       </div>

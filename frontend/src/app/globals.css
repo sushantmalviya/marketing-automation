@@ -971,3 +971,41 @@ html.dark .shadow-2xl { box-shadow: 0 32px 80px rgba(0,0,0,.7) !important; }
     @apply mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM DASHBOARD MICRO-INTERACTIONS & MOTION SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+
+.dash-card {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.dash-card:hover {
+  transform: translateY(-3px);
+}
+
+.dash-row-interactive {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dash-row-interactive:hover {
+  transform: translateY(-1.5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-card,
+  .dash-card:hover,
+  .dash-row-interactive,
+  .dash-row-interactive:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
