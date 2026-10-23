@@ -262,15 +262,51 @@ class MetaAdsService:
 
             # Level 1: Campaign
             endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/campaigns"
+            
+            is_cbo = bool(
+                campaign_data.get("is_adset_budget_sharing_enabled", False)
+                or campaign_data.get("budget_strategy") == "CAMPAIGN_BUDGET"
+            )
+            
+            campaign_status = campaign_data.get("status", "PAUSED")
+            if campaign_status not in ["ACTIVE", "PAUSED"]:
+                campaign_status = "PAUSED"
+                
+            special_cats = campaign_data.get("special_ad_categories") or ["NONE"]
+            if isinstance(special_cats, str):
+                special_cats = [special_cats]
+
             params = {
                 "access_token": access_token,
                 "name": campaign_data.get("name"),
-                "objective": campaign_data.get("objective", "OUTCOME_TRAFFIC"),
-                "buying_type": "AUCTION",
-                "status": "PAUSED",
-                "special_ad_categories": json.dumps(campaign_data.get("special_ad_categories") or ["NONE"]),
-                "is_adset_budget_sharing_enabled": False
+                "objective": campaign_data.get("objective", "OUTCOME_LEADS"),
+                "buying_type": campaign_data.get("buying_type", "AUCTION"),
+                "status": campaign_status,
+                "special_ad_categories": json.dumps(special_cats),
+                "is_adset_budget_sharing_enabled": is_cbo
             }
+
+            # If Advantage+ Campaign Budget is enabled, set budget and bid strategy on Campaign level
+            if is_cbo:
+                budget_mode = campaign_data.get("budget_mode", "DAILY")
+                daily_budget = campaign_data.get("daily_budget")
+                lifetime_budget = campaign_data.get("lifetime_budget")
+                
+                if budget_mode == "LIFETIME" and lifetime_budget:
+                    params["lifetime_budget"] = int(lifetime_budget)
+                elif daily_budget:
+                    params["daily_budget"] = int(daily_budget)
+                elif lifetime_budget:
+                    params["lifetime_budget"] = int(lifetime_budget)
+
+                bid_strat = campaign_data.get("bid_strategy", "LOWEST_COST_WITHOUT_CAP")
+                params["bid_strategy"] = bid_strat
+
+            # Optional campaign spending limit (minor currency units)
+            spend_cap = campaign_data.get("spend_cap")
+            if spend_cap and int(spend_cap) > 0:
+                params["spend_cap"] = int(spend_cap)
+
             logger.debug(f"Creating Campaign with payload: {json.dumps(params)}")
             response = requests.post(endpoint, data=params)
             MetaAdsService._handle_api_response(response)
@@ -279,32 +315,150 @@ class MetaAdsService:
 
             # Level 2: AdSet
             adset_endpoint = f"{MetaAdsService.BASE_URL}/{account_id}/adsets"
-            targeting = {
-                "geo_locations": {"countries": [campaign_data.get("location", "US")]},
-                "age_min": campaign_data.get("age_min", 18),
-                "age_max": campaign_data.get("age_max", 65),
-                "flexible_spec": [{"interests": campaign_data.get("interests", [])}]
+            
+            # 1. Targeting Spec Assembly
+            targeting: Dict[str, Any] = {
+                "age_min": int(campaign_data.get("age_min") or 18),
+                "age_max": int(campaign_data.get("age_max") or 65),
             }
-            adset_params = {
+
+            # Interests
+            raw_interests = campaign_data.get("interests", [])
+            if raw_interests:
+                targeting["flexible_spec"] = [{"interests": raw_interests}]
+
+            # Gender: Meta uses [1] for Male, [2] for Female, omitted for All
+            gender_val = campaign_data.get("gender")
+            if gender_val == "Men":
+                targeting["genders"] = [1]
+            elif gender_val == "Women":
+                targeting["genders"] = [2]
+
+            # Geo Locations: Custom radius or Country
+            geo_locations_data = campaign_data.get("geo_locations")
+            if geo_locations_data and "lat" in geo_locations_data and "lng" in geo_locations_data:
+                try:
+                    lat_num = float(geo_locations_data["lat"])
+                    lng_num = float(geo_locations_data["lng"])
+                    rad_num = float(geo_locations_data.get("radius") or campaign_data.get("radius") or 10)
+                    targeting["geo_locations"] = {
+                        "custom_locations": [
+                            {
+                                "latitude": lat_num,
+                                "longitude": lng_num,
+                                "radius": rad_num,
+                                "distance_unit": "kilometer"
+                            }
+                        ]
+                    }
+                except (ValueError, TypeError):
+                    targeting["geo_locations"] = {"countries": [campaign_data.get("location", "IN")]}
+            else:
+                targeting["geo_locations"] = {"countries": [campaign_data.get("location", "IN")]}
+
+            # 2. Optimization Goal & Billing Event
+            # Map campaign objective to standard Meta optimization goals
+            objective_val = campaign_data.get("objective", "OUTCOME_LEADS")
+            goal_mapping = {
+                "OUTCOME_LEADS": "LEAD_GENERATION",
+                "OUTCOME_AWARENESS": "REACH",
+                "OUTCOME_TRAFFIC": "LINK_CLICKS",
+                "OUTCOME_SALES": "OFFSITE_CONVERSIONS",
+                "OUTCOME_ENGAGEMENT": "POST_ENGAGEMENT",
+                "OUTCOME_APP_PROMOTION": "APP_INSTALLS"
+            }
+            derived_goal = campaign_data.get("optimization_goal") or goal_mapping.get(objective_val, "REACH")
+
+            # 3. AdSet Base Parameters
+            adset_params: Dict[str, Any] = {
                 "access_token": access_token,
                 "campaign_id": campaign_id,
                 "name": f"{campaign_data.get('name')} - AdSet",
-                "daily_budget": campaign_data.get("daily_budget", 1000),
                 "billing_event": "IMPRESSIONS",
-                "optimization_goal": campaign_data.get("optimization_goal", "REACH"),
-                "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+                "optimization_goal": derived_goal,
                 "targeting": json.dumps(targeting),
                 "status": "PAUSED"
             }
+
+            # 4. Frequency Control Specs (Target / Cap)
+            # Meta requires frequency_control_specs at AdSet level when optimization_goal is REACH
+            if campaign_data.get("frequency_control_enabled"):
+                freq_times = int(campaign_data.get("frequency_control_times") or 2)
+                freq_days = int(campaign_data.get("frequency_control_days") or 7)
+                adset_params["frequency_control_specs"] = json.dumps([
+                    {
+                        "event": "IMPRESSIONS",
+                        "interval_days": freq_days,
+                        "max_frequency": freq_times
+                    }
+                ])
+                if objective_val == "OUTCOME_AWARENESS":
+                    adset_params["optimization_goal"] = "REACH"
+
+            # 5. Ad Scheduling (Day Parting)
+            # Allowed when lifetime_budget is selected
+            if (
+                campaign_data.get("ad_schedule_type") == "ON_SCHEDULE"
+                and campaign_data.get("budget_mode") == "LIFETIME"
+            ):
+                adset_params["pacing_type"] = json.dumps(["day_parting"])
+
+            # 6. Budget & Bid Strategy if NOT using Advantage+ Campaign Budget (CBO)
+            if not is_cbo:
+                adset_params["bid_strategy"] = campaign_data.get("bid_strategy", "LOWEST_COST_WITHOUT_CAP")
+                budget_mode = campaign_data.get("budget_mode", "DAILY")
+                if budget_mode == "LIFETIME" and campaign_data.get("lifetime_budget"):
+                    adset_params["lifetime_budget"] = int(campaign_data.get("lifetime_budget"))
+                else:
+                    adset_params["daily_budget"] = int(campaign_data.get("daily_budget", 100000))
+
             start_time = campaign_data.get("start_time")
             if start_time:
                 adset_params["start_time"] = start_time
+
+            end_time = campaign_data.get("end_time")
+            if end_time:
+                adset_params["end_time"] = end_time
                 
             logger.debug(f"Creating AdSet with payload: {json.dumps(adset_params)}")
             adset_response = requests.post(adset_endpoint, data=adset_params)
             MetaAdsService._handle_api_response(adset_response)
             adset_data = adset_response.json()
             adset_id = adset_data.get("id")
+
+            # 7. Budget Scheduling Edge (High Demand Periods)
+            # If user configured scheduled budget increases, dispatch to /{adset_id}/budget_schedules
+            budget_schedules = campaign_data.get("budget_schedules", [])
+            if budget_schedules and campaign_data.get("schedule_budget_increases"):
+                schedule_endpoint = f"{MetaAdsService.BASE_URL}/{adset_id}/budget_schedules"
+                from datetime import datetime
+                for period in budget_schedules:
+                    try:
+                        # Extract timestamps
+                        start_d = period.get("startDate")
+                        start_t = period.get("startTime", "00:00")
+                        end_d = period.get("endDate")
+                        end_t = period.get("endTime", "00:00")
+                        
+                        if start_d and end_d:
+                            s_dt = datetime.strptime(f"{start_d} {start_t}", "%Y-%m-%d %H:%M")
+                            e_dt = datetime.strptime(f"{end_d} {end_t}", "%Y-%m-%d %H:%M")
+                            t_start = int(s_dt.timestamp())
+                            t_end = int(e_dt.timestamp())
+                            
+                            b_val = period.get("increaseValue", 5)
+                            b_type = "ABSOLUTE" if period.get("increaseType") == "VALUE" else "MULTIPLIER"
+                            
+                            sched_payload = {
+                                "access_token": access_token,
+                                "time_start": t_start,
+                                "time_end": t_end,
+                                "budget_value": int(b_val * 100) if b_type == "ABSOLUTE" else int(b_val),
+                                "budget_value_type": b_type
+                            }
+                            requests.post(schedule_endpoint, data=sched_payload)
+                    except Exception as sched_err:
+                        logger.warning(f"Failed to attach budget schedule: {sched_err}")
 
             # Level 3: AdCreative & Ad
             creative_id = None

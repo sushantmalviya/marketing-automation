@@ -160,12 +160,14 @@ class CreateMetaCampaignView(APIView):
             name = request.data.get("name")
             objective = request.data.get("objective")
             daily_budget = request.data.get("daily_budget")
+            lifetime_budget = request.data.get("lifetime_budget")
             location = request.data.get("location")
             ad_text = request.data.get("ad_text")
             
-            if not all([account_id, name, objective, daily_budget, location, ad_text]):
+            budget_val = daily_budget or lifetime_budget or request.data.get("budget_amount")
+            if not (account_id and name and objective and budget_val and location and ad_text):
                 return Response(
-                    {"status": "error", "message": "account_id, name, objective, daily_budget, location, and ad_text are required."},
+                    {"status": "error", "message": "account_id, name, objective, budget, location, and ad_text are required."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
