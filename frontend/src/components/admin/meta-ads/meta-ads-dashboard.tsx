@@ -1571,8 +1571,8 @@ function PixelSettingsTab() {
     }
     // Fallback demo log data
     return [
-      { id: "1", event_name: "PageView", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: new Date(Date.now() - 600000).toISOString() },
-      { id: "2", event_name: "Lead", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: new Date(Date.now() - 3600000).toISOString() }
+      { id: "1", event_name: "PageView", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: "2026-10-23T12:00:00.000Z" },
+      { id: "2", event_name: "Lead", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: "2026-10-23T11:00:00.000Z" }
     ];
   }, [logsQuery.data, pixelId, testCode]);
 
@@ -2090,7 +2090,6 @@ function CreateCampaignWizard({
               setCreativeData={setCreativeData} 
               mediaUrl={mediaUrl}
               setMediaUrl={setMediaUrl}
-              mediaFile={mediaFile}
               setMediaFile={setMediaFile}
               mediaType={mediaType}
               setMediaType={setMediaType}
@@ -2155,157 +2154,7 @@ function CreateCampaignWizard({
   );
 }
 
-function CampaignStep({
-  name,
-  setName,
-  objective,
-  setObjective,
-  pageId,
-  setPageId,
-  pages,
-  isLoadingPages,
-  leadFormId,
-  setLeadFormId,
-  forms,
-  isLoadingForms,
-}: {
-  name: string;
-  setName: (value: string) => void;
-  objective: string;
-  setObjective: (value: string) => void;
-  pageId: string;
-  setPageId: (value: string) => void;
-  pages?: MetaPage[];
-  isLoadingPages: boolean;
-  leadFormId: string;
-  setLeadFormId: (value: string) => void;
-  forms?: MetaLeadForm[];
-  isLoadingForms: boolean;
-}) {
-  return (
-    <div className="grid gap-6 md:grid-cols-[1fr_220px]">
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-xl font-black text-slate-950">Campaign Settings</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Configure your campaign name, core objective, and publishing identity.</p>
-        </div>
 
-        <Field label="Campaign Name">
-          <input 
-            value={name} 
-            onChange={(e) => setName(e.target.value)} 
-            placeholder="e.g. Summer Sale - Indore"
-          />
-        </Field>
-
-        <Field 
-          label="Campaign Objective"
-          helper="Choose the outcome you want to optimize your campaign for."
-        >
-          <select value={objective} onChange={(e) => setObjective(e.target.value)}>
-            <option>Leads</option>
-            <option>Traffic</option>
-            <option>Sales</option>
-            <option>Engagement</option>
-            <option>Awareness</option>
-            <option>App Promotion</option>
-          </select>
-        </Field>
-
-        {/* Facebook Page Selector */}
-        <Field 
-          label="Facebook Page (Required)"
-          helper="Ads on Facebook and Instagram must run under a verified Facebook Page."
-        >
-          {isLoadingPages ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-500">
-              Loading connected Facebook pages...
-            </div>
-          ) : !pages || pages.length === 0 ? (
-            <div className="space-y-2">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 leading-relaxed">
-                No Facebook Pages found. You need admin rights to at least one Facebook Page to publish ads and generate leads.
-              </div>
-              <input
-                placeholder="Or enter Facebook Page ID manually (e.g. 123456789)"
-                value={pageId}
-                onChange={(e) => setPageId(e.target.value)}
-                className="font-mono text-xs"
-              />
-            </div>
-          ) : (
-            <select value={pageId} onChange={(e) => setPageId(e.target.value)}>
-              {pages.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} (ID: {p.id})
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-
-        {/* Instant Lead Form Selector */}
-        {objective === "Leads" && (
-          <Field 
-            label="Instant Lead Form"
-            helper="When clicked, viewers submit this form and leads sync instantly to your CRM via Webhook."
-          >
-            {isLoadingForms ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-500">
-                Loading Instant Lead Forms for this Page...
-              </div>
-            ) : !forms || forms.length === 0 ? (
-              <div className="space-y-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600 leading-relaxed">
-                  No active Instant Forms found on this page. Enter a Form ID or create one in Meta Business Suite &gt; Instant Forms.
-                </div>
-                <input
-                  placeholder="Enter Meta Form ID (e.g. 98765432101234)"
-                  value={leadFormId}
-                  onChange={(e) => setLeadFormId(e.target.value)}
-                  className="font-mono text-xs"
-                />
-              </div>
-            ) : (
-              <select value={leadFormId} onChange={(e) => setLeadFormId(e.target.value)}>
-                {forms.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} ({f.status}) — ID: {f.id}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        )}
-
-        <Field 
-          label="Special Ad Category"
-          helper="Declare if your ads relate to credit, employment, housing, or social issues/politics."
-        >
-          <select>
-            <option>None</option>
-            <option>Credit</option>
-            <option>Employment</option>
-            <option>Housing</option>
-            <option>Issues, Elections or Politics</option>
-          </select>
-        </Field>
-      </div>
-
-      <Summary
-        title="Campaign Summary"
-        rows={[
-          ["Campaign", name || "Untitled"],
-          ["Objective", objective],
-          ["Page", pages?.find((p) => p.id === pageId)?.name || (pageId ? `ID: ${pageId}` : "None")],
-          ...(objective === "Leads"
-            ? [["Lead Form", forms?.find((f) => f.id === leadFormId)?.name || (leadFormId ? `ID: ${leadFormId}` : "None")]]
-            : []),
-        ]}
-      />
-    </div>
-  );
-}
 
 function AdSetStep({
   adSet,
@@ -2517,7 +2366,6 @@ function CreativeStep({
   setCreativeData,
   mediaUrl,
   setMediaUrl,
-  mediaFile,
   setMediaFile,
   mediaType,
   setMediaType,
@@ -2528,7 +2376,6 @@ function CreativeStep({
   setCreativeData: React.Dispatch<React.SetStateAction<{ primaryText: string; headline: string; description: string; destinationUrl: string; callToAction: string; }>>;
   mediaUrl: string | null;
   setMediaUrl: (value: string | null) => void;
-  mediaFile: File | null;
   setMediaFile: (value: File | null) => void;
   mediaType: "image" | "video";
   setMediaType: (value: "image" | "video") => void;
