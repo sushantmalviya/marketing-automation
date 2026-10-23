@@ -12,6 +12,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
@@ -20,6 +21,7 @@ import { getDefaultBlocks, serializeBlocksToHtml, parseHtmlToBlocks } from "./ht
 import { EmailBuilder } from "./email-builder";
 import { EmailPreviewModal } from "./email-builder/email-preview-modal";
 import { WhatsAppTemplateBuilder } from "./whatsapp-builder";
+import { WhatsAppPreviewModal } from "./whatsapp-builder/whatsapp-preview-modal";
 import {
   WhatsAppTemplateData,
   DEFAULT_WHATSAPP_TEMPLATE,
@@ -250,6 +252,20 @@ export function TemplateBuilderView({
     }
   };
 
+  const [verifying, setVerifying] = useState(false);
+
+  const handleSendForVerification = () => {
+    if (!name.trim()) {
+      toast.error("Please enter a template name before sending for verification");
+      return;
+    }
+    setVerifying(true);
+    setTimeout(() => {
+      setVerifying(false);
+      toast.success("Template submitted for verification! (Simulated request - backend permission pending)");
+    }, 600);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -296,10 +312,11 @@ export function TemplateBuilderView({
               </select>
             </div>
 
-            {/* Email / SMS Preview Button */}
-            {(isEmail || isSMS) && (
+            {/* Email / SMS / WhatsApp Preview Button */}
+            {(isEmail || isSMS || isWhatsApp) && (
               <button
                 type="button"
+                id="template-full-preview-btn"
                 onClick={() => setPreviewOpen(true)}
                 className={`flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs ${
                   isSMS ? "hover:border-indigo-300" : "hover:border-blue-300"
@@ -310,11 +327,23 @@ export function TemplateBuilderView({
               </button>
             )}
 
+            {/* Send for Verification Button */}
+            <button
+              type="button"
+              onClick={handleSendForVerification}
+              disabled={verifying || saving}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition shadow-xs disabled:opacity-50"
+              title="Submit template for verification / approval"
+            >
+              <ShieldCheck size={15} className="text-emerald-600" />
+              <span>{verifying ? "Sending..." : "Send for Verification"}</span>
+            </button>
+
             {/* Save Button */}
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || verifying}
               className="primary-button flex items-center gap-2 px-5 py-2 text-xs font-bold shadow-md"
             >
               <Save size={15} />
@@ -455,6 +484,18 @@ export function TemplateBuilderView({
         <EmailPreviewModal
           subject={subject}
           blocks={blocks}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+
+      {/* Full WhatsApp Preview Modal */}
+      {previewOpen && isWhatsApp && (
+        <WhatsAppPreviewModal
+          template={{
+            name,
+            subject: serializeWhatsAppMetadata(whatsappData),
+            body: compileWhatsAppMessage(whatsappData),
+          }}
           onClose={() => setPreviewOpen(false)}
         />
       )}

@@ -213,6 +213,7 @@ class SenderIdentity(models.Model):
         ("AWS_SES", "Amazon SES"),
         ("SMTP", "SMTP"),
         ("API_KEY", "API Key / Token"),
+        ("OAUTH", "OAuth / Meta Embedded Signup"),
     ]
 
     STATUS_CHOICES = [

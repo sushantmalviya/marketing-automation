@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.communications.models import DomainAuthentication, SenderIdentity
+from apps.communications.models import DomainAuthentication, SenderIdentity, WhatsAppConnection
 from apps.communications.providers.sender_abstraction import (
     SMTPEmailSender,
     get_sender_provider,
@@ -334,6 +334,29 @@ class SendTestEmailView(APIView):
             return Response({"success": False, "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class WhatsAppPublicConfigView(APIView):
+    """
+    Returns public Meta App ID, Config ID, and Graph API version needed by frontend for Embedded Signup.
+    Does NOT return any secret or sensitive tokens.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        app_id = getattr(settings, "META_APP_ID", "")
+        config_id = (
+            getattr(settings, "META_CONFIG_ID", "")
+            or getattr(settings, "META_EMBEDDED_SIGNUP_CONFIG_ID", "")
+            or getattr(settings, "NEXT_PUBLIC_META_CONFIG_ID", "")
+        )
+        api_version = getattr(settings, "META_GRAPH_API_VERSION", "v19.0")
+        return Response({
+            "app_id": app_id,
+            "config_id": config_id,
+            "api_version": api_version,
+            "is_configured": bool(app_id and config_id),
+        })
+
+
 class WhatsAppEmbeddedSignupCallbackView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -343,9 +366,9 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
         data = serializer.validated_data
 
         code = data.get("code")
-        waba_id = data["waba_id"]
-        phone_number_id = data["phone_number_id"]
-        access_token = data.get("access_token", "")
+        waba_id = data.get("waba_id", "").strip()
+        phone_number_id = data.get("phone_number_id", "").strip()
+        access_token = data.get("access_token", "").strip()
 
         meta_api = MetaAPIService()
 
@@ -366,11 +389,42 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 1. Auto-subscribe WABA to webhook application
-        meta_api.subscribe_waba_to_app(waba_id, access_token)
+        # Autonomously resolve WABA ID from token if missing
+        if not waba_id:
+            token_debug = meta_api.debug_token(access_token)
+            granular_scopes = token_debug.get("granular_scopes", [])
+            for scope_info in granular_scopes:
+                target_ids = scope_info.get("target_ids", [])
+                if target_ids:
+                    waba_id = target_ids[0]
+                    break
 
-        # 2. Register Phone Number if required
-        meta_api.register_phone_number(phone_number_id, access_token)
+        # Autonomously resolve phone_number_id from WABA if missing
+        if waba_id and not phone_number_id:
+            phone_numbers = meta_api.get_waba_phone_numbers(waba_id, access_token)
+            if phone_numbers:
+                phone_number_id = phone_numbers[0].get("id", "")
+
+        if not phone_number_id:
+            return Response(
+                {"detail": "WhatsApp Phone Number ID could not be identified. Please select or verify a phone number in Meta Embedded Signup."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        is_coexistence = bool(data.get("is_coexistence", False))
+
+        # 1. Auto-subscribe WABA to webhook application (if waba_id is known)
+        if waba_id:
+            meta_api.subscribe_waba_to_app(waba_id, access_token)
+
+        # 2. Register Phone Number if required (Standard onboarding only; Coexistence numbers are already registered on mobile app)
+        if not is_coexistence:
+            meta_api.register_phone_number(phone_number_id, access_token)
+        else:
+            logger.info(
+                f"Skipping explicit phone number registration for coexistence phone number {phone_number_id} "
+                "(managed natively by WhatsApp Business App)."
+            )
 
         # 3. Fetch phone details & quality rating from Meta Graph API
         phone_info = meta_api.get_phone_number_details(phone_number_id, access_token)
@@ -380,10 +434,13 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
         code_verification_status = phone_info.get("code_verification_status") or "UNKNOWN"
         account_review_status = phone_info.get("account_review_status") or "UNKNOWN"
 
+        encrypted_token_val = encrypt_token(access_token)
+
         credentials = {
             "phone_number_id": phone_number_id,
             "waba_id": waba_id,
-            "access_token": encrypt_token(access_token),
+            "access_token": encrypted_token_val,
+            "is_coexistence": is_coexistence,
         }
 
         # 4. Save/Update SenderIdentity scoped to request.user (strict multi-tenant isolation)
@@ -403,6 +460,17 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
                 "account_review_status": account_review_status,
                 "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
+            }
+        )
+
+        # 5. Dual Persistence: Also create/update WhatsAppConnection for organization
+        # to ensure existing campaign sending, automation actions, and event logs work seamlessly
+        WhatsAppConnection.objects.update_or_create(
+            organization=request.user,
+            phone_number_id=phone_number_id,
+            defaults={
+                "encrypted_access_token": encrypted_token_val,
+                "is_active": True,
             }
         )
 

@@ -3,7 +3,6 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from apps.tasks.models import Task
 from apps.campaigns.models import (
     Audience,
     Campaign,
@@ -84,17 +83,6 @@ class Command(BaseCommand):
             is_active=True,
         )
 
-        task = Task.objects.create(
-            title="WhatsApp Campaign Verification Task",
-            description="End-to-end campaign dispatch test",
-            audience=audience,
-            priority=Task.Priority.HIGH,
-            due_date=timezone.now() + timedelta(days=1),
-            created_by=user,
-            is_active=True,
-        )
-        task.channels.add(whatsapp_channel)
-
         template = Template.objects.create(
             name="WhatsApp Campaign Test Template",
             channel=whatsapp_channel,
@@ -104,7 +92,7 @@ class Command(BaseCommand):
         )
 
         campaign = Campaign.objects.create(
-            task=task,
+            target_audience=audience,
             name="Real WhatsApp Campaign Verification",
             description="Automated end-to-end verification of campaign flow",
             status=Campaign.Status.APPROVED,

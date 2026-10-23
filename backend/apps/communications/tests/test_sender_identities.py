@@ -35,12 +35,14 @@ class SenderIdentityTests(APITestCase):
         token = response.data["verification_token"]
 
         # Test verification failure
-        with patch("apps.communications.views_sender.verify_domain_dns", return_value=(False, "TXT record not found", [])):
+        with patch("apps.communications.views_sender.AWSSESService.get_domain_verification_status", return_value={"status": "PENDING"}), \
+             patch("apps.communications.views_sender.verify_domain_dns", return_value=(False, "TXT record not found", [])):
             verify_res = self.client.post(f"/api/communications/sender-domains/{domain_id}/verify/")
             self.assertEqual(verify_res.status_code, status.HTTP_400_BAD_REQUEST)
 
         # Test verification success
-        with patch("apps.communications.views_sender.verify_domain_dns", return_value=(True, "Verified", [f"automarket-verify={token}"])):
+        with patch("apps.communications.views_sender.AWSSESService.get_domain_verification_status", return_value={"status": "PENDING"}), \
+             patch("apps.communications.views_sender.verify_domain_dns", return_value=(True, "Verified", [f"automarket-verify={token}"])):
             verify_res = self.client.post(f"/api/communications/sender-domains/{domain_id}/verify/")
             self.assertEqual(verify_res.status_code, status.HTTP_200_OK)
             self.assertEqual(verify_res.data["domain"]["status"], "VERIFIED")

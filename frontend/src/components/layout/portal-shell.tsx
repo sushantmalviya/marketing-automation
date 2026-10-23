@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { getAllowedNavigation, roleFromPath, type ModuleKey } from "@/permissions/permission-matrix";
 import { useTheme } from "@/providers/theme-provider";
@@ -63,6 +63,23 @@ function initials(email: string, first?: string, last?: string) {
     : email.slice(0, 2).toUpperCase();
 }
 
+/* ── Sidebar Context ── */
+export interface SidebarContextType {
+  collapsed: boolean;
+  setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  sidebarWidth: number;
+}
+
+export const SidebarContext = createContext<SidebarContextType>({
+  collapsed: false,
+  setCollapsed: () => {},
+  sidebarWidth: 280,
+});
+
+export function useSidebar() {
+  return useContext(SidebarContext);
+}
+
 /* ── PortalShell ── */
 export function PortalShell({ rolePath, children }: { rolePath: string; children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -108,6 +125,13 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
   }, [loading, user, expected, router]);
 
   const standardNav = useMemo(() => user ? getAllowedNavigation(user.role) : [], [user]);
+
+  const sidebarWidth = collapsed ? 76 : 280;
+  const sidebarContextValue = useMemo(() => ({
+    collapsed,
+    setCollapsed,
+    sidebarWidth,
+  }), [collapsed, sidebarWidth]);
 
   if (loading || !user || user.role !== expected)
     return (
@@ -248,15 +272,27 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
 
   /* ── Shell layout ── */
   return (
-    <div className="admin-motion-shell min-h-screen bg-slate-50 dark:bg-[#050d1f] flex flex-col md:flex-row">
+    <SidebarContext.Provider value={sidebarContextValue}>
+      <div
+        className="admin-motion-shell min-h-screen bg-slate-50 dark:bg-[#050d1f] flex flex-col md:flex-row"
+        style={{
+          "--sidebar-width": `${sidebarWidth}px`,
+        } as React.CSSProperties}
+      >
 
-      {/* desktop sidebar placeholder for layout spacing */}
-      <div className={`hidden md:block shrink-0 transition-[width] duration-300 ${collapsed ? "w-[76px]" : "w-[280px]"}`} />
+        {/* desktop sidebar placeholder for layout spacing */}
+        <div
+          className="hidden md:block shrink-0 transition-[width] duration-300"
+          style={{ width: sidebarWidth }}
+        />
 
-      {/* fixed desktop sidebar */}
-      <div className="hidden md:block fixed top-0 left-0 bottom-0 shadow-2xl z-20 bg-[#1a1d2d]" style={{ width: collapsed ? 76 : 280 }}>
-        {sidebar}
-      </div>
+        {/* fixed desktop sidebar */}
+        <div
+          className="hidden md:block fixed top-0 left-0 bottom-0 shadow-2xl z-20 bg-[#1a1d2d] transition-[width] duration-300"
+          style={{ width: sidebarWidth }}
+        >
+          {sidebar}
+        </div>
 
       {/* mobile sidebar overlay */}
       <AnimatePresence>
@@ -468,6 +504,7 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
           {children}
         </motion.div>
       </main>
-    </div>
+      </div>
+    </SidebarContext.Provider>
   );
 }

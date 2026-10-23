@@ -9,7 +9,8 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 import { parseApiError } from "@/services/api-client";
 import { metaAdsService } from "@/services/meta-ads.service";
-import type { MetaAdAccount, MetaCampaign, MetaPage, MetaLeadForm, WebhookLead, MetaInsights } from "@/types/meta-ads";
+import type { MetaAdAccount, MetaCampaign, MetaPage, MetaLeadForm, WebhookLead, MetaInsights, CampaignFormData } from "@/types/meta-ads";
+import { CampaignCreationStep } from "./CampaignCreationStep";
 
 const LocationTargetingMap = dynamic(
   () => import("./LocationTargetingMap"),
@@ -1819,8 +1820,20 @@ function CreateCampaignWizard({
     params.set("step", nextStep.toString());
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
-  const [name, setName] = useState("Summer Sale - Indore");
-  const [objective, setObjective] = useState("Leads");
+  const [campaignForm, setCampaignForm] = useState<CampaignFormData>({
+    name: "New Leads campaign",
+    status: "PAUSED",
+    buying_type: "AUCTION",
+    objective: "OUTCOME_LEADS",
+    spend_cap_enabled: false,
+    spend_cap: undefined,
+    budget_strategy: "CAMPAIGN_BUDGET",
+    budget_mode: "DAILY",
+    budget_amount: 500,
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    special_ad_categories: ["NONE"],
+    ad_schedule_type: "ALL_TIME",
+  });
   const [pageId, setPageId] = useState("");
   const [leadFormId, setLeadFormId] = useState("");
 
@@ -1853,7 +1866,6 @@ function CreateCampaignWizard({
 
   const selectedPage = pagesQuery.data?.find((p) => p.id === pageId);
   const selectedForm = formsQuery.data?.find((f) => f.id === leadFormId);
-
   const [adSet, setAdSet] = useState("Indore Leads Audience");
   const [creativeData, setCreativeData] = useState({
     primaryText: "Transform your home with our premium interior design services.",
@@ -1909,28 +1921,49 @@ function CreateCampaignWizard({
 
   const labels = ["Campaign", "Ad Set & Audience", "Ad Creative", "Review & Launch"];
   const submitCampaign = (image_hash?: string, video_id?: string) => {
-    if (!pageId) {
-      toast.error("Please select a Facebook Page. Meta requires an active Page for ad publishing.");
-      return;
-    }
+    const isAdvantagePlus = campaignForm.budget_strategy === "CAMPAIGN_BUDGET";
+    const budgetAmountInMinorUnits = Math.round(
+      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : budget) * 100
+    );
 
     createCampaignMutation.mutate({
       account_id: accountId,
-      name,
-      objective: objective === "Leads" ? "OUTCOME_LEADS" : "OUTCOME_TRAFFIC",
-      daily_budget: budget * 100, // Cents to rupees conversion
-      location: location === "India" ? "IN" : location === "United States" ? "US" : location === "United Kingdom" ? "GB" : location === "Canada" ? "CA" : "IN",
+      name: campaignForm.name,
+      status: campaignForm.status,
+      buying_type: campaignForm.buying_type,
+      objective: campaignForm.objective,
+      special_ad_categories: campaignForm.special_ad_categories,
+      budget_strategy: campaignForm.budget_strategy,
+      budget_mode: campaignForm.budget_mode,
+      bid_strategy: campaignForm.bid_strategy,
+      is_adset_budget_sharing_enabled: isAdvantagePlus,
+      spend_cap: campaignForm.spend_cap_enabled && campaignForm.spend_cap
+        ? Math.round(campaignForm.spend_cap * 100)
+        : undefined,
+      ad_schedule_type: campaignForm.ad_schedule_type,
+      frequency_control_enabled: campaignForm.frequency_control_enabled,
+      frequency_control_type: campaignForm.frequency_control_type,
+      frequency_control_times: campaignForm.frequency_control_times,
+      frequency_control_days: campaignForm.frequency_control_days,
+      schedule_budget_increases: campaignForm.schedule_budget_increases,
+      budget_schedules: campaignForm.budget_schedules,
+      daily_budget: campaignForm.budget_mode === "DAILY" ? budgetAmountInMinorUnits : undefined,
+      lifetime_budget: campaignForm.budget_mode === "LIFETIME" ? budgetAmountInMinorUnits : undefined,
+      start_time: startDate || undefined,
+      end_time: endDate || undefined,
+      location: location === "India" ? "IN" : location === "United States" ? "US" : "IN",
+      radius: radius,
+      age_min: ageMin,
+      age_max: ageMax,
+      gender: gender === "Men" ? "male" : gender === "Women" ? "female" : "all",
+      interests: interests ? interests.split(",").map((s) => s.trim()).filter(Boolean) : [],
       ad_text: creativeData.primaryText,
       headline: creativeData.headline,
       description: creativeData.description,
       link: creativeData.destinationUrl,
       call_to_action: creativeData.callToAction,
-      page_id: pageId,
-      leadgen_form_id: objective === "Leads" ? (leadFormId || undefined) : undefined,
-      age_min: ageMin,
-      age_max: ageMax,
-      gender: gender === "Men" ? "male" : gender === "Women" ? "female" : "all",
-      interests: interests,
+      page_id: pageId || undefined,
+      leadgen_form_id: campaignForm.objective === "OUTCOME_LEADS" ? (leadFormId || undefined) : undefined,
       geo_locations: {
         location_type: "custom_locations",
         lat: coordinates.lat,
@@ -1964,6 +1997,24 @@ function CreateCampaignWizard({
       }
     }
   };
+
+  // Step 1 uses the full-fidelity Meta Ads Manager Campaign Creation level interface
+  if (step === 1) {
+    return (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 md:p-6 backdrop-blur-[2px]">
+        <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+          <CampaignCreationStep
+            formData={campaignForm}
+            onChange={(updated) => setCampaignForm((prev) => ({ ...prev, ...updated }))}
+            onNext={() => setStep(2)}
+            onClose={onClose}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 backdrop-blur-[2px]">
@@ -2004,22 +2055,7 @@ function CreateCampaignWizard({
         </header>
 
         <div className="p-7">
-          {step === 1 && (
-            <CampaignStep 
-              name={name} 
-              setName={setName} 
-              objective={objective} 
-              setObjective={setObjective} 
-              pageId={pageId}
-              setPageId={setPageId}
-              pages={pagesQuery.data}
-              isLoadingPages={pagesQuery.isLoading}
-              leadFormId={leadFormId}
-              setLeadFormId={setLeadFormId}
-              forms={formsQuery.data}
-              isLoadingForms={formsQuery.isLoading}
-            />
-          )}
+
           {step === 2 && (
             <AdSetStep 
               adSet={adSet} 
@@ -2064,8 +2100,8 @@ function CreateCampaignWizard({
           )}
           {step === 4 && (
             <ReviewStep 
-              name={name} 
-              objective={objective} 
+              name={campaignForm.name} 
+              objective={campaignForm.objective} 
               adSet={adSet} 
               budget={budget}
               budgetType={budgetType}
@@ -2078,7 +2114,8 @@ function CreateCampaignWizard({
               gender={gender}
               interests={interests}
               pageName={selectedPage?.name || (pageId ? `Page (${pageId})` : undefined)}
-              formName={objective === "Leads" ? (selectedForm?.name || (leadFormId ? `Form (${leadFormId})` : undefined)) : undefined}
+              formName={campaignForm.objective === "OUTCOME_LEADS" ? (selectedForm?.name || (leadFormId ? `Form (${leadFormId})` : undefined)) : undefined}
+              campaignForm={campaignForm}
             />
           )}
         </div>
@@ -2806,6 +2843,7 @@ function ReviewStep({
   interests,
   pageName,
   formName,
+  campaignForm,
 }: {
   name: string;
   objective: string;
@@ -2822,21 +2860,44 @@ function ReviewStep({
   interests: string;
   pageName?: string;
   formName?: string;
+  campaignForm?: CampaignFormData;
 }) {
+  const campaignRows: string[][] = campaignForm
+    ? [
+        ["Name", campaignForm.name],
+        ["Objective", campaignForm.objective.replace("OUTCOME_", "")],
+        ["Status", campaignForm.status],
+        ["Buying Type", campaignForm.buying_type],
+        [
+          "Budget Strategy",
+          campaignForm.budget_strategy === "CAMPAIGN_BUDGET"
+            ? `Advantage+ (${campaignForm.budget_mode === "DAILY" ? "Daily" : "Lifetime"} ₹${campaignForm.budget_amount})`
+            : "Ad set budget",
+        ],
+        ["Bid Strategy", campaignForm.bid_strategy],
+        ["Special Categories", campaignForm.special_ad_categories?.join(", ") || "None"],
+        [
+          "Spend Cap",
+          campaignForm.spend_cap_enabled && campaignForm.spend_cap
+            ? `₹${campaignForm.spend_cap}`
+            : "None set",
+        ],
+        ...(pageName ? [["Facebook Page", pageName]] : []),
+        ...(formName ? [["Lead Form", formName]] : []),
+      ]
+    : [
+        ["Name", name],
+        ["Objective", objective],
+        ...(pageName ? [["Facebook Page", pageName]] : []),
+        ...(formName ? [["Lead Form", formName]] : []),
+      ];
+
   return (
     <div>
       <h3 className="text-2xl font-black text-slate-950">Review & Launch</h3>
       <p className="mt-2 text-sm text-slate-500">Confirm your campaign configuration before sending it to Meta for review.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Summary 
-          title="Campaign" 
-          rows={[
-            ["Name", name], 
-            ["Objective", objective],
-            ["Facebook Page", pageName || "Default Page"],
-            ...(formName ? [["Lead Form", formName]] : [])
-          ]} 
-        />
+        <Summary title="Campaign" rows={campaignRows} />
         <Summary 
           title="Ad Set & Audience" 
           rows={[

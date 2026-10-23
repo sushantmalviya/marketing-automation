@@ -14,6 +14,7 @@ from apps.communications.views_sender import (
     ConnectSESView,
     ConnectSMTPView,
     WhatsAppEmbeddedSignupCallbackView,
+    WhatsAppPublicConfigView,
     ConnectSMSView,
     DomainAuthenticationDetailView,
     DomainAuthenticationListCreateView,
@@ -26,6 +27,11 @@ from apps.communications.views_sender import (
 
 urlpatterns = [
     path("", include(router.urls)),
+    path(
+        "whatsapp/config/",
+        WhatsAppPublicConfigView.as_view(),
+        name="whatsapp-public-config",
+    ),
     path(
         "events/",
         CommunicationEventListView.as_view(),
@@ -43,6 +49,7 @@ urlpatterns = [
     path(
         "whatsapp/embedded-signup/callback/",
         WhatsAppEmbeddedSignupCallbackView.as_view(),
+        name="whatsapp-embedded-signup-callback",
     ),
     path(
         "sender-domains/",

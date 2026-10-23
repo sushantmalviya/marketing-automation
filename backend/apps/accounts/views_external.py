@@ -1,5 +1,6 @@
 import os
 import uuid
+import datetime
 from decimal import Decimal
 from django.conf import settings
 from django.db import transaction
@@ -69,11 +70,11 @@ class ExternalOrganizationProvisionView(APIView):
         rent_end_str = data.get("rent_end_date")
         if rent_end_str:
             try:
-                rent_end = timezone.datetime.fromisoformat(rent_end_str.replace("Z", "+00:00"))
+                rent_end = datetime.datetime.fromisoformat(rent_end_str.replace("Z", "+00:00"))
             except ValueError:
-                rent_end = rent_start + timezone.timedelta(days=365)
+                rent_end = rent_start + datetime.timedelta(days=365)
         else:
-            rent_end = rent_start + timezone.timedelta(days=365)
+            rent_end = rent_start + datetime.timedelta(days=365)
 
         base_slug = slugify(company_name) or "company"
         slug = f"{base_slug}-{uuid.uuid4().hex[:6]}"
@@ -177,7 +178,7 @@ class ExternalOrganizationRentalUpdateView(APIView):
 
         if "rent_end_date" in data:
             try:
-                sub.rent_end_date = timezone.datetime.fromisoformat(data["rent_end_date"].replace("Z", "+00:00"))
+                sub.rent_end_date = datetime.datetime.fromisoformat(data["rent_end_date"].replace("Z", "+00:00"))
             except ValueError:
                 pass
 

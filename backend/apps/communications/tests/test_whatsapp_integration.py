@@ -105,10 +105,11 @@ class WhatsAppIntegrationTests(APITestCase):
 
     def test_webhook_challenge_verification(self):
         """Test GET request challenge verification."""
-        url = "/api/communications/webhooks/whatsapp/?hub.mode=subscribe&hub.verify_token=auto-market-whatsapp-secure-token&hub.challenge=test_challenge_123"
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content.decode("utf-8"), "test_challenge_123")
+        with self.settings(WHATSAPP_WEBHOOK_VERIFY_TOKEN="auto-market-whatsapp-secure-token"):
+            url = "/api/communications/webhooks/whatsapp/?hub.mode=subscribe&hub.verify_token=auto-market-whatsapp-secure-token&hub.challenge=test_challenge_123"
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.content.decode("utf-8"), "test_challenge_123")
 
     def test_webhook_hmac_signature_validation(self):
         """Test POST signature verification rejects invalid HMAC signature."""

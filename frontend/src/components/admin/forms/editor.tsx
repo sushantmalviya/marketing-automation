@@ -48,7 +48,7 @@ export function FormEditor({ formId }: { formId: string }) {
         setFormDescription(data.description);
         setIsLive(data.status === "published");
         setFormUuid(data.uuid);
-        
+
         // Map backend fields to frontend format
         if (data.fields_schema) {
           setFields(data.fields_schema.map((f: any) => ({
@@ -120,41 +120,41 @@ export function FormEditor({ formId }: { formId: string }) {
   const handleSave = () => {
     saveMutation.mutate();
   };
-  
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans">
       {/* Top Navigation Bar */}
       <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-6">
-          <button 
+          <button
             onClick={() => router.push(basePath)}
             className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          
+
           <div className="h-full flex items-center gap-1">
-            <TabButton 
-              label="Builder" 
-              isActive={activeTab === "builder"} 
-              onClick={() => setActiveTab("builder")} 
+            <TabButton
+              label="Builder"
+              isActive={activeTab === "builder"}
+              onClick={() => setActiveTab("builder")}
             />
-            <TabButton 
-              label="Responses" 
-              isActive={activeTab === "responses"} 
-              onClick={() => setActiveTab("responses")} 
+            <TabButton
+              label="Responses"
+              isActive={activeTab === "responses"}
+              onClick={() => setActiveTab("responses")}
             />
-            <TabButton 
-              label="Settings" 
-              isActive={activeTab === "settings"} 
-              onClick={() => setActiveTab("settings")} 
+            <TabButton
+              label="Settings"
+              isActive={activeTab === "settings"}
+              onClick={() => setActiveTab("settings")}
             />
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {!isNew && isLive && formUuid && (
-            <button 
+            <button
               onClick={() => {
                 const url = `${window.location.origin}/f/${formUuid}`;
                 navigator.clipboard.writeText(url);
@@ -167,7 +167,7 @@ export function FormEditor({ formId }: { formId: string }) {
           )}
 
           {!isNew && !isLive && (
-            <button 
+            <button
               onClick={() => publishMutation.mutate()}
               disabled={publishMutation.isPending}
               className="flex items-center gap-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 px-4 py-2 rounded-lg font-medium transition-colors text-sm"
@@ -176,8 +176,8 @@ export function FormEditor({ formId }: { formId: string }) {
               Make Live
             </button>
           )}
-          
-          <button 
+
+          <button
             onClick={handleSave}
             disabled={saveMutation.isPending}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition-colors text-sm disabled:opacity-50"
@@ -191,11 +191,11 @@ export function FormEditor({ formId }: { formId: string }) {
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden relative">
         {activeTab === "builder" && (
-          <FormBuilder 
-            title={formTitle} 
-            setTitle={setFormTitle} 
-            description={formDescription} 
-            setDescription={setFormDescription} 
+          <FormBuilder
+            title={formTitle}
+            setTitle={setFormTitle}
+            description={formDescription}
+            setDescription={setFormDescription}
             fields={fields}
             setFields={setFields}
           />
@@ -211,9 +211,8 @@ function TabButton({ label, isActive, onClick }: { label: string, isActive: bool
   return (
     <button
       onClick={onClick}
-      className={`relative h-16 px-4 text-sm font-medium transition-colors ${
-        isActive ? "text-blue-600" : "text-slate-600 hover:text-slate-900"
-      }`}
+      className={`relative h-16 px-4 text-sm font-medium transition-colors ${isActive ? "text-blue-600" : "text-slate-600 hover:text-slate-900"
+        }`}
     >
       {label}
       {isActive && (

@@ -37,10 +37,14 @@ def get_whatsapp_identity(user=None, identity_id=None):
     if identity_id:
         return SenderIdentity.objects.filter(id=identity_id, provider="WHATSAPP_CLOUD").first()
     if user:
-        from apps.common.ownership import get_organization_users
-        org_users = get_organization_users(user)
+        from apps.common.ownership import get_managed_user_ids
+        target_ids = [user.id]
+        try:
+            target_ids.extend(get_managed_user_ids(user))
+        except Exception:
+            pass
         return SenderIdentity.objects.filter(
-            user__in=org_users,
+            user_id__in=target_ids,
             provider="WHATSAPP_CLOUD",
             status="CONNECTED"
         ).order_by("-updated_at").first()
@@ -125,12 +129,29 @@ def send_whatsapp(to, message, config=None, execution=None, campaign=None, organ
 
     whatsapp_conn = get_whatsapp_connection(organization=organization, connection=connection)
     if not whatsapp_conn:
+        identity = get_whatsapp_identity(user=organization)
+        if identity:
+            try:
+                creds = get_whatsapp_credentials(identity)
+                org_target = organization or identity.user
+                whatsapp_conn, _ = WhatsAppConnection.objects.get_or_create(
+                    organization=org_target,
+                    phone_number_id=creds["phone_number_id"],
+                    defaults={
+                        "encrypted_access_token": identity.encrypted_credentials.get("access_token", ""),
+                        "is_active": True,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Could not auto-link WhatsAppConnection from SenderIdentity: {e}")
+
+    if not whatsapp_conn:
         raise ValueError(
             f"No active WhatsApp connection found for organization: {organization}"
             if organization else "No active WhatsApp connection configured."
         )
 
-    provider = get_whatsapp_provider(connection=whatsapp_conn)
+    provider = get_whatsapp_provider(connection=whatsapp_conn, user=organization)
     response = provider.send(
         to=to,
         message=message,

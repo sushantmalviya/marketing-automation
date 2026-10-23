@@ -185,9 +185,8 @@ export function TemplatesManager() {
             <button
               type="button"
               onClick={() => { setChannelFilter(""); setPage(1); }}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${
-                !channelFilter ? "bg-slate-900 text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${!channelFilter ? "bg-slate-900 text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
             >
               All Channels
             </button>
@@ -201,15 +200,14 @@ export function TemplatesManager() {
                   key={ch.id}
                   type="button"
                   onClick={() => { setChannelFilter(String(ch.id)); setPage(1); }}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
-                    isSelected
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${isSelected
                       ? isChWA
                         ? "bg-emerald-600 text-white shadow-xs"
                         : isChEmail
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "bg-indigo-600 text-white shadow-xs"
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "bg-indigo-600 text-white shadow-xs"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                    }`}
                 >
                   {isChWA ? <MessageCircle size={14} /> : isChEmail ? <Mail size={14} /> : <MessageCircle size={14} />}
                   <span>{ch.name}</span>
@@ -240,20 +238,18 @@ export function TemplatesManager() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:-translate-y-1 hover:shadow-xl ${
-                    isTplWhatsApp ? "hover:border-emerald-300" : isTplSMS ? "hover:border-indigo-300" : "hover:border-blue-300"
-                  }`}
+                  className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 transition-all hover:-translate-y-1 hover:shadow-xl ${isTplWhatsApp ? "hover:border-emerald-300" : isTplSMS ? "hover:border-indigo-300" : "hover:border-blue-300"
+                    }`}
                 >
                   <div>
                     <div className="flex items-start justify-between mb-4">
                       <span
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                          isTplWhatsApp
+                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isTplWhatsApp
                             ? "bg-emerald-100 text-emerald-600"
                             : isTplSMS
-                            ? "bg-indigo-100 text-indigo-600"
-                            : "bg-blue-100 text-blue-600"
-                        }`}
+                              ? "bg-indigo-100 text-indigo-600"
+                              : "bg-blue-100 text-blue-600"
+                          }`}
                       >
                         <ChannelGlyph name={tpl.channel_name} />
                       </span>
@@ -273,8 +269,8 @@ export function TemplatesManager() {
                             isTplWhatsApp
                               ? "bg-emerald-50 text-emerald-700 font-bold"
                               : isTplSMS
-                              ? "bg-indigo-50 text-indigo-700"
-                              : "bg-blue-50 text-blue-700"
+                                ? "bg-indigo-50 text-indigo-700"
+                                : "bg-blue-50 text-blue-700"
                           }
                         >
                           {tpl.channel_name}
@@ -311,11 +307,11 @@ export function TemplatesManager() {
                       {isTplWhatsApp && waData
                         ? waData.body || "WhatsApp Message Content"
                         : tpl.body
-                            .replace(/<br\s*\/?>/gi, " ")
-                            .replace(/<[^>]*>?/gm, "")
-                            .replace(/&nbsp;/g, " ")
-                            .replace(/\s+/g, " ")
-                            .trim() || "Template Content"}
+                          .replace(/<br\s*\/?>/gi, " ")
+                          .replace(/<[^>]*>?/gm, "")
+                          .replace(/&nbsp;/g, " ")
+                          .replace(/\s+/g, " ")
+                          .trim() || "Template Content"}
                     </div>
 
                     {isTplWhatsApp && waData?.footer && (
@@ -334,13 +330,12 @@ export function TemplatesManager() {
                       {(isTplEmail || isTplWhatsApp || isTplSMS) && (
                         <button
                           type="button"
-                          className={`p-1.5 rounded-lg transition ${
-                            isTplWhatsApp
+                          className={`p-1.5 rounded-lg transition ${isTplWhatsApp
                               ? "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
                               : isTplSMS
-                              ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                              : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                          }`}
+                                ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                            }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setQuickPreviewTarget(tpl);
@@ -349,15 +344,15 @@ export function TemplatesManager() {
                             isTplWhatsApp
                               ? "Preview WhatsApp Template"
                               : isTplSMS
-                              ? "Preview SMS Template"
-                              : "Preview Email"
+                                ? "Preview SMS Template"
+                                : "Preview Email"
                           }
                           aria-label={
                             isTplWhatsApp
                               ? "Preview WhatsApp Template"
                               : isTplSMS
-                              ? "Preview SMS Template"
-                              : "Preview Email"
+                                ? "Preview SMS Template"
+                                : "Preview Email"
                           }
                         >
                           <Eye size={16} />

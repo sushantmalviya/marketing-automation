@@ -91,19 +91,98 @@ export interface MetaInsights {
   [key: string]: unknown;
 }
 
+export type MetaBuyingType = 'AUCTION' | 'RESERVED';
+
+export type MetaCampaignObjective =
+  | 'OUTCOME_LEADS'
+  | 'OUTCOME_SALES'
+  | 'OUTCOME_TRAFFIC'
+  | 'OUTCOME_AWARENESS'
+  | 'OUTCOME_ENGAGEMENT'
+  | 'OUTCOME_APP_PROMOTION';
+
+export type MetaBudgetStrategy = 'CAMPAIGN_BUDGET' | 'ADSET_BUDGET';
+export type MetaBudgetMode = 'DAILY' | 'LIFETIME';
+export type MetaBidStrategy = 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+
+export type MetaSpecialAdCategory =
+  | 'CREDIT'
+  | 'EMPLOYMENT'
+  | 'HOUSING'
+  | 'ISSUES_ELECTIONS_POLITICS'
+  | 'NONE';
+
+export interface CampaignFormData {
+  name: string;
+  status: 'ACTIVE' | 'PAUSED';
+  buying_type: 'AUCTION' | 'RESERVED';
+  objective: MetaCampaignObjective;
+  spend_cap_enabled: boolean;
+  spend_cap?: number; // In base units (e.g., paise/cents)
+  budget_strategy: 'CAMPAIGN_BUDGET' | 'ADSET_BUDGET';
+  budget_mode?: 'DAILY' | 'LIFETIME';
+  budget_amount?: number;
+  bid_strategy: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+  special_ad_categories: Array<'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS' | 'NONE'>;
+  ad_schedule_type: 'ALL_TIME' | 'ON_SCHEDULE';
+  frequency_control_enabled?: boolean;
+  frequency_control_type?: 'TARGET' | 'CAP';
+  frequency_control_times?: number;
+  frequency_control_days?: number;
+  schedule_budget_increases?: boolean;
+  budget_schedules?: Array<{
+    id: string;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+    increaseType: 'VALUE' | 'PERCENTAGE';
+    increaseValue: number;
+    isCollapsed?: boolean;
+  }>;
+}
+
 export interface CreateMetaCampaignPayload {
   account_id: string;
   name: string;
   objective: string;
+  status?: 'ACTIVE' | 'PAUSED';
+  buying_type?: 'AUCTION' | 'RESERVED';
   special_ad_categories?: string[];
-  daily_budget: number;
+  daily_budget?: number;
+  lifetime_budget?: number;
+  budget_strategy?: 'CAMPAIGN_BUDGET' | 'ADSET_BUDGET';
+  budget_mode?: 'DAILY' | 'LIFETIME';
+  bid_strategy?: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+  is_adset_budget_sharing_enabled?: boolean;
+  spend_cap?: number;
+  ad_schedule_type?: 'ALL_TIME' | 'ON_SCHEDULE';
+  frequency_control_enabled?: boolean;
+  frequency_control_type?: 'TARGET' | 'CAP';
+  frequency_control_times?: number;
+  frequency_control_days?: number;
+  schedule_budget_increases?: boolean;
+  budget_schedules?: Array<{
+    id?: string;
+    startDate?: string;
+    startTime?: string;
+    endDate?: string;
+    endTime?: string;
+    increaseType?: 'VALUE' | 'PERCENTAGE';
+    increaseValue?: number;
+    time_start?: number;
+    time_end?: number;
+    budget_value?: number;
+    budget_value_type?: 'ABSOLUTE' | 'MULTIPLIER';
+  }>;
   start_time?: string;
   end_time?: string;
-  location?: string;
+  location: string;
+  radius?: number;
   age_min?: number;
   age_max?: number;
   gender?: string;
-  interests?: string | string[];
+  interests?: string[];
   image_hash?: string;
   video_id?: string;
   ad_text: string;
