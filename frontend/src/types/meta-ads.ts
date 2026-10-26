@@ -178,3 +178,217 @@ export interface CreateMetaCampaignPayload {
     radius: number;
   };
 }
+
+export type MetaConversionLocation = 
+  | 'INSTANT_FORMS' 
+  | 'WEBSITE' 
+  | 'MESSENGER' 
+  | 'INSTAGRAM' 
+  | 'CALLS'
+  | 'WEBSITE_AND_INSTANT_FORMS'
+  | 'WEBSITE_AND_CALLS'
+  | 'INSTANT_FORMS_AND_MESSENGER'
+  | 'INSTAGRAM_LIVE_VIDEO'
+  | 'WHATSAPP'
+  | 'APP';
+
+export type MetaPlacementType = 'ADVANTAGE_PLUS' | 'MANUAL';
+
+export interface MetaManualPlacements {
+  facebook: {
+    feed: boolean;
+    stories: boolean;
+    reels: boolean;
+    marketplace: boolean;
+    videoFeed: boolean;
+  };
+  instagram: {
+    feed: boolean;
+    stories: boolean;
+    reels: boolean;
+    explore: boolean;
+  };
+  messenger: {
+    inbox: boolean;
+    stories: boolean;
+  };
+  audienceNetwork: {
+    native: boolean;
+    banner: boolean;
+    interstitial: boolean;
+  };
+}
+
+export interface ValueRuleCriterion {
+  type: string;
+  value: string;
+}
+
+export interface ValueRule {
+  id: string;
+  name: string;
+  criteria_type?: 'AUDIENCE' | 'PLACEMENT' | 'DEVICE' | 'LOCATION' | string;
+  criteria_value?: string;
+  criteria?: ValueRuleCriterion[];
+  bid_increase_pct: number;
+}
+
+export interface CustomConversionRule {
+  property: string;
+  operator: string;
+  value: string;
+}
+
+export interface CustomConversion {
+  id: string;
+  name: string;
+  description?: string;
+  data_source_id?: string;
+  data_source_name?: string;
+  event_id: string;
+  event_name: string;
+  standard_event?: string;
+  rules?: CustomConversionRule[];
+  has_conversion_value?: boolean;
+  value?: number | string;
+}
+
+export interface DatasetItem {
+  id: string;
+  name: string;
+  active_events_count: number;
+  type: 'WEBSITE' | 'CRM' | 'APP';
+}
+
+export interface ConversionEventItem {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  category?: string;
+}
+
+export interface FrequencyControlConfig {
+  enabled: boolean;
+  type: 'TARGET' | 'CAP';
+  frequency: number;
+  period: number;
+  periodUnit: 'DAYS';
+}
+
+export interface SpendingLimitsConfig {
+  enabled: boolean;
+  mode?: 'AMOUNT' | 'PERCENTAGE' | 'VALUE';
+  min_daily?: number;
+  max_daily?: number;
+  min_percentage?: number;
+  max_percentage?: number;
+}
+
+export interface IndiaPolicyRequirements {
+  verification_status: 'REQUIRED' | 'VERIFIED' | 'PENDING';
+  beneficiary: string;
+  payer: string;
+  pan_or_gstin?: string;
+  is_securities_related?: boolean;
+}
+
+export interface DevicesOsConfig {
+  devices: 'ALL' | 'MOBILE' | 'DESKTOP';
+  os: 'ALL' | 'IOS' | 'ANDROID';
+  wifi_only: boolean;
+}
+
+export interface BrandSuitabilityConfig {
+  inventory_filter: 'EXPANDED' | 'STANDARD' | 'LIMITED';
+  block_lists: string[];
+  content_exclusions: string[];
+  topic_exclusions: string[];
+}
+
+export interface AdSetFormData {
+  name: string;
+  status?: 'ACTIVE' | 'PAUSED';
+  conversion_location: MetaConversionLocation;
+  leadgen_form_id: string;
+  form_type: 'SELECT' | 'CREATE';
+  custom_form_name?: string;
+  location: string;
+  location_display?: string;
+  locations_list?: string[];
+  excluded_locations?: string[];
+  radius: number;
+  coordinates: { lat: number; lng: number };
+  age_min: number;
+  age_max: number;
+  gender: 'All' | 'Men' | 'Women';
+  languages?: string[];
+  interests: string[];
+  custom_audiences: string[];
+  excluded_custom_audiences?: string[];
+  saved_audience_id?: string;
+  advantage_audience: boolean;
+  use_advantage_audience?: boolean;
+  placement_type: MetaPlacementType;
+  manual_placements: MetaManualPlacements;
+  start_date: string;
+  start_time: string;
+  end_date: string;
+  end_time: string;
+  run_continuously?: boolean;
+  use_end_date?: boolean;
+  ad_schedule_type?: 'ALL_TIME' | 'ON_SCHEDULE';
+  budget?: number;
+  budget_type?: 'Daily' | 'Lifetime';
+  performance_goal: string;
+  bid_control?: number;
+  facebook_page_id?: string;
+  facebook_page_name?: string;
+  facebook_page_tos_accepted?: boolean;
+  cost_per_result_goal?: number;
+  frequency_control?: FrequencyControlConfig;
+  value_rules?: ValueRule[];
+  value_rules_acknowledged?: boolean;
+  placement_value_rules?: ValueRule[];
+  dynamic_creative?: boolean;
+  live_video_ad?: boolean;
+  spending_limits?: SpendingLimitsConfig;
+  budget_scheduling_enabled?: boolean;
+  india_policy?: IndiaPolicyRequirements;
+  account_controls_excluded_placements?: string[];
+  devices_os?: DevicesOsConfig;
+  brand_suitability?: BrandSuitabilityConfig;
+  show_more_settings?: boolean;
+  dataset_id?: string;
+  dataset_name?: string;
+  conversion_event_id?: string;
+  conversion_event_name?: string;
+  custom_conversions?: CustomConversion[];
+  attribution_model?: 'STANDARD' | 'INCREMENTAL';
+}
+
+export interface AdCreativeFormData {
+  name: string;
+  status?: 'ACTIVE' | 'PAUSED';
+  page_id: string;
+  page_name: string;
+  instagram_account: string;
+  ad_setup: 'CREATE_AD' | 'EXISTING_POST';
+  format: 'SINGLE_IMAGE_VIDEO' | 'CAROUSEL';
+  media_url: string | null;
+  media_type: 'image' | 'video';
+  media_name: string;
+  media_file: File | null;
+  carousel_cards?: Array<{
+    id: string;
+    headline: string;
+    description: string;
+    image_url: string;
+    link: string;
+  }>;
+  primary_text: string;
+  headline: string;
+  description: string;
+  destination_url: string;
+  call_to_action: string;
+  leadgen_form_id: string;
+}

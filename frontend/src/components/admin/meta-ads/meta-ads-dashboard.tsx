@@ -9,8 +9,17 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 import { parseApiError } from "@/services/api-client";
 import { metaAdsService } from "@/services/meta-ads.service";
-import type { MetaAdAccount, MetaCampaign, CampaignFormData } from "@/types/meta-ads";
+import type {
+  MetaAdAccount,
+  MetaCampaign,
+  CampaignFormData,
+  AdSetFormData,
+  AdCreativeFormData,
+} from "@/types/meta-ads";
 import { CampaignCreationStep } from "./CampaignCreationStep";
+import { AdSetCreationStep } from "./AdSetCreationStep";
+import { AdCreationStep } from "./AdCreationStep";
+import { CampaignUnifiedReviewStep } from "./CampaignUnifiedReviewStep";
 
 const LocationTargetingMap = dynamic(
   () => import("./LocationTargetingMap"),
@@ -171,7 +180,7 @@ export function MetaAdsDashboard() {
         campaignDialog={
           campaignOpen ? (
             <CreateCampaignWizard
-              accountId={currentAccount!.account_id}
+              accountId={currentAccount?.account_id || "act_sandbox_default"}
               onCreated={() => campaigns.refetch()}
               onClose={() => setCampaignOpen(false)}
             />
@@ -245,6 +254,13 @@ export function MetaAdsDashboard() {
           ))}
         </div>
       </section>
+      {campaignOpen && (
+        <CreateCampaignWizard
+          accountId={currentAccount?.account_id || "act_sandbox_default"}
+          onCreated={() => campaigns.refetch()}
+          onClose={() => setCampaignOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1652,7 +1668,7 @@ function CreateCampaignWizard({
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
   const [campaignForm, setCampaignForm] = useState<CampaignFormData>({
-    name: "New Leads campaign",
+    name: "Diwali Festive Leads 2026",
     status: "PAUSED",
     buying_type: "AUCTION",
     objective: "OUTCOME_LEADS",
@@ -1665,46 +1681,109 @@ function CreateCampaignWizard({
     special_ad_categories: ["NONE"],
     ad_schedule_type: "ALL_TIME",
   });
-  const [adSet, setAdSet] = useState("Indore Leads Audience");
-  const [creativeData, setCreativeData] = useState({
-    primaryText: "Transform your home with our premium interior design services.",
-    headline: "Book Your Free Consultation",
-    description: "Get a personalized consultation today.",
-    destinationUrl: "https://example.com",
-    callToAction: "Book Now"
+
+  const [adSetForm, setAdSetForm] = useState<AdSetFormData>({
+    name: "Indore Leads Ad Set",
+    status: "ACTIVE",
+    conversion_location: "INSTANT_FORMS",
+    leadgen_form_id: "default_form_1",
+    form_type: "SELECT",
+    location: "India",
+    location_display: "Indore, Madhya Pradesh, India",
+    radius: 40,
+    coordinates: { lat: 22.7196, lng: 75.8577 },
+    age_min: 18,
+    age_max: 55,
+    gender: "All",
+    interests: ["Marketing Automation", "Real Estate Investors", "B2B Decision Makers"],
+    custom_audiences: [],
+    advantage_audience: true,
+    placement_type: "ADVANTAGE_PLUS",
+    manual_placements: {
+      facebook: { feed: true, stories: true, reels: true, marketplace: true, videoFeed: true },
+      instagram: { feed: true, stories: true, reels: true, explore: true },
+      messenger: { inbox: true, stories: true },
+      audienceNetwork: { native: true, banner: true, interstitial: true },
+    },
+    start_date: new Date().toISOString().split("T")[0],
+    start_time: "09:00",
+    end_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+    end_time: "23:59",
+    budget: 500,
+    budget_type: "Daily",
+    performance_goal: "MAXIMIZE_LEADS",
+    facebook_page_id: "1261471110372189",
+    facebook_page_name: "Marketing Automation Official",
+    locations_list: ["India"],
+    excluded_locations: [],
+    languages: ["All languages"],
+    use_advantage_audience: true,
+    frequency_control: {
+      enabled: false,
+      type: "TARGET",
+      frequency: 2,
+      period: 7,
+      periodUnit: "DAYS",
+    },
+    value_rules: [],
+    placement_value_rules: [],
+    dynamic_creative: false,
+    live_video_ad: false,
+    spending_limits: {
+      enabled: false,
+    },
+    use_end_date: true,
+    budget_scheduling_enabled: false,
+    india_policy: {
+      verification_status: "REQUIRED",
+      beneficiary: "",
+      payer: "",
+      is_securities_related: false,
+    },
+    account_controls_excluded_placements: [],
+    devices_os: {
+      devices: "ALL",
+      os: "ALL",
+      wifi_only: false,
+    },
+    brand_suitability: {
+      inventory_filter: "EXPANDED",
+      block_lists: [],
+      content_exclusions: [],
+      topic_exclusions: [],
+    },
+    show_more_settings: false,
   });
 
-  // Ad Set Details State
-  const [budget, setBudget] = useState(10000);
-  const [budgetType, setBudgetType] = useState("Daily");
-  
-  // Ad Creative Media states
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video">("image");
-  const [mediaName, setMediaName] = useState("home-interior.jpg");
-  const [startDate, setStartDate] = useState("2026-08-18");
-  const [endDate, setEndDate] = useState("2026-08-25");
-  const [location, setLocation] = useState("India");
-  const [radius, setRadius] = useState(40);
-  const [ageMin, setAgeMin] = useState(18);
-  const [ageMax, setAgeMax] = useState(55);
-  const [gender, setGender] = useState("All");
-  const [interests, setInterests] = useState("Marketing Automation, Real Estate Investors, B2B Decision Makers");
-  const [customCoordinates, setCustomCoordinates] = useState<{lat: number; lng: number} | null>(null);
+  const [adCreativeForm, setAdCreativeForm] = useState<AdCreativeFormData>({
+    name: "New Leads Ad",
+    status: "ACTIVE",
+    page_id: "1261471110372189",
+    page_name: "Marketing Automation Official",
+    instagram_account: "@marketingauto_in",
+    ad_setup: "CREATE_AD",
+    format: "SINGLE_IMAGE_VIDEO",
+    media_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1000&auto=format&fit=crop&q=80",
+    media_type: "image",
+    media_name: "diwali-leads-creative.jpg",
+    media_file: null,
+    primary_text: "Grow your business with intelligent marketing automation. Collect high-intent leads automatically on Facebook & Instagram.",
+    headline: "Transform Your Lead Generation Today",
+    description: "Get a free 1-on-1 strategy session and workflow template.",
+    destination_url: "https://marketingauto.example.com/leads",
+    call_to_action: "LEARN_MORE",
+    leadgen_form_id: "default_form_1",
+  });
 
-  useEffect(() => {
-    setCustomCoordinates(null);
-  }, [location]);
-
-  const coordinates = useMemo(() => {
-    if (customCoordinates) return customCoordinates;
-    if (location === "India") return { lat: 22.7196, lng: 75.8577 };
-    if (location === "United States") return { lat: 37.0902, lng: -95.7129 };
-    if (location === "United Kingdom") return { lat: 55.3781, lng: -3.4360 };
-    if (location === "Canada") return { lat: 56.1304, lng: -106.3468 };
-    return { lat: 22.7196, lng: 75.8577 };
-  }, [location, customCoordinates]);
+  const handleAdSetChange = (updated: Partial<AdSetFormData>) => {
+    setAdSetForm((prev) => {
+      const next = { ...prev, ...updated };
+      if (updated.leadgen_form_id && updated.leadgen_form_id !== adCreativeForm.leadgen_form_id) {
+        setAdCreativeForm((c) => ({ ...c, leadgen_form_id: updated.leadgen_form_id! }));
+      }
+      return next;
+    });
+  };
 
   const createCampaignMutation = useMutation({
     mutationFn: metaAdsService.createCampaign,
@@ -1718,11 +1797,10 @@ function CreateCampaignWizard({
     },
   });
 
-  const labels = ["Campaign", "Ad Set & Audience", "Ad Creative", "Review & Launch"];
   const submitCampaign = (image_hash?: string, video_id?: string) => {
     const isAdvantagePlus = campaignForm.budget_strategy === "CAMPAIGN_BUDGET";
     const budgetAmountInMinorUnits = Math.round(
-      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : budget) * 100
+      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : (adSetForm.budget || 500)) * 100
     );
 
     createCampaignMutation.mutate({
@@ -1746,27 +1824,28 @@ function CreateCampaignWizard({
       frequency_control_days: campaignForm.frequency_control_days,
       schedule_budget_increases: campaignForm.schedule_budget_increases,
       budget_schedules: campaignForm.budget_schedules,
-      daily_budget: campaignForm.budget_mode === "DAILY" ? budgetAmountInMinorUnits : undefined,
-      lifetime_budget: campaignForm.budget_mode === "LIFETIME" ? budgetAmountInMinorUnits : undefined,
-      start_time: startDate || undefined,
-      end_time: endDate || undefined,
-      location: location === "India" ? "IN" : location === "United States" ? "US" : "IN",
-      radius: radius,
-      age_min: ageMin,
-      age_max: ageMax,
-      gender: gender,
-      interests: interests ? interests.split(",").map((s) => s.trim()).filter(Boolean) : [],
-      ad_text: creativeData.primaryText,
-      headline: creativeData.headline,
-      description: creativeData.description,
-      link: creativeData.destinationUrl,
-      call_to_action: creativeData.callToAction,
-      page_id: "1261471110372189", // Real sandbox Page ID
+      daily_budget: (isAdvantagePlus ? campaignForm.budget_mode === "DAILY" : adSetForm.budget_type === "Daily") ? budgetAmountInMinorUnits : undefined,
+      lifetime_budget: (isAdvantagePlus ? campaignForm.budget_mode === "LIFETIME" : adSetForm.budget_type === "Lifetime") ? budgetAmountInMinorUnits : undefined,
+      start_time: adSetForm.start_date ? `${adSetForm.start_date}T${adSetForm.start_time || '00:00:00'}` : undefined,
+      end_time: !adSetForm.run_continuously && adSetForm.end_date ? `${adSetForm.end_date}T${adSetForm.end_time || '23:59:59'}` : undefined,
+      location: adSetForm.location === "India" ? "IN" : adSetForm.location === "United States" ? "US" : "IN",
+      radius: adSetForm.radius,
+      age_min: adSetForm.age_min,
+      age_max: adSetForm.age_max,
+      gender: adSetForm.gender,
+      interests: adSetForm.interests,
+      ad_text: adCreativeForm.primary_text,
+      headline: adCreativeForm.headline,
+      description: adCreativeForm.description,
+      link: adCreativeForm.destination_url,
+      call_to_action: adCreativeForm.call_to_action,
+      leadgen_form_id: adCreativeForm.leadgen_form_id || adSetForm.leadgen_form_id || undefined,
+      page_id: adCreativeForm.page_id || "1261471110372189",
       geo_locations: {
         location_type: "cities",
-        lat: coordinates.lat,
-        lng: coordinates.lng,
-        radius: radius
+        lat: adSetForm.coordinates.lat,
+        lng: adSetForm.coordinates.lng,
+        radius: adSetForm.radius
       },
       image_hash,
       video_id
@@ -1784,168 +1863,69 @@ function CreateCampaignWizard({
     }
   });
 
-  const next = () => {
-    if (step < 4) {
-      setStep((value) => value + 1);
+  const handleFinalLaunch = () => {
+    if (adCreativeForm.media_file) {
+      uploadMediaMutation.mutate({ file: adCreativeForm.media_file, type: adCreativeForm.media_type });
     } else {
-      if (mediaFile) {
-        uploadMediaMutation.mutate({ file: mediaFile, type: mediaType });
-      } else {
-        submitCampaign();
-      }
+      submitCampaign();
     }
   };
 
-  // Step 1 uses the full-fidelity Meta Ads Manager Campaign Creation level interface
-  if (step === 1) {
-    return (
-      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 md:p-6 backdrop-blur-[2px]">
-        <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-2 md:p-5 backdrop-blur-[2px]">
+      <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        {step === 1 && (
           <CampaignCreationStep
             formData={campaignForm}
             onChange={(updated) => setCampaignForm((prev) => ({ ...prev, ...updated }))}
             onNext={() => setStep(2)}
             onClose={onClose}
+            onNavigateStep={setStep}
             currencySymbol="₹"
             currencyCode="INR"
           />
-        </div>
+        )}
+        {step === 2 && (
+          <AdSetCreationStep
+            campaignData={campaignForm}
+            formData={adSetForm}
+            onChange={handleAdSetChange}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 3 && (
+          <AdCreationStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            formData={adCreativeForm}
+            onChange={(updated) => setAdCreativeForm((prev) => ({ ...prev, ...updated }))}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 4 && (
+          <CampaignUnifiedReviewStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            adCreativeData={adCreativeForm}
+            onNavigateStep={setStep}
+            onLaunch={handleFinalLaunch}
+            onClose={onClose}
+            isLaunching={createCampaignMutation.isPending || uploadMediaMutation.isPending}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 backdrop-blur-[2px]">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="campaign-flow-title"
-        className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl"
-      >
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-7 py-4">
-          <div className="flex items-center justify-between">
-            <h2 id="campaign-flow-title" className="text-lg font-black text-slate-950">
-              Create Campaign
-            </h2>
-            <button onClick={onClose} aria-label="Close" className="text-slate-500 hover:text-slate-900">
-              <X size={20} />
-            </button>
-          </div>
-          <ol className="mt-4 grid grid-cols-4 gap-2">
-            {labels.map((label, index) => (
-              <li key={label} className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                <span
-                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-                    index + 1 < step
-                      ? "bg-blue-600 text-white"
-                      : index + 1 === step
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-400"
-                  }`}
-                >
-                  {index + 1 < step ? "✓" : index + 1}
-                </span>
-                <span className="hidden sm:block">{label}</span>
-                {index < 3 && <span className="ml-auto hidden h-px flex-1 bg-slate-300 sm:block" />}
-              </li>
-            ))}
-          </ol>
-        </header>
-
-        <div className="p-7">
-          {step === 2 && (
-            <AdSetStep 
-              adSet={adSet} 
-              setAdSet={setAdSet} 
-              budget={budget}
-              setBudget={setBudget}
-              budgetType={budgetType}
-              setBudgetType={setBudgetType}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              location={location}
-              setLocation={setLocation}
-              radius={radius}
-              setRadius={setRadius}
-              coordinates={coordinates}
-              ageMin={ageMin}
-              setAgeMin={setAgeMin}
-              ageMax={ageMax}
-              setAgeMax={setAgeMax}
-              gender={gender}
-              setGender={setGender}
-              interests={interests}
-              setInterests={setInterests}
-              onLocationChange={(lat, lng) => setCustomCoordinates({ lat, lng })}
-            />
-          )}
-          {step === 3 && (
-            <CreativeStep 
-              creativeData={creativeData} 
-              setCreativeData={setCreativeData} 
-              mediaUrl={mediaUrl}
-              setMediaUrl={setMediaUrl}
-              mediaFile={mediaFile}
-              setMediaFile={setMediaFile}
-              mediaType={mediaType}
-              setMediaType={setMediaType}
-              mediaName={mediaName}
-              setMediaName={setMediaName}
-            />
-          )}
-          {step === 4 && (
-            <ReviewStep 
-              name={campaignForm.name} 
-              objective={campaignForm.objective} 
-              adSet={adSet} 
-              budget={budget}
-              budgetType={budgetType}
-              startDate={startDate}
-              endDate={endDate}
-              location={location}
-              radius={radius}
-              ageMin={ageMin}
-              ageMax={ageMax}
-              gender={gender}
-              interests={interests}
-              campaignForm={campaignForm}
-            />
-          )}
-        </div>
-
-        <footer className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white px-7 py-4">
-          <div>
-            {step > 1 && (
-              <button
-                onClick={() => setStep((value) => value - 1)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
-              >
-                Back
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700">
-              Cancel
-            </button>
-            <button
-              onClick={next}
-              disabled={createCampaignMutation.isPending || uploadMediaMutation.isPending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
-            >
-              {createCampaignMutation.isPending || uploadMediaMutation.isPending
-                ? "Launching..."
-                : step === 4
-                ? "Launch Campaign"
-                : step === 3
-                ? "Continue to Review"
-                : "Continue"}
-            </button>
-          </div>
-        </footer>
-      </section>
     </div>
   );
 }
