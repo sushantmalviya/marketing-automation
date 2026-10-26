@@ -9,8 +9,17 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 import { parseApiError } from "@/services/api-client";
 import { metaAdsService } from "@/services/meta-ads.service";
-import type { MetaAdAccount, MetaCampaign, MetaPage, MetaLeadForm, WebhookLead, MetaInsights, CampaignFormData } from "@/types/meta-ads";
+import type {
+  MetaAdAccount,
+  MetaCampaign,
+  CampaignFormData,
+  AdSetFormData,
+  AdCreativeFormData,
+} from "@/types/meta-ads";
 import { CampaignCreationStep } from "./CampaignCreationStep";
+import { AdSetCreationStep } from "./AdSetCreationStep";
+import { AdCreationStep } from "./AdCreationStep";
+import { CampaignUnifiedReviewStep } from "./CampaignUnifiedReviewStep";
 
 const LocationTargetingMap = dynamic(
   () => import("./LocationTargetingMap"),
@@ -177,7 +186,7 @@ export function MetaAdsDashboard() {
         campaignDialog={
           campaignOpen ? (
             <CreateCampaignWizard
-              accountId={currentAccount!.account_id}
+              accountId={currentAccount?.account_id || "act_sandbox_default"}
               onCreated={() => campaigns.refetch()}
               onClose={() => setCampaignOpen(false)}
             />
@@ -251,6 +260,13 @@ export function MetaAdsDashboard() {
           ))}
         </div>
       </section>
+      {campaignOpen && (
+        <CreateCampaignWizard
+          accountId={currentAccount?.account_id || "act_sandbox_default"}
+          onCreated={() => campaigns.refetch()}
+          onClose={() => setCampaignOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -319,11 +335,10 @@ function AccountPicker({
             matches.map((account) => (
               <label
                 key={account.account_id}
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 ${
-                  selectedId === account.account_id
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 ${selectedId === account.account_id
                     ? "border-[#2875d6] bg-blue-50 shadow-[inset_0_0_0_1px_rgba(40,117,214,.15)]"
                     : "border-transparent hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 <input
                   type="radio"
@@ -551,7 +566,7 @@ function AdsPerformanceDashboard({
     const spendVal = Number(raw?.spend || 0);
     const clicksVal = Number(raw?.clicks || 0);
     const convVal = Number(raw?.conversions || raw?.leads || 0);
-    
+
     return [
       { name: "Spend", value: spendVal || 1, color: "#2875d6" },
       { name: "Clicks", value: clicksVal || 1, color: "#32a86a" },
@@ -578,7 +593,7 @@ function AdsPerformanceDashboard({
   const getDateRangeText = (preset: string) => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-    
+
     if (preset === "last_7d") {
       const start = new Date();
       start.setDate(today.getDate() - 7);
@@ -625,7 +640,7 @@ function AdsPerformanceDashboard({
         <div className="flex items-center gap-2">
           {/* Working Calendar Dropdown */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button 
+            <button
               onClick={() => setCalendarOpen(!calendarOpen)}
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
@@ -687,41 +702,37 @@ function AdsPerformanceDashboard({
       <div className="mt-4 flex border-b border-slate-200 gap-6 text-sm font-semibold mb-6">
         <button
           onClick={() => setCurrentView('dashboard')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'dashboard'
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'dashboard'
               ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           Insights
         </button>
         <button
           onClick={() => setCurrentView('campaigns')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'campaigns'
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'campaigns'
               ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           Ad Campaigns
         </button>
         <button
           onClick={() => setCurrentView('leads')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'leads'
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'leads'
               ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           Lead Sync
         </button>
         <button
           onClick={() => setCurrentView('pixel')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'pixel'
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'pixel'
               ? 'border-blue-600 text-blue-600 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+            }`}
         >
           Pixel & Conversions
         </button>
@@ -768,7 +779,7 @@ function AdsPerformanceDashboard({
           </div>
 
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            
+
             {/* Donut Chart */}
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-bold text-slate-900">Spend by Platform</h2>
@@ -814,11 +825,10 @@ function AdsPerformanceDashboard({
                     <div key={campaign.id} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2">
                       <span className="font-semibold text-slate-700">▣ &nbsp;{campaign.name}</span>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          campaign.status === "ACTIVE"
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${campaign.status === "ACTIVE"
                             ? "bg-green-100 text-green-800"
                             : "bg-slate-100 text-slate-800"
-                        }`}
+                          }`}
                       >
                         {campaign.status}
                       </span>
@@ -904,39 +914,38 @@ function AdsPerformanceDashboard({
                         ? `₹${new Intl.NumberFormat("en-IN").format(Number(campaign.daily_budget) / 100)}`
                         : "None";
 
-                      const mockSpend = isStaticActive 
-                        ? `₹${new Intl.NumberFormat("en-IN").format(45000 + (hash % 100000))}` 
+                      const mockSpend = isStaticActive
+                        ? `₹${new Intl.NumberFormat("en-IN").format(45000 + (hash % 100000))}`
                         : "₹0.00";
 
                       const mockResults = isStaticActive ? 100 + (hash % 250) : 0;
                       const mockRoas = isStaticActive ? (1.1 + (hash % 250) / 100).toFixed(2) : "0.00";
 
-                      const createdDate = campaign.created_time 
+                      const createdDate = campaign.created_time
                         ? new Date(campaign.created_time).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric"
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric"
+                        })
                         : "15 Aug 2026";
 
-                      const formattedObj = campaign.objective === "OUTCOME_LEADS" 
-                        ? "Leads" 
-                        : campaign.objective === "OUTCOME_TRAFFIC" 
-                        ? "Traffic" 
-                        : campaign.objective === "OUTCOME_SALES" 
-                        ? "Sales" 
-                        : "Awareness";
+                      const formattedObj = campaign.objective === "OUTCOME_LEADS"
+                        ? "Leads"
+                        : campaign.objective === "OUTCOME_TRAFFIC"
+                          ? "Traffic"
+                          : campaign.objective === "OUTCOME_SALES"
+                            ? "Sales"
+                            : "Awareness";
 
                       return (
                         <tr key={campaign.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
                           <td className="px-5 py-4 font-semibold text-slate-900">{campaign.name}</td>
                           <td className="px-3 py-4">
                             <span
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                                campaign.status === "ACTIVE"
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${campaign.status === "ACTIVE"
                                   ? "bg-green-100 text-green-800"
                                   : "bg-slate-100 text-slate-800"
-                              }`}
+                                }`}
                             >
                               {campaign.status}
                             </span>
@@ -958,7 +967,7 @@ function AdsPerformanceDashboard({
                               •••
                             </button>
                             {isDropdownOpen && (
-                              <div 
+                              <div
                                 onClick={(e) => e.stopPropagation()}
                                 className="absolute right-5 mt-1 z-20 w-52 rounded-xl border border-slate-200 bg-white shadow-xl py-1.5 text-left text-sm text-slate-700"
                               >
@@ -1085,7 +1094,7 @@ function AdsPerformanceDashboard({
                 <Info className="text-blue-500" />
                 <span>Campaign Details</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setSelectedDetailsCampaign(null)}
                 className="text-slate-500 hover:text-slate-800 p-1 rounded"
               >
@@ -1112,14 +1121,14 @@ function AdsPerformanceDashboard({
               <div className="grid grid-cols-3 gap-2">
                 <span className="font-semibold text-slate-500">Budget</span>
                 <span className="col-span-2 font-bold text-slate-900">
-                  {selectedDetailsCampaign.daily_budget 
-                    ? `₹${new Intl.NumberFormat("en-IN").format(Number(selectedDetailsCampaign.daily_budget) / 100)}/day` 
+                  {selectedDetailsCampaign.daily_budget
+                    ? `₹${new Intl.NumberFormat("en-IN").format(Number(selectedDetailsCampaign.daily_budget) / 100)}/day`
                     : "None"}
                 </span>
               </div>
             </div>
             <footer className="mt-7 flex justify-end">
-              <button 
+              <button
                 onClick={() => setSelectedDetailsCampaign(null)}
                 className="rounded-lg bg-slate-100 px-5 py-2.5 font-semibold text-slate-800 hover:bg-slate-200 transition"
               >
@@ -1139,7 +1148,7 @@ function AdsPerformanceDashboard({
                 <Pencil className="text-slate-500" />
                 <span>Edit Campaign</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setEditingCampaign(null)}
                 className="text-slate-500 hover:text-slate-800 p-1 rounded"
               >
@@ -1158,13 +1167,13 @@ function AdsPerformanceDashboard({
               </label>
             </div>
             <footer className="mt-7 flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setEditingCampaign(null)}
                 className="rounded-lg bg-slate-100 px-5 py-2.5 font-semibold text-slate-800 hover:bg-slate-200 transition"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => updateCampaignMutation.mutate({ id: editingCampaign.id, name: editName })}
                 disabled={updateCampaignMutation.isPending || !editName.trim()}
                 className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-blue-700 transition disabled:opacity-60"
@@ -1260,22 +1269,20 @@ function LeadSyncTab() {
               <button
                 type="button"
                 onClick={() => setWebhookEnv("render")}
-                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${
-                  webhookEnv === "render"
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "render"
                     ? "bg-white text-blue-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
-                }`}
+                  }`}
               >
                 Render (Production)
               </button>
               <button
                 type="button"
                 onClick={() => setWebhookEnv("local")}
-                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${
-                  webhookEnv === "local"
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "local"
                     ? "bg-white text-blue-700 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
-                }`}
+                  }`}
               >
                 Local Dev (localhost:8000)
               </button>
@@ -1407,7 +1414,7 @@ function LeadSyncTab() {
             <h3 className="text-sm font-bold text-slate-900">Captured Leads ({leadsList.length})</h3>
             <p className="text-xs text-slate-500">Live feed of incoming leads synced from Meta directly into your CRM</p>
           </div>
-          <button 
+          <button
             onClick={() => leads.refetch()}
             className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
           >
@@ -1489,11 +1496,11 @@ function LeadSyncTab() {
                     <td className="px-3 py-3 text-slate-500 text-xs">
                       {lead.created_at
                         ? new Date(lead.created_at).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit"
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })
                         : "—"}
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -1586,7 +1593,7 @@ function PixelSettingsTab() {
             <p className="text-xs text-slate-500">Configure client-side tracking and server-side Conversion events</p>
           </div>
 
-          <form 
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               saveSettings.mutate({
@@ -1672,7 +1679,7 @@ function PixelSettingsTab() {
           <div className="space-y-4">
             <h4 className="text-xs font-black text-slate-900 tracking-wider uppercase">Conversion API (CAPI) Guide</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Meta Pixel (browser tracking) is often limited by ad blockers and browser privacy filters. 
+              Meta Pixel (browser tracking) is often limited by ad blockers and browser privacy filters.
               By configuring the **Conversion API (CAPI)**, Marketing Auto transmits lead events directly from our server to Meta.
             </p>
             <div className="space-y-2 text-xs">
@@ -1700,7 +1707,7 @@ function PixelSettingsTab() {
             <h3 className="text-sm font-bold text-slate-900">Recently Sent Conversion Events</h3>
             <p className="text-xs text-slate-500">Live feed of server-side Conversion events dispatched to Meta CAPI</p>
           </div>
-          <button 
+          <button
             onClick={() => logsQuery.refetch()}
             className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
           >
@@ -1781,9 +1788,8 @@ function QuickActions({
                 toast.info("Select a campaign to delete from the list below.");
               }
             }}
-            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold cursor-pointer transition ${
-              tone === "blue" ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "text-slate-700 hover:bg-slate-50"
-            }`}
+            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold cursor-pointer transition ${tone === "blue" ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "text-slate-700 hover:bg-slate-50"
+              }`}
           >
             <Icon size={14} />
             {label}
@@ -1807,21 +1813,21 @@ function CreateCampaignWizard({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const stepParam = searchParams.get("step");
-  
+
   // Hydrate step from URL, fallback to 1
   const step = stepParam ? parseInt(stepParam) : 1;
-  
+
   const setStep = (newStepOrUpdater: React.SetStateAction<number>) => {
-    const nextStep = typeof newStepOrUpdater === 'function' 
-      ? newStepOrUpdater(step) 
+    const nextStep = typeof newStepOrUpdater === 'function'
+      ? newStepOrUpdater(step)
       : newStepOrUpdater;
-      
+
     const params = new URLSearchParams(searchParams.toString());
     params.set("step", nextStep.toString());
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
   const [campaignForm, setCampaignForm] = useState<CampaignFormData>({
-    name: "New Leads campaign",
+    name: "Diwali Festive Leads 2026",
     status: "PAUSED",
     buying_type: "AUCTION",
     objective: "OUTCOME_LEADS",
@@ -1834,78 +1840,109 @@ function CreateCampaignWizard({
     special_ad_categories: ["NONE"],
     ad_schedule_type: "ALL_TIME",
   });
-  const [pageId, setPageId] = useState("");
-  const [leadFormId, setLeadFormId] = useState("");
 
-  const pagesQuery = useQuery({
-    queryKey: ["meta-pages"],
-    queryFn: () => metaAdsService.getPages(),
+  const [adSetForm, setAdSetForm] = useState<AdSetFormData>({
+    name: "Indore Leads Ad Set",
+    status: "ACTIVE",
+    conversion_location: "INSTANT_FORMS",
+    leadgen_form_id: "default_form_1",
+    form_type: "SELECT",
+    location: "India",
+    location_display: "Indore, Madhya Pradesh, India",
+    radius: 40,
+    coordinates: { lat: 22.7196, lng: 75.8577 },
+    age_min: 18,
+    age_max: 55,
+    gender: "All",
+    interests: ["Marketing Automation", "Real Estate Investors", "B2B Decision Makers"],
+    custom_audiences: [],
+    advantage_audience: true,
+    placement_type: "ADVANTAGE_PLUS",
+    manual_placements: {
+      facebook: { feed: true, stories: true, reels: true, marketplace: true, videoFeed: true },
+      instagram: { feed: true, stories: true, reels: true, explore: true },
+      messenger: { inbox: true, stories: true },
+      audienceNetwork: { native: true, banner: true, interstitial: true },
+    },
+    start_date: new Date().toISOString().split("T")[0],
+    start_time: "09:00",
+    end_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+    end_time: "23:59",
+    budget: 500,
+    budget_type: "Daily",
+    performance_goal: "MAXIMIZE_LEADS",
+    facebook_page_id: "1261471110372189",
+    facebook_page_name: "Marketing Automation Official",
+    locations_list: ["India"],
+    excluded_locations: [],
+    languages: ["All languages"],
+    use_advantage_audience: true,
+    frequency_control: {
+      enabled: false,
+      type: "TARGET",
+      frequency: 2,
+      period: 7,
+      periodUnit: "DAYS",
+    },
+    value_rules: [],
+    placement_value_rules: [],
+    dynamic_creative: false,
+    live_video_ad: false,
+    spending_limits: {
+      enabled: false,
+    },
+    use_end_date: true,
+    budget_scheduling_enabled: false,
+    india_policy: {
+      verification_status: "REQUIRED",
+      beneficiary: "",
+      payer: "",
+      is_securities_related: false,
+    },
+    account_controls_excluded_placements: [],
+    devices_os: {
+      devices: "ALL",
+      os: "ALL",
+      wifi_only: false,
+    },
+    brand_suitability: {
+      inventory_filter: "EXPANDED",
+      block_lists: [],
+      content_exclusions: [],
+      topic_exclusions: [],
+    },
+    show_more_settings: false,
   });
 
-  useEffect(() => {
-    if (!pageId && pagesQuery.data && pagesQuery.data.length > 0) {
-      setPageId(pagesQuery.data[0].id);
-    }
-  }, [pagesQuery.data, pageId]);
-
-  const formsQuery = useQuery({
-    queryKey: ["meta-page-forms", pageId],
-    queryFn: () => metaAdsService.getPageLeadForms(pageId),
-    enabled: !!pageId,
+  const [adCreativeForm, setAdCreativeForm] = useState<AdCreativeFormData>({
+    name: "New Leads Ad",
+    status: "ACTIVE",
+    page_id: "1261471110372189",
+    page_name: "Marketing Automation Official",
+    instagram_account: "@marketingauto_in",
+    ad_setup: "CREATE_AD",
+    format: "SINGLE_IMAGE_VIDEO",
+    media_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1000&auto=format&fit=crop&q=80",
+    media_type: "image",
+    media_name: "diwali-leads-creative.jpg",
+    media_file: null,
+    primary_text: "Grow your business with intelligent marketing automation. Collect high-intent leads automatically on Facebook & Instagram.",
+    headline: "Transform Your Lead Generation Today",
+    description: "Get a free 1-on-1 strategy session and workflow template.",
+    destination_url: "https://marketingauto.example.com/leads",
+    call_to_action: "LEARN_MORE",
+    leadgen_form_id: "default_form_1",
   });
 
-  useEffect(() => {
-    if (formsQuery.data && formsQuery.data.length > 0) {
-      if (!leadFormId || !formsQuery.data.some((f) => f.id === leadFormId)) {
-        setLeadFormId(formsQuery.data[0].id);
+  const handleAdSetChange = (updated: Partial<AdSetFormData>) => {
+    setAdSetForm((prev) => {
+      const next = { ...prev, ...updated };
+      if (updated.leadgen_form_id && updated.leadgen_form_id !== adCreativeForm.leadgen_form_id) {
+        setAdCreativeForm((c) => ({ ...c, leadgen_form_id: updated.leadgen_form_id! }));
       }
-    } else {
-      setLeadFormId("");
-    }
-  }, [formsQuery.data, pageId]);
-
-  const selectedPage = pagesQuery.data?.find((p) => p.id === pageId);
-  const selectedForm = formsQuery.data?.find((f) => f.id === leadFormId);
-  const [adSet, setAdSet] = useState("Indore Leads Audience");
-  const [creativeData, setCreativeData] = useState({
-    primaryText: "Transform your home with our premium interior design services.",
-    headline: "Book Your Free Consultation",
-    description: "Get a personalized consultation today.",
-    destinationUrl: "https://example.com",
-    callToAction: "Book Now"
-  });
-
-  // Ad Set Details State
-  const [budget, setBudget] = useState(10000);
-  const [budgetType, setBudgetType] = useState("Daily");
-  
-  // Ad Creative Media states
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video">("image");
-  const [mediaName, setMediaName] = useState("home-interior.jpg");
-  const [startDate, setStartDate] = useState("2026-08-18");
-  const [endDate, setEndDate] = useState("2026-08-25");
-  const [location, setLocation] = useState("India");
-  const [radius, setRadius] = useState(40);
-  const [ageMin, setAgeMin] = useState(18);
-  const [ageMax, setAgeMax] = useState(55);
-  const [gender, setGender] = useState("All");
-  const [interests, setInterests] = useState("Marketing Automation, Real Estate Investors, B2B Decision Makers");
-  const [customCoordinates, setCustomCoordinates] = useState<{lat: number; lng: number} | null>(null);
-
-  useEffect(() => {
-    setCustomCoordinates(null);
-  }, [location]);
-
-  const coordinates = useMemo(() => {
-    if (customCoordinates) return customCoordinates;
-    if (location === "India") return { lat: 22.7196, lng: 75.8577 };
-    if (location === "United States") return { lat: 37.0902, lng: -95.7129 };
-    if (location === "United Kingdom") return { lat: 55.3781, lng: -3.4360 };
-    if (location === "Canada") return { lat: 56.1304, lng: -106.3468 };
-    return { lat: 22.7196, lng: 75.8577 };
-  }, [location, customCoordinates]);
+      return next;
+    });
+  };
 
   const createCampaignMutation = useMutation({
     mutationFn: metaAdsService.createCampaign,
@@ -1919,11 +1956,10 @@ function CreateCampaignWizard({
     },
   });
 
-  const labels = ["Campaign", "Ad Set & Audience", "Ad Creative", "Review & Launch"];
   const submitCampaign = (image_hash?: string, video_id?: string) => {
     const isAdvantagePlus = campaignForm.budget_strategy === "CAMPAIGN_BUDGET";
     const budgetAmountInMinorUnits = Math.round(
-      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : budget) * 100
+      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : (adSetForm.budget || 500)) * 100
     );
 
     createCampaignMutation.mutate({
@@ -1947,28 +1983,28 @@ function CreateCampaignWizard({
       frequency_control_days: campaignForm.frequency_control_days,
       schedule_budget_increases: campaignForm.schedule_budget_increases,
       budget_schedules: campaignForm.budget_schedules,
-      daily_budget: campaignForm.budget_mode === "DAILY" ? budgetAmountInMinorUnits : undefined,
-      lifetime_budget: campaignForm.budget_mode === "LIFETIME" ? budgetAmountInMinorUnits : undefined,
-      start_time: startDate || undefined,
-      end_time: endDate || undefined,
-      location: location === "India" ? "IN" : location === "United States" ? "US" : "IN",
-      radius: radius,
-      age_min: ageMin,
-      age_max: ageMax,
-      gender: gender === "Men" ? "male" : gender === "Women" ? "female" : "all",
-      interests: interests ? interests.split(",").map((s) => s.trim()).filter(Boolean) : [],
-      ad_text: creativeData.primaryText,
-      headline: creativeData.headline,
-      description: creativeData.description,
-      link: creativeData.destinationUrl,
-      call_to_action: creativeData.callToAction,
-      page_id: pageId || undefined,
-      leadgen_form_id: campaignForm.objective === "OUTCOME_LEADS" ? (leadFormId || undefined) : undefined,
+      daily_budget: (isAdvantagePlus ? campaignForm.budget_mode === "DAILY" : adSetForm.budget_type === "Daily") ? budgetAmountInMinorUnits : undefined,
+      lifetime_budget: (isAdvantagePlus ? campaignForm.budget_mode === "LIFETIME" : adSetForm.budget_type === "Lifetime") ? budgetAmountInMinorUnits : undefined,
+      start_time: adSetForm.start_date ? `${adSetForm.start_date}T${adSetForm.start_time || '00:00:00'}` : undefined,
+      end_time: !adSetForm.run_continuously && adSetForm.end_date ? `${adSetForm.end_date}T${adSetForm.end_time || '23:59:59'}` : undefined,
+      location: adSetForm.location === "India" ? "IN" : adSetForm.location === "United States" ? "US" : "IN",
+      radius: adSetForm.radius,
+      age_min: adSetForm.age_min,
+      age_max: adSetForm.age_max,
+      gender: adSetForm.gender,
+      interests: adSetForm.interests,
+      ad_text: adCreativeForm.primary_text,
+      headline: adCreativeForm.headline,
+      description: adCreativeForm.description,
+      link: adCreativeForm.destination_url,
+      call_to_action: adCreativeForm.call_to_action,
+      leadgen_form_id: adCreativeForm.leadgen_form_id || adSetForm.leadgen_form_id || undefined,
+      page_id: adCreativeForm.page_id || "1261471110372189",
       geo_locations: {
-        location_type: "custom_locations",
-        lat: coordinates.lat,
-        lng: coordinates.lng,
-        radius: radius
+        location_type: "cities",
+        lat: adSetForm.coordinates.lat,
+        lng: adSetForm.coordinates.lng,
+        radius: adSetForm.radius
       },
       image_hash,
       video_id
@@ -1976,7 +2012,7 @@ function CreateCampaignWizard({
   };
 
   const uploadMediaMutation = useMutation({
-    mutationFn: ({ file, type }: { file: File; type: "image" | "video" }) => 
+    mutationFn: ({ file, type }: { file: File; type: "image" | "video" }) =>
       metaAdsService.uploadMedia(accountId, type, file),
     onSuccess: (data) => {
       submitCampaign(data.image_hash, data.video_id);
@@ -1986,170 +2022,69 @@ function CreateCampaignWizard({
     }
   });
 
-  const next = () => {
-    if (step < 4) {
-      setStep((value) => value + 1);
+  const handleFinalLaunch = () => {
+    if (adCreativeForm.media_file) {
+      uploadMediaMutation.mutate({ file: adCreativeForm.media_file, type: adCreativeForm.media_type });
     } else {
-      if (mediaFile) {
-        uploadMediaMutation.mutate({ file: mediaFile, type: mediaType });
-      } else {
-        submitCampaign();
-      }
+      submitCampaign();
     }
   };
 
-  // Step 1 uses the full-fidelity Meta Ads Manager Campaign Creation level interface
-  if (step === 1) {
-    return (
-      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 md:p-6 backdrop-blur-[2px]">
-        <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-2 md:p-5 backdrop-blur-[2px]">
+      <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        {step === 1 && (
           <CampaignCreationStep
             formData={campaignForm}
             onChange={(updated) => setCampaignForm((prev) => ({ ...prev, ...updated }))}
             onNext={() => setStep(2)}
             onClose={onClose}
+            onNavigateStep={setStep}
             currencySymbol="₹"
             currencyCode="INR"
           />
-        </div>
+        )}
+        {step === 2 && (
+          <AdSetCreationStep
+            campaignData={campaignForm}
+            formData={adSetForm}
+            onChange={handleAdSetChange}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 3 && (
+          <AdCreationStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            formData={adCreativeForm}
+            onChange={(updated) => setAdCreativeForm((prev) => ({ ...prev, ...updated }))}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 4 && (
+          <CampaignUnifiedReviewStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            adCreativeData={adCreativeForm}
+            onNavigateStep={setStep}
+            onLaunch={handleFinalLaunch}
+            onClose={onClose}
+            isLaunching={createCampaignMutation.isPending || uploadMediaMutation.isPending}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
       </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 backdrop-blur-[2px]">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="campaign-flow-title"
-        className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl"
-      >
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-7 py-4">
-          <div className="flex items-center justify-between">
-            <h2 id="campaign-flow-title" className="text-lg font-black text-slate-950">
-              Create Campaign
-            </h2>
-            <button onClick={onClose} aria-label="Close" className="text-slate-500 hover:text-slate-900">
-              <X size={20} />
-            </button>
-          </div>
-          <ol className="mt-4 grid grid-cols-4 gap-2">
-            {labels.map((label, index) => (
-              <li key={label} className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                <span
-                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-                    index + 1 < step
-                      ? "bg-blue-600 text-white"
-                      : index + 1 === step
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-400"
-                  }`}
-                >
-                  {index + 1 < step ? "✓" : index + 1}
-                </span>
-                <span className="hidden sm:block">{label}</span>
-                {index < 3 && <span className="ml-auto hidden h-px flex-1 bg-slate-300 sm:block" />}
-              </li>
-            ))}
-          </ol>
-        </header>
-
-        <div className="p-7">
-
-          {step === 2 && (
-            <AdSetStep 
-              adSet={adSet} 
-              setAdSet={setAdSet} 
-              budget={budget}
-              setBudget={setBudget}
-              budgetType={budgetType}
-              setBudgetType={setBudgetType}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              location={location}
-              setLocation={setLocation}
-              radius={radius}
-              setRadius={setRadius}
-              coordinates={coordinates}
-              ageMin={ageMin}
-              setAgeMin={setAgeMin}
-              ageMax={ageMax}
-              setAgeMax={setAgeMax}
-              gender={gender}
-              setGender={setGender}
-              interests={interests}
-              setInterests={setInterests}
-              onLocationChange={(lat, lng) => setCustomCoordinates({ lat, lng })}
-            />
-          )}
-          {step === 3 && (
-            <CreativeStep 
-              creativeData={creativeData} 
-              setCreativeData={setCreativeData} 
-              mediaUrl={mediaUrl}
-              setMediaUrl={setMediaUrl}
-              setMediaFile={setMediaFile}
-              mediaType={mediaType}
-              setMediaType={setMediaType}
-              mediaName={mediaName}
-              setMediaName={setMediaName}
-            />
-          )}
-          {step === 4 && (
-            <ReviewStep 
-              name={campaignForm.name} 
-              objective={campaignForm.objective} 
-              adSet={adSet} 
-              budget={budget}
-              budgetType={budgetType}
-              startDate={startDate}
-              endDate={endDate}
-              location={location}
-              radius={radius}
-              ageMin={ageMin}
-              ageMax={ageMax}
-              gender={gender}
-              interests={interests}
-              pageName={selectedPage?.name || (pageId ? `Page (${pageId})` : undefined)}
-              formName={campaignForm.objective === "OUTCOME_LEADS" ? (selectedForm?.name || (leadFormId ? `Form (${leadFormId})` : undefined)) : undefined}
-              campaignForm={campaignForm}
-            />
-          )}
-        </div>
-
-        <footer className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white px-7 py-4">
-          <div>
-            {step > 1 && (
-              <button
-                onClick={() => setStep((value) => value - 1)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
-              >
-                Back
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700">
-              Cancel
-            </button>
-            <button
-              onClick={next}
-              disabled={createCampaignMutation.isPending || uploadMediaMutation.isPending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
-            >
-              {createCampaignMutation.isPending || uploadMediaMutation.isPending
-                ? "Launching..."
-                : step === 4
-                ? "Launch Campaign"
-                : step === 3
-                ? "Continue to Review"
-                : "Continue"}
-            </button>
-          </div>
-        </footer>
-      </section>
     </div>
   );
 }
@@ -2210,7 +2145,7 @@ function AdSetStep({
   const audienceEstimateText = useMemo(() => {
     let baseMin = 12;
     let baseMax = 16;
-    
+
     if (location === "India") {
       baseMin = 45;
       baseMax = 58;
@@ -2221,13 +2156,13 @@ function AdSetStep({
       baseMin = 2.8;
       baseMax = 3.9;
     }
-    
+
     const ageFactor = Math.max(0.1, (ageMax - ageMin) / 80);
     const genderFactor = gender === "All" ? 1.0 : 0.48;
-    
+
     const finalMin = (baseMin * ageFactor * genderFactor).toFixed(1);
     const finalMax = (baseMax * ageFactor * genderFactor).toFixed(1);
-    
+
     return `${finalMin}M – ${finalMax}M people`;
   }, [location, ageMin, ageMax, gender]);
 
@@ -2246,7 +2181,7 @@ function AdSetStep({
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Budget">
             <div className="flex rounded-lg border border-slate-300 overflow-hidden bg-white">
-              <select 
+              <select
                 value={budgetType}
                 onChange={(e) => setBudgetType(e.target.value)}
                 className="w-1/2 border-0 text-xs px-2 py-2.5 bg-slate-50 outline-none cursor-pointer"
@@ -2255,11 +2190,11 @@ function AdSetStep({
                 <option>Weekly</option>
                 <option>Monthly</option>
               </select>
-              <input 
-                type="number" 
-                value={budget} 
-                onChange={(e) => setBudget(Number(e.target.value) || 0)} 
-                className="w-1/2 border-0 text-xs px-2.5 py-2.5 outline-none text-slate-900 font-bold" 
+              <input
+                type="number"
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value) || 0)}
+                className="w-1/2 border-0 text-xs px-2.5 py-2.5 outline-none text-slate-900 font-bold"
                 placeholder="10000"
               />
             </div>
@@ -2286,17 +2221,17 @@ function AdSetStep({
           <LocationTargetingMap lat={coordinates.lat} lng={coordinates.lng} radiusKm={radius} onLocationChange={onLocationChange} />
         </div>
 
-        <Field 
+        <Field
           label={`Targeting Radius: ${radius} km`}
           helper="Coordinates and radius will be mapped to Meta's custom_locations API."
         >
           <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <input 
-              type="range" 
-              min={10} 
-              max={100} 
-              value={radius} 
-              onChange={(e) => setRadius(Number(e.target.value))} 
+            <input
+              type="range"
+              min={10}
+              max={100}
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
               className="flex-1 accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
             />
             <span className="text-xs font-black text-slate-800 shrink-0 w-14 text-right">
@@ -2308,21 +2243,21 @@ function AdSetStep({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Age Range">
             <div className="flex items-center gap-2">
-              <input 
-                type="number" 
-                value={ageMin} 
-                onChange={(e) => setAgeMin(Number(e.target.value) || 18)} 
-                min={13} 
-                max={65} 
+              <input
+                type="number"
+                value={ageMin}
+                onChange={(e) => setAgeMin(Number(e.target.value) || 18)}
+                min={13}
+                max={65}
                 className="w-full text-center"
               />
               <span className="text-slate-400 font-bold">–</span>
-              <input 
-                type="number" 
-                value={ageMax} 
-                onChange={(e) => setAgeMax(Number(e.target.value) || 65)} 
-                min={18} 
-                max={65} 
+              <input
+                type="number"
+                value={ageMax}
+                onChange={(e) => setAgeMax(Number(e.target.value) || 65)}
+                min={18}
+                max={65}
                 className="w-full text-center"
               />
             </div>
@@ -2336,26 +2271,26 @@ function AdSetStep({
           </Field>
         </div>
 
-        <Field 
+        <Field
           label="Interests"
           helper="Comma-separated interests (e.g. Real Estate, Marketing, Investing)."
         >
-          <input 
-            value={interests} 
-            onChange={(e) => setInterests(e.target.value)} 
+          <input
+            value={interests}
+            onChange={(e) => setInterests(e.target.value)}
             placeholder="e.g. Real Estate, Marketing"
           />
         </Field>
       </div>
 
-      <Summary 
-        title="Audience Estimate" 
+      <Summary
+        title="Audience Estimate"
         rows={[
-          ["Estimated Audience", audienceEstimateText], 
+          ["Estimated Audience", audienceEstimateText],
           ["Budget Summary", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`],
           ["Perimeter", `${location} (+${radius} km)`],
           ["Demographics", `${ageMin}–${ageMax} yrs, ${gender}`]
-        ]} 
+        ]}
       />
     </div>
   );
@@ -2421,28 +2356,28 @@ function CreativeStep({
           <h3 className="text-xl font-black text-slate-950">Ad Creative</h3>
           <p className="text-xs text-slate-500 mt-0.5">Upload visual media and craft compelling advertising copy.</p>
         </div>
-        
+
         {/* Hidden File Input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          accept={acceptType} 
-          onChange={handleFileChange} 
-          className="hidden" 
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept={acceptType}
+          onChange={handleFileChange}
+          className="hidden"
         />
 
         <div className="space-y-1.5">
           <label className="block text-xs font-bold text-slate-700">Media</label>
           {!mediaUrl ? (
             <div className="flex gap-2">
-              <button 
+              <button
                 type="button"
                 onClick={() => handleUploadClick("image")}
                 className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-bold text-white cursor-pointer hover:bg-blue-700 transition"
               >
                 Upload Image
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleUploadClick("video")}
                 className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 cursor-pointer hover:bg-slate-50 transition"
@@ -2480,28 +2415,28 @@ function CreativeStep({
         </div>
 
         <Field label="Primary Text">
-          <textarea 
-            rows={3} 
-            value={creativeData.primaryText} 
-            onChange={(e) => handleCreativeChange("primaryText", e.target.value)} 
+          <textarea
+            rows={3}
+            value={creativeData.primaryText}
+            onChange={(e) => handleCreativeChange("primaryText", e.target.value)}
           />
         </Field>
         <Field label="Headline">
-          <input 
-            value={creativeData.headline} 
-            onChange={(e) => handleCreativeChange("headline", e.target.value)} 
+          <input
+            value={creativeData.headline}
+            onChange={(e) => handleCreativeChange("headline", e.target.value)}
           />
         </Field>
         <Field label="Description">
-          <input 
-            value={creativeData.description} 
-            onChange={(e) => handleCreativeChange("description", e.target.value)} 
+          <input
+            value={creativeData.description}
+            onChange={(e) => handleCreativeChange("description", e.target.value)}
           />
         </Field>
         <Field label="Destination URL">
-          <input 
-            value={creativeData.destinationUrl} 
-            onChange={(e) => handleCreativeChange("destinationUrl", e.target.value)} 
+          <input
+            value={creativeData.destinationUrl}
+            onChange={(e) => handleCreativeChange("destinationUrl", e.target.value)}
           />
         </Field>
         <Field label="Call to Action">
@@ -2512,12 +2447,12 @@ function CreativeStep({
         </Field>
       </div>
 
-      <LiveMetaPreview 
-        platform={platform} 
-        setPlatform={setPlatform} 
-        creativeData={creativeData} 
-        mediaUrl={mediaUrl} 
-        mediaType={mediaType} 
+      <LiveMetaPreview
+        platform={platform}
+        setPlatform={setPlatform}
+        creativeData={creativeData}
+        mediaUrl={mediaUrl}
+        mediaType={mediaType}
       />
     </div>
   );
@@ -2540,8 +2475,8 @@ function LiveMetaPreview({
     <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex flex-col items-center">
       <div className="w-full text-left">
         <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">META PREVIEW</h4>
-        <select 
-          value={platform} 
+        <select
+          value={platform}
           onChange={(e) => setPlatform(e.target.value)}
           className="mt-3 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none cursor-pointer hover:bg-slate-50 transition"
         >
@@ -2625,7 +2560,7 @@ function LiveMetaPreview({
 
         {/* Stories Preview (FB / IG) */}
         {(platform === "Facebook Stories" || platform === "Instagram Stories") && (
-          <div 
+          <div
             style={mediaUrl && mediaType === "image" ? { backgroundImage: `url(${mediaUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}
             className="relative w-[210px] h-[340px] rounded-2xl overflow-hidden shadow-md bg-[linear-gradient(135deg,#d8c2aa,#91755d)] flex flex-col justify-between p-3 transition-all duration-300"
           >
@@ -2711,33 +2646,33 @@ function ReviewStep({
 }) {
   const campaignRows: string[][] = campaignForm
     ? [
-        ["Name", campaignForm.name],
-        ["Objective", campaignForm.objective.replace("OUTCOME_", "")],
-        ["Status", campaignForm.status],
-        ["Buying Type", campaignForm.buying_type],
-        [
-          "Budget Strategy",
-          campaignForm.budget_strategy === "CAMPAIGN_BUDGET"
-            ? `Advantage+ (${campaignForm.budget_mode === "DAILY" ? "Daily" : "Lifetime"} ₹${campaignForm.budget_amount})`
-            : "Ad set budget",
-        ],
-        ["Bid Strategy", campaignForm.bid_strategy],
-        ["Special Categories", campaignForm.special_ad_categories?.join(", ") || "None"],
-        [
-          "Spend Cap",
-          campaignForm.spend_cap_enabled && campaignForm.spend_cap
-            ? `₹${campaignForm.spend_cap}`
-            : "None set",
-        ],
-        ...(pageName ? [["Facebook Page", pageName]] : []),
-        ...(formName ? [["Lead Form", formName]] : []),
-      ]
+      ["Name", campaignForm.name],
+      ["Objective", campaignForm.objective.replace("OUTCOME_", "")],
+      ["Status", campaignForm.status],
+      ["Buying Type", campaignForm.buying_type],
+      [
+        "Budget Strategy",
+        campaignForm.budget_strategy === "CAMPAIGN_BUDGET"
+          ? `Advantage+ (${campaignForm.budget_mode === "DAILY" ? "Daily" : "Lifetime"} ₹${campaignForm.budget_amount})`
+          : "Ad set budget",
+      ],
+      ["Bid Strategy", campaignForm.bid_strategy],
+      ["Special Categories", campaignForm.special_ad_categories?.join(", ") || "None"],
+      [
+        "Spend Cap",
+        campaignForm.spend_cap_enabled && campaignForm.spend_cap
+          ? `₹${campaignForm.spend_cap}`
+          : "None set",
+      ],
+      ...(pageName ? [["Facebook Page", pageName]] : []),
+      ...(formName ? [["Lead Form", formName]] : []),
+    ]
     : [
-        ["Name", name],
-        ["Objective", objective],
-        ...(pageName ? [["Facebook Page", pageName]] : []),
-        ...(formName ? [["Lead Form", formName]] : []),
-      ];
+      ["Name", name],
+      ["Objective", objective],
+      ...(pageName ? [["Facebook Page", pageName]] : []),
+      ...(formName ? [["Lead Form", formName]] : []),
+    ];
 
   return (
     <div>
@@ -2745,25 +2680,25 @@ function ReviewStep({
       <p className="mt-2 text-sm text-slate-500">Confirm your campaign configuration before sending it to Meta for review.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Summary title="Campaign" rows={campaignRows} />
-        <Summary 
-          title="Ad Set & Audience" 
+        <Summary
+          title="Ad Set & Audience"
           rows={[
-            ["Audience Name", adSet], 
-            ["Budget", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`], 
+            ["Audience Name", adSet],
+            ["Budget", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`],
             ["Location", `${location} (+${radius} km radius)`],
             ["Age range", `${ageMin} – ${ageMax} years`],
             ["Gender", gender],
             ["Target Interests", interests]
-          ]} 
+          ]}
         />
-        <Summary 
-          title="Creative & Schedule" 
+        <Summary
+          title="Creative & Schedule"
           rows={[
-            ["Format", "Single Image / Video"], 
-            ["Start Date", startDate], 
-            ["End Date", endDate], 
+            ["Format", "Single Image / Video"],
+            ["Start Date", startDate],
+            ["End Date", endDate],
             ["CTA button", "Book Now / Learn More"]
-          ]} 
+          ]}
         />
       </div>
       <div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
@@ -2789,14 +2724,14 @@ function Summary({ title, rows }: { title: string; rows: string[][] }) {
   );
 }
 
-function Field({ 
-  label, 
-  helper, 
+function Field({
+  label,
+  helper,
   children,
-  className = "" 
-}: { 
-  label: string; 
-  helper?: React.ReactNode; 
+  className = ""
+}: {
+  label: string;
+  helper?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {

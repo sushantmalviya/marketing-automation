@@ -40,6 +40,7 @@ interface CampaignCreationStepProps {
   onChange: (updated: Partial<CampaignFormData>) => void;
   onNext: () => void;
   onClose: () => void;
+  onNavigateStep?: (step: number) => void;
   currencySymbol?: string;
   currencyCode?: string;
 }
@@ -49,6 +50,7 @@ export function CampaignCreationStep({
   onChange,
   onNext,
   onClose,
+  onNavigateStep,
   currencySymbol = "₹",
   currencyCode = "INR",
 }: CampaignCreationStepProps) {
@@ -533,13 +535,28 @@ export function CampaignCreationStep({
         {/* Left: Breadcrumbs & Badges */}
         <div className="flex items-center gap-3">
           <nav aria-label="Campaign hierarchy" className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-            <span className="max-w-[200px] truncate text-slate-900 font-bold" title={formData.name || "New Leads campaign"}>
+            <span
+              className="max-w-[200px] truncate text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md"
+              title={formData.name || "New Leads campaign"}
+            >
               {formData.name || "New Leads campaign"}
             </span>
             <span className="text-slate-400">&gt;</span>
-            <span className="hover:text-slate-700 cursor-pointer">1 Ad set</span>
+            <button
+              type="button"
+              onClick={() => onNavigateStep?.(2)}
+              className="hover:text-blue-600 cursor-pointer font-medium text-slate-600 transition"
+            >
+              1 Ad set
+            </button>
             <span className="text-slate-400">&gt;</span>
-            <span className="hover:text-slate-700 cursor-pointer">1 Ad</span>
+            <button
+              type="button"
+              onClick={() => onNavigateStep?.(3)}
+              className="hover:text-blue-600 cursor-pointer font-medium text-slate-600 transition"
+            >
+              1 Ad
+            </button>
           </nav>
 
           {/* Status Badge */}
@@ -585,7 +602,13 @@ export function CampaignCreationStep({
             </button>
             <button
               type="button"
-              onClick={() => setViewMode("review")}
+              onClick={() => {
+                if (onNavigateStep) {
+                  onNavigateStep(4);
+                } else {
+                  setViewMode("review");
+                }
+              }}
               className={`rounded-md px-3 py-1 transition ${
                 viewMode === "review"
                   ? "bg-white text-blue-700 shadow-sm font-bold"
@@ -715,6 +738,41 @@ export function CampaignCreationStep({
                         {c.replaceAll("_", " ")}
                       </span>
                     ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Hierarchy Status Check in Review */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Campaign Hierarchy Readiness
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">1 Ad Set</p>
+                      <p className="text-[11px] text-amber-700 font-semibold">⚠ Requires targeting & schedule setup</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateStep?.(2)}
+                      className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-700 transition"
+                    >
+                      Configure &rarr;
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">1 Ad</p>
+                      <p className="text-[11px] text-amber-700 font-semibold">⚠ Requires creative media & copy</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigateStep?.(3)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      Configure &rarr;
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2052,7 +2110,7 @@ export function CampaignCreationStep({
           onClick={handleNextClick}
           className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 active:scale-98 transition disabled:opacity-50"
         >
-          <span>Next</span>
+          <span>Next: 1 Ad set</span>
           <ArrowRight size={16} />
         </button>
       </footer>
