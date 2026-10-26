@@ -337,8 +337,8 @@ function AccountPicker({
               <label
                 key={account.account_id}
                 className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 ${selectedId === account.account_id
-                    ? "border-[#2875d6] bg-blue-50 shadow-[inset_0_0_0_1px_rgba(40,117,214,.15)]"
-                    : "border-transparent hover:bg-slate-50"
+                  ? "border-[#2875d6] bg-blue-50 shadow-[inset_0_0_0_1px_rgba(40,117,214,.15)]"
+                  : "border-transparent hover:bg-slate-50"
                   }`}
               >
                 <input
@@ -704,8 +704,8 @@ function AdsPerformanceDashboard({
         <button
           onClick={() => setCurrentView('dashboard')}
           className={`pb-3 transition border-b-2 px-1 ${currentView === 'dashboard'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
         >
           Insights
@@ -713,8 +713,8 @@ function AdsPerformanceDashboard({
         <button
           onClick={() => setCurrentView('campaigns')}
           className={`pb-3 transition border-b-2 px-1 ${currentView === 'campaigns'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
         >
           Ad Campaigns
@@ -722,8 +722,8 @@ function AdsPerformanceDashboard({
         <button
           onClick={() => setCurrentView('leads')}
           className={`pb-3 transition border-b-2 px-1 ${currentView === 'leads'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
         >
           Lead Sync
@@ -731,8 +731,8 @@ function AdsPerformanceDashboard({
         <button
           onClick={() => setCurrentView('pixel')}
           className={`pb-3 transition border-b-2 px-1 ${currentView === 'pixel'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
         >
           Pixel & Conversions
@@ -827,8 +827,8 @@ function AdsPerformanceDashboard({
                       <span className="font-semibold text-slate-700">▣ &nbsp;{campaign.name}</span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${campaign.status === "ACTIVE"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-slate-100 text-slate-800"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-slate-100 text-slate-800"
                           }`}
                       >
                         {campaign.status}
@@ -944,8 +944,8 @@ function AdsPerformanceDashboard({
                           <td className="px-3 py-4">
                             <span
                               className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${campaign.status === "ACTIVE"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-slate-100 text-slate-800"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-slate-100 text-slate-800"
                                 }`}
                             >
                               {campaign.status}
@@ -1271,8 +1271,8 @@ function LeadSyncTab() {
                 type="button"
                 onClick={() => setWebhookEnv("render")}
                 className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "render"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
                   }`}
               >
                 Render (Production)
@@ -1281,8 +1281,8 @@ function LeadSyncTab() {
                 type="button"
                 onClick={() => setWebhookEnv("local")}
                 className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "local"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
                   }`}
               >
                 Local Dev (localhost:8000)
@@ -1478,21 +1478,24 @@ function LeadSyncTab() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-xs">
-                      {lead.custom_answers && Object.keys(lead.custom_answers).length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {Object.entries(lead.custom_answers).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700 font-mono"
-                              title={`${k}: ${v}`}
-                            >
-                              <strong className="text-slate-900">{k}:</strong> {String(v)}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
-                      )}
+                      {(() => {
+                        const customAnswers = lead.custom_answers || lead.custom_questions;
+                        return customAnswers && Object.keys(customAnswers).length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {Object.entries(customAnswers).map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700 font-mono"
+                                title={`${k}: ${String(v)}`}
+                              >
+                                <strong className="text-slate-900">{k}:</strong> {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-slate-500 text-xs">
                       {lead.created_at

@@ -56,6 +56,18 @@ export interface MetaLead {
   custom_questions?: Record<string, string | string[]>;
 }
 
+export interface WebhookLead {
+  id: string | number;
+  email?: string | null;
+  name?: string;
+  phone?: string;
+  campaign_name?: string;
+  form_id?: string;
+  custom_questions?: Record<string, unknown>;
+  custom_answers?: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface MetaPage {
   id: string;
   name: string;
