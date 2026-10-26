@@ -12,6 +12,7 @@ import { metaAdsService } from "@/services/meta-ads.service";
 import type {
   MetaAdAccount,
   MetaCampaign,
+  MetaInsights,
   CampaignFormData,
   AdSetFormData,
   AdCreativeFormData,
