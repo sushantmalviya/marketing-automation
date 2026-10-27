@@ -23,6 +23,7 @@ import {
   Trash2,
   PlusCircle,
   Clock,
+  Pencil,
 } from "lucide-react";
 import type {
   CampaignFormData,
@@ -32,6 +33,7 @@ import type {
   MetaBudgetMode,
   MetaBidStrategy,
   MetaSpecialAdCategory,
+  MetaDeliveryType,
 } from "@/types/meta-ads";
 import { CampaignTemplateModal } from "./CampaignTemplateModal";
 
@@ -61,7 +63,15 @@ export function CampaignCreationStep({
 
   // Accordion collapses
   const [showCampaignOptions, setShowCampaignOptions] = useState(false);
-  const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  const [showBudgetSettings, setShowBudgetSettings] = useState(formData.bid_strategy === "BID_CAP");
+  const [isDeliveryTypeExpanded, setIsDeliveryTypeExpanded] = useState(true);
+
+  // Automatically open budget settings when bid strategy is Bid cap so Delivery type is immediately visible
+  useEffect(() => {
+    if (formData.bid_strategy === "BID_CAP") {
+      setShowBudgetSettings(true);
+    }
+  }, [formData.bid_strategy]);
 
   // Buying type custom dropdown & confirmation modal (Exact replica of Meta Ads Manager)
   const [isBuyingTypeDropdownOpen, setIsBuyingTypeDropdownOpen] = useState(false);
@@ -1360,7 +1370,14 @@ export function CampaignCreationStep({
                                   key={strat.key}
                                   type="button"
                                   onClick={() => {
-                                    onChange({ bid_strategy: strat.key });
+                                    onChange({
+                                      bid_strategy: strat.key,
+                                      ...(strat.key !== "BID_CAP" ? { delivery_type: "STANDARD" } : {}),
+                                    });
+                                    if (strat.key === "BID_CAP") {
+                                      setShowBudgetSettings(true);
+                                      setIsDeliveryTypeExpanded(true);
+                                    }
                                     setIsBidStrategyDropdownOpen(false);
                                   }}
                                   className={`w-full flex items-start gap-3 rounded-md p-2.5 text-left transition ${
@@ -1644,6 +1661,103 @@ export function CampaignCreationStep({
                               <p className="text-xs text-slate-500 mt-0.5 font-normal">Run ads all the time</p>
                             )}
                           </div>
+
+                          {/* Delivery type (Appears when Campaign bid strategy is Bid cap) */}
+                          {formData.bid_strategy === "BID_CAP" && (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-slate-900">Delivery type</span>
+                                <HelpCircle size={13} className="text-slate-500 cursor-help" />
+                              </div>
+
+                              {!isDeliveryTypeExpanded ? (
+                                <div className="mt-1 flex items-center justify-between">
+                                  <span className="text-xs text-slate-700 font-normal">
+                                    {formData.delivery_type === "ACCELERATED" ? "Accelerated" : "Standard"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsDeliveryTypeExpanded(true)}
+                                    className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+                                  >
+                                    <Pencil size={12} />
+                                    <span>Edit</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm space-y-3 relative">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                                      Delivery Options
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsDeliveryTypeExpanded(false)}
+                                      className="text-slate-500 hover:text-slate-700 transition"
+                                      title="Collapse"
+                                    >
+                                      <ChevronUp size={15} />
+                                    </button>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    {/* Standard Option */}
+                                    <label
+                                      className={`flex items-start gap-2.5 rounded-lg border p-2.5 transition cursor-pointer ${
+                                        (formData.delivery_type || "STANDARD") === "STANDARD"
+                                          ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                                          : "border-slate-200 bg-white hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="delivery_type"
+                                        value="STANDARD"
+                                        checked={(formData.delivery_type || "STANDARD") === "STANDARD"}
+                                        onChange={() => onChange({ delivery_type: "STANDARD" })}
+                                        className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                                      />
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-bold text-slate-900">Standard</span>
+                                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                                            Recommended
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-500 mt-0.5 font-normal leading-snug">
+                                          Spend your budget evenly throughout your schedule
+                                        </p>
+                                      </div>
+                                    </label>
+
+                                    {/* Accelerated Option */}
+                                    <label
+                                      className={`flex items-start gap-2.5 rounded-lg border p-2.5 transition cursor-pointer ${
+                                        formData.delivery_type === "ACCELERATED"
+                                          ? "border-blue-600 bg-blue-50/50 shadow-sm"
+                                          : "border-slate-200 bg-white hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="delivery_type"
+                                        value="ACCELERATED"
+                                        checked={formData.delivery_type === "ACCELERATED"}
+                                        onChange={() => onChange({ delivery_type: "ACCELERATED" })}
+                                        className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                                      />
+                                      <div className="flex-1">
+                                        <span className="text-xs font-bold text-slate-900">Accelerated</span>
+                                        <p className="text-[11px] text-slate-500 mt-0.5 font-normal leading-snug">
+                                          Spend your budget and get results as quickly as possible
+                                        </p>
+                                      </div>
+                                    </label>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

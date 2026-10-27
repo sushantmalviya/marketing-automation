@@ -116,6 +116,7 @@ export type MetaCampaignObjective =
 export type MetaBudgetStrategy = 'CAMPAIGN_BUDGET' | 'ADSET_BUDGET';
 export type MetaBudgetMode = 'DAILY' | 'LIFETIME';
 export type MetaBidStrategy = 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+export type MetaDeliveryType = 'STANDARD' | 'ACCELERATED';
 
 export type MetaSpecialAdCategory =
   | 'CREDIT'
@@ -135,6 +136,7 @@ export interface CampaignFormData {
   budget_mode?: 'DAILY' | 'LIFETIME';
   budget_amount?: number;
   bid_strategy: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+  delivery_type?: MetaDeliveryType;
   special_ad_categories: Array<'CREDIT' | 'EMPLOYMENT' | 'HOUSING' | 'ISSUES_ELECTIONS_POLITICS' | 'NONE'>;
   ad_schedule_type: 'ALL_TIME' | 'ON_SCHEDULE';
   frequency_control_enabled?: boolean;
@@ -166,6 +168,7 @@ export interface CreateMetaCampaignPayload {
   budget_strategy?: 'CAMPAIGN_BUDGET' | 'ADSET_BUDGET';
   budget_mode?: 'DAILY' | 'LIFETIME';
   bid_strategy?: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'BID_CAP';
+  delivery_type?: MetaDeliveryType;
   is_adset_budget_sharing_enabled?: boolean;
   spend_cap?: number;
   ad_schedule_type?: 'ALL_TIME' | 'ON_SCHEDULE';

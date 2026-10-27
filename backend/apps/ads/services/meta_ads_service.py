@@ -568,13 +568,22 @@ class MetaAdsService:
                 if objective_val == "OUTCOME_AWARENESS":
                     adset_params["optimization_goal"] = "REACH"
 
-            # 5. Ad Scheduling (Day Parting)
-            # Allowed when lifetime_budget is selected
+            # 5. Ad Scheduling & Delivery Pacing Type
+            pacing = []
+            delivery_type = campaign_data.get("delivery_type")
+            if delivery_type == "ACCELERATED" and campaign_data.get("bid_strategy") == "BID_CAP":
+                pacing.append("no_pacing")
+            elif delivery_type == "STANDARD":
+                pacing.append("standard")
+
             if (
                 campaign_data.get("ad_schedule_type") == "ON_SCHEDULE"
                 and campaign_data.get("budget_mode") == "LIFETIME"
             ):
-                adset_params["pacing_type"] = json.dumps(["day_parting"])
+                pacing.append("day_parting")
+
+            if pacing:
+                adset_params["pacing_type"] = json.dumps(pacing)
 
             # 6. Budget & Bid Strategy if NOT using Advantage+ Campaign Budget (CBO)
             if not is_cbo:

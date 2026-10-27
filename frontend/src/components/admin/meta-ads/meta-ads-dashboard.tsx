@@ -1841,6 +1841,7 @@ function CreateCampaignWizard({
     budget_mode: "DAILY",
     budget_amount: 500,
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    delivery_type: "STANDARD",
     special_ad_categories: ["NONE"],
     ad_schedule_type: "ALL_TIME",
   });
@@ -1976,6 +1977,7 @@ function CreateCampaignWizard({
       budget_strategy: campaignForm.budget_strategy,
       budget_mode: campaignForm.budget_mode,
       bid_strategy: campaignForm.bid_strategy,
+      delivery_type: campaignForm.bid_strategy === "BID_CAP" ? (campaignForm.delivery_type || "STANDARD") : undefined,
       is_adset_budget_sharing_enabled: isAdvantagePlus,
       spend_cap: campaignForm.spend_cap_enabled && campaignForm.spend_cap
         ? Math.round(campaignForm.spend_cap * 100)
@@ -2661,6 +2663,7 @@ function ReviewStep({
           : "Ad set budget",
       ],
       ["Bid Strategy", campaignForm.bid_strategy],
+      ...(campaignForm.bid_strategy === "BID_CAP" ? [["Delivery Type", campaignForm.delivery_type === "ACCELERATED" ? "Accelerated" : "Standard"]] : []),
       ["Special Categories", campaignForm.special_ad_categories?.join(", ") || "None"],
       [
         "Spend Cap",
