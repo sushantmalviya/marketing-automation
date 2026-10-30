@@ -986,14 +986,28 @@ html.dark .shadow-xl  { box-shadow: 0 20px 56px rgba(0,0,0,.65) !important; }
 html.dark .shadow-2xl { box-shadow: 0 32px 80px rgba(0,0,0,.7) !important; }
 
 
-@layer components {
-  .page-title, .sa-title {
-    @apply text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight;
-  }
-  .page-subtitle, .sa-subtitle {
-    @apply mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium;
-  }
+.page-title, .sa-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: -0.025em;
 }
+html.dark .page-title, html.dark .sa-title {
+  color: #f1f5f9;
+}
+
+.page-subtitle, .sa-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: #64748b;
+  font-weight: 500;
+}
+html.dark .page-subtitle, html.dark .sa-subtitle {
+  color: #94a3b8;
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    PREMIUM DASHBOARD MICRO-INTERACTIONS & MOTION SYSTEM
