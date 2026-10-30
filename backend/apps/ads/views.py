@@ -631,8 +631,12 @@ class SyncMetaFormLeadsView(APIView):
             from apps.campaigns.services import ContactService
             from apps.events.models import SystemEvent
 
+            # Resolve actual form name
+            form_info = MetaAdsService.get_form_info(credential.access_token, str(form_id))
+            form_name = form_info.get("name") or f"Meta Form {form_id}"
+
             upload, _ = CustomerUpload.objects.get_or_create(
-                file_name="Meta Webhooks",
+                file_name=f"Meta Form: {form_name}",
                 uploaded_by=request.user,
                 defaults={"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
             )
@@ -663,6 +667,7 @@ class SyncMetaFormLeadsView(APIView):
                     'email': email or "",
                     'name': full_name,
                     'phone': phone_number or "",
+                    'phone_no': phone_number or "",
                     'source': 'meta',
                     '__source__': 'meta',
                     '_source': 'meta',
@@ -672,9 +677,15 @@ class SyncMetaFormLeadsView(APIView):
                     'campaign_id': str(lead.get("campaign_id") or ""),
                     'campaign_name': lead.get("campaign_name") or "Meta Leads",
                     'form_id': str(form_id),
+                    'form_name': form_name,
                     'custom_questions': custom_questions,
                     'field_data': field_data
                 }
+
+                # Flatten custom questions into top-level keys
+                for qname, qval in custom_questions.items():
+                    if qname not in meta_payload:
+                        meta_payload[qname] = qval if isinstance(qval, str) else ", ".join(map(str, qval)) if isinstance(qval, list) else str(qval)
 
                 existing_record = CustomerRecord.objects.filter(
                     upload=upload,
@@ -687,6 +698,9 @@ class SyncMetaFormLeadsView(APIView):
                         data=meta_payload
                     )
                     synced_count += 1
+                else:
+                    existing_record.data = {**existing_record.data, **meta_payload}
+                    existing_record.save(update_fields=["data"])
 
                 if email or phone_number:
                     try:
@@ -695,9 +709,9 @@ class SyncMetaFormLeadsView(APIView):
                             payload=meta_payload,
                             default_source="meta",
                             initial_upload=upload,
-                            sub_source_type="meta_campaign",
-                            sub_source_id=str(lead.get("campaign_id") or form_id),
-                            sub_source_name=lead.get("campaign_name") or "Meta Leads",
+                            sub_source_type="meta_form",
+                            sub_source_id=str(form_id),
+                            sub_source_name=form_name,
                         )
                     except Exception:
                         pass

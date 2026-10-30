@@ -62,8 +62,23 @@ class CustomerSourceDeleteAPIView(APIView):
         sub_source_id = request.data.get("sub_source_id")
         if not source or not sub_source_id:
             return Response({"error": "Missing source or sub_source_id"}, status=status.HTTP_400_BAD_REQUEST)
-        from apps.campaigns.models import Contact
+        from apps.campaigns.models import Contact, CustomerRecord, CustomerUpload
+        from django.db.models import Q
+
         count, _ = Contact.objects.filter(owner=request.user, source=source, sub_source_id=sub_source_id).delete()
+        if source == "meta":
+            rec_count, _ = CustomerRecord.objects.filter(
+                upload__uploaded_by=request.user
+            ).filter(
+                Q(data__form_id=str(sub_source_id)) | Q(data__sub_source_id=str(sub_source_id))
+            ).delete()
+            CustomerUpload.objects.filter(
+                uploaded_by=request.user,
+                file_type="meta"
+            ).filter(
+                Q(file_name__icontains=str(sub_source_id)) | Q(records__isnull=True)
+            ).delete()
+            count += rec_count
         return Response({"deleted": count}, status=status.HTTP_200_OK)
 
 
@@ -75,12 +90,173 @@ class CustomerRecordListAPIView(APIView):
         audience_ids_str = request.query_params.get("audience_ids") or request.query_params.get("audience_id")
         columns_only = str(request.query_params.get("columns_only", "false")).lower() == "true"
         
-        from apps.campaigns.models import Contact
-        contacts_qs = Contact.objects.filter(owner=request.user)
+        from apps.campaigns.models import Contact, CustomerRecord
+        from django.db.models import Q
 
         source_param = request.query_params.get("source")
         sub_source_type_param = request.query_params.get("sub_source_type")
         sub_source_id_param = request.query_params.get("sub_source_id")
+
+        is_meta_form_query = (source_param == "meta") or (sub_source_type_param in ["meta_form", "meta_campaign"])
+        if is_meta_form_query and sub_source_id_param:
+            # Dedicated drill-down view for a specific Meta Instant Form
+            meta_records_qs = CustomerRecord.objects.filter(
+                upload__uploaded_by=request.user
+            ).filter(
+                Q(upload__file_type="meta") | Q(data__source="meta")
+            )
+            if sub_source_id_param != "meta_general":
+                meta_records_qs = meta_records_qs.filter(
+                    Q(data__form_id=str(sub_source_id_param)) |
+                    Q(data__sub_source_id=str(sub_source_id_param)) |
+                    Q(upload_id=int(sub_source_id_param) if str(sub_source_id_param).isdigit() else -1)
+                )
+
+            meta_records = list(meta_records_qs.order_by("-created_at")[:limit])
+
+            # Also check if any Contact rows exist with this form_id that might not be in CustomerRecord
+            contact_meta = list(Contact.objects.filter(owner=request.user, source="meta", sub_source_id=sub_source_id_param)[:limit])
+            existing_emails = {r.data.get("email") for r in meta_records if r.data.get("email")}
+
+            # Excluded internal/technical keys from dynamic columns
+            excluded_keys = {
+                "name", "full_name", "first_name", "last_name", "email", "phone", "phone_no", "phone_number",
+                "source", "_source", "__source__", "activity", "tags", "list", "score", "status",
+                "ad_id", "ad_name", "campaign_id", "campaign_name", "form_id", "form_name", "lead_id", "leadgen_id",
+                "field_data", "custom_questions", "__col_order__", "routing_logs", "sub_source_type",
+                "sub_source_id", "sub_source_name", "initial_upload", "initial_upload_id"
+            }
+
+            custom_fields = []
+            seen_custom = set()
+
+            # First discover custom questions in order of appearance
+            for rec in meta_records:
+                rdata = rec.data or {}
+                # 1. custom_questions dict
+                c_questions = rdata.get("custom_questions") or {}
+                if isinstance(c_questions, dict):
+                    for k in c_questions.keys():
+                        if k not in seen_custom and k.lower() not in excluded_keys:
+                            seen_custom.add(k)
+                            custom_fields.append(k)
+                # 2. field_data list
+                f_data = rdata.get("field_data") or []
+                if isinstance(f_data, list):
+                    for fld in f_data:
+                        fname = fld.get("name")
+                        if fname and fname not in seen_custom and fname.lower() not in excluded_keys:
+                            seen_custom.add(fname)
+                            custom_fields.append(fname)
+                # 3. top-level keys
+                for k in rdata.keys():
+                    if k not in seen_custom and k.lower() not in excluded_keys and not str(k).startswith("_"):
+                        seen_custom.add(k)
+                        custom_fields.append(k)
+
+            if not meta_records:
+                for c in contact_meta:
+                    for k in (c.attributes or {}).keys():
+                        if k not in seen_custom and k.lower() not in excluded_keys and not str(k).startswith("_"):
+                            seen_custom.add(k)
+                            custom_fields.append(k)
+
+            # Check whether email and phone are present across leads in this form
+            has_email = any(r.data.get("email") for r in meta_records) or any(c.email for c in contact_meta)
+            has_phone = any(r.data.get("phone") or r.data.get("phone_no") or r.data.get("phone_number") for r in meta_records) or any(c.phone for c in contact_meta)
+
+            col_order = ["name"]
+            if has_email: col_order.append("email")
+            if has_phone: col_order.append("phone_no")
+            col_order.extend(custom_fields)
+
+            meta_results = []
+            for rec in meta_records:
+                rdata = dict(rec.data or {})
+                # Unpack custom questions into top level
+                c_questions = rdata.get("custom_questions") or {}
+                if isinstance(c_questions, dict):
+                    for qk, qv in c_questions.items():
+                        if qk not in rdata:
+                            rdata[qk] = qv if isinstance(qv, str) else ", ".join(map(str, qv)) if isinstance(qv, list) else str(qv)
+                # Unpack field_data into top level
+                f_data = rdata.get("field_data") or []
+                if isinstance(f_data, list):
+                    for fld in f_data:
+                        fname = fld.get("name")
+                        fvals = fld.get("values") or []
+                        if fname and fname not in rdata and fvals:
+                            rdata[fname] = fvals[0] if len(fvals) == 1 else ", ".join(map(str, fvals))
+
+                custom_vals = {}
+                for k in custom_fields:
+                    val = rdata.get(k, "")
+                    if isinstance(val, (list, tuple)):
+                        custom_vals[k] = ", ".join(map(str, val))
+                    elif isinstance(val, dict):
+                        custom_vals[k] = ", ".join(f"{dk}: {dv}" for dk, dv in val.items())
+                    else:
+                        custom_vals[k] = str(val) if val is not None else ""
+
+                row_data = {
+                    "__col_order__": col_order,
+                    "name": rdata.get("name") or rdata.get("full_name") or "Unknown",
+                    "email": rdata.get("email") or "",
+                    "phone_no": rdata.get("phone") or rdata.get("phone_number") or rdata.get("phone_no") or "",
+                    "phone": rdata.get("phone") or rdata.get("phone_number") or rdata.get("phone_no") or "",
+                    "tags": rdata.get("tags") or [],
+                    "list": "General",
+                    "score": 50,
+                    "status": "Active",
+                    "source": "meta",
+                    "activity": "Meta Lead",
+                    **custom_vals
+                }
+                meta_results.append({
+                    "id": rec.id,
+                    "data": row_data,
+                    "created_at": rec.created_at.isoformat()
+                })
+
+            # Add any Contact rows not captured in CustomerRecord
+            for c in contact_meta:
+                if c.email and c.email in existing_emails:
+                    continue
+                attrs = dict(c.attributes or {})
+                custom_vals = {}
+                for k in custom_fields:
+                    val = attrs.get(k, "")
+                    if isinstance(val, (list, tuple)):
+                        custom_vals[k] = ", ".join(map(str, val))
+                    elif isinstance(val, dict):
+                        custom_vals[k] = ", ".join(f"{dk}: {dv}" for dk, dv in val.items())
+                    else:
+                        custom_vals[k] = str(val) if val is not None else ""
+
+                row_data = {
+                    "__col_order__": col_order,
+                    "name": c.name or c.email or "Unknown",
+                    "email": c.email or "",
+                    "phone_no": c.phone or "",
+                    "phone": c.phone or "",
+                    "tags": c.tags or [],
+                    "list": "General",
+                    "score": c.score,
+                    "status": c.status,
+                    "source": "meta",
+                    "activity": "Meta Lead",
+                    **custom_vals
+                }
+                meta_results.append({
+                    "id": str(c.id),
+                    "data": row_data,
+                    "created_at": c.created_at.isoformat()
+                })
+
+            return Response(meta_results)
+
+        # Standard CRM Contact querying
+        contacts_qs = Contact.objects.filter(owner=request.user)
 
         if source_param:
             if source_param == "imported":
@@ -90,7 +266,6 @@ class CustomerRecordListAPIView(APIView):
         if sub_source_type_param:
             contacts_qs = contacts_qs.filter(sub_source_type=sub_source_type_param)
         if sub_source_id_param:
-            from django.db.models import Q
             if sub_source_id_param == "manual":
                 contacts_qs = contacts_qs.filter(sub_source_type="manual")
             else:
@@ -475,29 +650,83 @@ class ContactHierarchyAPIView(APIView):
             if f["count"] > 0
         ]
 
-        # 3. Meta Leads
-        meta_list = (
-            contacts.filter(source="meta")
-            .values("sub_source_id", "sub_source_name")
-            .annotate(count=Count("id"))
-            .order_by("-count")
+        # 3. Meta Leads by Instant Form
+        from apps.ads.models import MetaLeadTrigger, MetaUserCredential
+        from apps.ads.services.meta_ads_service import MetaAdsService
+        from apps.campaigns.models import CustomerRecord
+        from django.db.models import Q
+
+        active_cred = MetaUserCredential.objects.filter(user=user, status='ACTIVE').first() or MetaUserCredential.objects.filter(status='ACTIVE').first()
+
+        meta_records = CustomerRecord.objects.filter(upload__uploaded_by=user).filter(
+            Q(upload__file_type="meta") | Q(data__source="meta")
         )
-        meta_items = [
-            {
-                "id": m["sub_source_id"] or "meta_general",
-                "name": m["sub_source_name"] or "Meta Campaign",
-                "count": m["count"],
-                "type": "meta_campaign",
-                "sub_source_type": "meta_campaign",
-            }
-            for m in meta_list
-            if m["count"] > 0
-        ]
+
+        form_counts: dict[str, int] = {}
+        form_names: dict[str, str] = {}
+
+        # 1. Tally from CustomerRecord
+        for r in meta_records:
+            rdata = r.data or {}
+            fid = str(rdata.get("form_id") or "")
+            fname = rdata.get("form_name") or ""
+            if not fid:
+                fid = "meta_general"
+                fname = fname or "General Meta Leads"
+            form_counts[fid] = form_counts.get(fid, 0) + 1
+            if fname and fname not in ["Meta Leads", "Meta Webhooks", "Meta Campaign"]:
+                form_names[fid] = fname
+
+        # 2. Tally from Contact (if any contact not already counted or has sub_source_id)
+        for c in contacts.filter(source="meta"):
+            fid = str(c.sub_source_id or "")
+            if not fid:
+                fid = "meta_general"
+            if fid not in form_counts:
+                form_counts[fid] = 1
+            fname = c.sub_source_name or ""
+            if fname and fname not in ["Meta Leads", "Meta Webhooks", "Meta Campaign"]:
+                form_names[fid] = fname
+
+        # 3. Include configured MetaLeadTriggers even if count is 0
+        triggers = MetaLeadTrigger.objects.filter(user=user, is_active=True).exclude(form_id="all")
+        for trig in triggers:
+            fid = str(trig.form_id)
+            if fid not in form_counts:
+                form_counts[fid] = 0
+            if trig.form_name and trig.form_name != "All Forms on this Page":
+                form_names[fid] = trig.form_name
+
+        # 4. Resolve form names from Meta Graph API if still generic or unknown
+        meta_items = []
+        for fid, count in form_counts.items():
+            name = form_names.get(fid)
+            if not name or name in ["Meta Leads", "Meta Webhooks", "Meta Campaign", f"Meta Form {fid}"]:
+                if fid != "meta_general" and active_cred:
+                    try:
+                        finfo = MetaAdsService.get_form_info(active_cred.access_token, fid)
+                        if finfo.get("name"):
+                            name = finfo["name"]
+                            form_names[fid] = name
+                    except Exception:
+                        pass
+            if not name:
+                name = "General Meta Leads" if fid == "meta_general" else f"Meta Form {fid}"
+
+            meta_items.append({
+                "id": fid,
+                "name": name,
+                "count": count,
+                "type": "meta_form",
+                "sub_source_type": "meta_form",
+            })
+
+        meta_items.sort(key=lambda x: x["count"], reverse=True)
 
         # Category level counts
         imported_total = contacts.exclude(source__in=["form", "meta"]).count()
         forms_total = contacts.filter(source="form").count()
-        meta_total = contacts.filter(source="meta").count()
+        meta_total = sum(item["count"] for item in meta_items)
 
         return Response({
             "categories": {

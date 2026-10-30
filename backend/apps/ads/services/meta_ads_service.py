@@ -231,6 +231,52 @@ class MetaAdsService:
         data = response.json()
         return data.get("data", [])
 
+    _form_info_cache: Dict[str, dict] = {}
+
+    @classmethod
+    def get_form_info(cls, access_token: str, form_id: str, page_id: Optional[str] = None) -> dict:
+        """
+        Fetches form details (id, name, questions) from Meta Graph API with in-memory caching.
+        """
+        if not form_id or form_id == "all":
+            return {"id": form_id, "name": "All Forms", "questions": []}
+
+        if form_id in cls._form_info_cache:
+            return cls._form_info_cache[form_id]
+
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
+            mock_res = {"id": form_id, "name": f"Mock Form {form_id}", "questions": []}
+            cls._form_info_cache[form_id] = mock_res
+            return mock_res
+
+        try:
+            token_to_use = access_token
+            if page_id:
+                ptoken = cls.get_page_access_token(access_token, str(page_id))
+                if ptoken:
+                    token_to_use = ptoken
+
+            endpoint = f"{cls.BASE_URL}/{form_id}"
+            response = requests.get(
+                endpoint,
+                params={
+                    "access_token": token_to_use,
+                    "fields": "id,name,questions,status,leads_count"
+                },
+                timeout=10
+            )
+            if response.ok:
+                data = response.json()
+                cls._form_info_cache[form_id] = data
+                return data
+            else:
+                logger.warning(f"Meta Graph error fetching form {form_id}: {response.text}")
+        except Exception as e:
+            logger.error(f"Failed to fetch form {form_id} details: {e}")
+
+        fallback = {"id": form_id, "name": f"Form {form_id}", "questions": []}
+        return fallback
+
     @classmethod
     def get_form_leads(cls, access_token: str, form_id: str, limit: int = 50) -> Dict[str, Any]:
         """
@@ -988,13 +1034,38 @@ class MetaAdsService:
                         else:
                             custom_questions[fname] = val if len(values) == 1 else values
 
+                final_form_id = str(lead_data.get("form_id") or form_id or "")
+                
+                # Dynamically resolve actual form name
+                form_name = None
+                if matching_triggers.exists():
+                    matched_trig = matching_triggers.filter(form_id=final_form_id).first() or matching_triggers.first()
+                    if matched_trig and matched_trig.form_name and matched_trig.form_name != "All Forms on this Page":
+                        form_name = matched_trig.form_name
+
+                if not form_name and final_form_id:
+                    trigger_obj = MetaLeadTrigger.objects.filter(form_id=final_form_id).first()
+                    if trigger_obj and trigger_obj.form_name and trigger_obj.form_name != "All Forms on this Page":
+                        form_name = trigger_obj.form_name
+
+                if not form_name and final_form_id and owner_user:
+                    user_cred = MetaUserCredential.objects.filter(user=owner_user, status='ACTIVE').first() or MetaUserCredential.objects.filter(status='ACTIVE').first()
+                    if user_cred:
+                        f_info = cls.get_form_info(user_cred.access_token, final_form_id, page_id=page_id)
+                        if f_info.get("name"):
+                            form_name = f_info["name"]
+
+                if not form_name:
+                    form_name = f"Meta Form {final_form_id}" if final_form_id else "Meta Leads"
+
                 campaign_name = lead_data.get("campaign_name") or f"Meta Campaign {campaign_id}" if campaign_id else "Meta Webhooks"
                 
-                # Ensure CustomerUpload has a non-null uploaded_by
+                # Dedicated CustomerUpload per Meta Form
+                upload_name = f"Meta Form: {form_name}"
                 upload_defaults = {"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
                 if owner_user:
                     upload, _ = CustomerUpload.objects.get_or_create(
-                        file_name="Meta Webhooks",
+                        file_name=upload_name,
                         uploaded_by=owner_user,
                         defaults=upload_defaults
                     )
@@ -1002,7 +1073,7 @@ class MetaAdsService:
                     from apps.accounts.models import User
                     fallback_user = User.objects.filter(is_superuser=True).first() or User.objects.first()
                     upload, _ = CustomerUpload.objects.get_or_create(
-                        file_name="Meta Webhooks",
+                        file_name=upload_name,
                         uploaded_by=fallback_user,
                         defaults=upload_defaults
                     )
@@ -1012,6 +1083,7 @@ class MetaAdsService:
                     'email': email or "",
                     'name': full_name,
                     'phone': phone_number or "",
+                    'phone_no': phone_number or "",
                     'source': 'meta',
                     '__source__': 'meta',
                     '_source': 'meta',
@@ -1020,10 +1092,16 @@ class MetaAdsService:
                     'ad_name': lead_data.get("ad_name") or "Meta Lead Form Ad",
                     'campaign_id': str(campaign_id or lead_data.get("campaign_id") or ""),
                     'campaign_name': campaign_name,
-                    'form_id': str(lead_data.get("form_id") or form_id or ""),
+                    'form_id': final_form_id,
+                    'form_name': form_name,
                     'custom_questions': custom_questions,
                     'field_data': field_data
                 }
+
+                # Flatten custom questions and additional fields directly into top-level of meta_payload
+                for qname, qval in custom_questions.items():
+                    if qname not in meta_payload:
+                        meta_payload[qname] = qval if isinstance(qval, str) else ", ".join(map(str, qval)) if isinstance(qval, list) else str(qval)
 
                 # Avoid duplicate entries for the same lead_id
                 existing_record = CustomerRecord.objects.filter(
@@ -1038,8 +1116,11 @@ class MetaAdsService:
                     )
                 else:
                     record = existing_record
+                    # Update data if fields were previously unflattened
+                    record.data = {**record.data, **meta_payload}
+                    record.save(update_fields=["data"])
 
-                # Upsert into Contact model
+                # Upsert into Contact model with sub_source_type="meta_form" and form_id
                 if owner_user and (email or phone_number):
                     try:
                         contact, _ = ContactService.upsert_contact(
@@ -1047,9 +1128,9 @@ class MetaAdsService:
                             payload=meta_payload,
                             default_source="meta",
                             initial_upload=upload,
-                            sub_source_type="meta_campaign",
-                            sub_source_id=campaign_id or form_id or "meta_lead",
-                            sub_source_name=campaign_name,
+                            sub_source_type="meta_form",
+                            sub_source_id=final_form_id or "meta_lead",
+                            sub_source_name=form_name,
                         )
                         SystemEvent.objects.create(
                             event_type=SystemEvent.EventType.WEBHOOK,

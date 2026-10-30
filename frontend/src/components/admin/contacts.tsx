@@ -28,21 +28,55 @@ function val(data: Record<string, unknown>, keys: string[], fallback = "") {
   return fallback;
 }
 
+function formatCellValue(val: unknown): string {
+  if (val === undefined || val === null) return "";
+  if (typeof val === "string") return val.trim();
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) {
+    return val.map(item => {
+      if (typeof item === "object" && item !== null) {
+        if ("values" in item && Array.isArray((item as any).values)) {
+          return (item as any).values.join(", ");
+        }
+        return JSON.stringify(item);
+      }
+      return String(item);
+    }).join(", ");
+  }
+  if (typeof val === "object") {
+    if ("values" in val && Array.isArray((val as any).values)) {
+      return (val as any).values.join(", ");
+    }
+    try {
+      const entries = Object.entries(val as Record<string, unknown>);
+      if (entries.length === 0) return "";
+      return entries.map(([k, v]) => `${k}: ${v}`).join(", ");
+    } catch {
+      return "";
+    }
+  }
+  return String(val);
+}
+
 function getFieldValue(data: Record<string, unknown>, col: string): string {
   if (!data) return "";
   // 1. Exact match
-  if (data[col] !== undefined && data[col] !== null && String(data[col]).trim() !== "") {
-    return String(data[col]);
+  if (data[col] !== undefined && data[col] !== null) {
+    const formatted = formatCellValue(data[col]);
+    if (formatted !== "") return formatted;
   }
 
   const colLower = col.toLowerCase().trim();
+  const colSnake = colLower.replace(/[\s-]+/g, "_");
 
-  // 2. Case-insensitive match
+  // 2. Case-insensitive or snake_case match
   for (const key of Object.keys(data)) {
-    if (key.toLowerCase().trim() === colLower) {
+    const kLower = key.toLowerCase().trim();
+    if (kLower === colLower || kLower === colSnake || kLower.replace(/_/g, " ") === colLower) {
       const v = data[key];
-      if (v !== undefined && v !== null && String(v).trim() !== "") {
-        return String(v);
+      if (v !== undefined && v !== null) {
+        const formatted = formatCellValue(v);
+        if (formatted !== "") return formatted;
       }
     }
   }
@@ -138,25 +172,11 @@ export function AdminContacts() {
   const normalized = useMemo(() => rows.map(row => ({ row, contact: normalize(row) })), [rows]);
   const allTags = useMemo(() => Array.from(new Set(normalized.flatMap(({ contact }) => contact.tags))).sort(), [normalized]);
 
-  // Derive column keys from actual data — enforcing compulsory Name, Email, Phone Number, plus dynamic custom columns
+  // Derive column keys from actual data — adapting dynamically to the fields in that specific form or list
   const dynamicColumns = useMemo(() => {
-    const mandatory = ["Name", "Email", "Phone Number"];
-    if (!rows.length) return mandatory;
+    if (!rows.length) return ["Name", "Email", "Phone Number"];
 
-    const extraCols: string[] = [];
-    const seenNormalized = new Set<string>();
-
-    const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
-    let cols: string[] = [];
-    if (orderRow) {
-      cols = (orderRow.data.__col_order__ as string[]);
-    } else {
-      for (const row of rows) {
-        for (const key of Object.keys(row.data)) {
-          if (!cols.includes(key)) cols.push(key);
-        }
-      }
-    }
+    const isMetaOrSubItem = Boolean(selectedSubItem) || selectedCategory === "meta";
 
     const canonicalStems = [
       "name", "full_name", "fullname", "customer_name", "customername", "client_name", "clientname",
@@ -164,20 +184,47 @@ export function AdminContacts() {
       "email", "email_address", "emailaddress", "mail", "mail_id", "mailid",
       "phone", "phone_no", "phoneno", "phone_number", "phonenumber", "mobile", "mobile_no", "mobileno",
       "mobile_number", "mobilenumber", "number", "contact", "contact_no", "contactno", "contact_number", "contactnumber",
-      "tags", "list", "score", "status", "source", "activity", "routing_logs"
+      "tags", "list", "score", "status", "source", "_source", "__source__", "activity", "routing_logs",
+      "field_data", "custom_questions", "ad_id", "ad_name", "campaign_id", "campaign_name", "form_id", "form_name",
+      "lead_id", "leadgen_id", "sub_source_type", "sub_source_id", "sub_source_name", "initial_upload", "initial_upload_id"
     ];
 
-    for (const col of cols) {
+    const orderRow = rows.find(r => Array.isArray(r.data.__col_order__));
+    let rawCols: string[] = [];
+    if (orderRow) {
+      rawCols = (orderRow.data.__col_order__ as string[]);
+    } else {
+      for (const row of rows) {
+        for (const key of Object.keys(row.data)) {
+          if (!rawCols.includes(key)) rawCols.push(key);
+        }
+      }
+    }
+
+    const hasName = rows.some(r => Boolean(getFieldValue(r.data, "Name")));
+    const hasEmail = rows.some(r => Boolean(getFieldValue(r.data, "Email")));
+    const hasPhone = rows.some(r => Boolean(getFieldValue(r.data, "Phone Number")));
+
+    const baseCols: string[] = [];
+    if (hasName || !isMetaOrSubItem) baseCols.push("Name");
+    if (hasEmail || !isMetaOrSubItem) baseCols.push("Email");
+    if (hasPhone || !isMetaOrSubItem) baseCols.push("Phone Number");
+
+    const extraCols: string[] = [];
+    const seenNormalized = new Set<string>(["name", "email", "phone_no", "phone", "phone number"]);
+
+    for (const col of rawCols) {
       const k = col.toLowerCase().trim();
-      if (!k.startsWith("_") && !k.startsWith("__") && !canonicalStems.includes(k) && !canonicalStems.includes(k.replace(/[\s_]+/g, ""))) {
+      const stripped = k.replace(/[\s_]+/g, "");
+      if (!k.startsWith("_") && !canonicalStems.includes(k) && !canonicalStems.includes(stripped)) {
         if (!seenNormalized.has(k)) {
           seenNormalized.add(k);
           extraCols.push(col);
         }
       }
     }
-    return [...mandatory, ...extraCols];
-  }, [rows]);
+    return [...baseCols, ...extraCols];
+  }, [rows, selectedSubItem, selectedCategory]);
 
   const contacts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -498,10 +545,15 @@ export function AdminContacts() {
             onClick={() => { setSelectedSubItem(null); setSelected(new Set()); }}
             className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors"
           >
-            <span className="text-lg leading-none mt-[-2px]">&larr;</span> Back to {selectedCategory === "imported" ? "Files" : selectedCategory === "forms" ? "Forms" : "Ad Campaigns"}
+            <span className="text-lg leading-none mt-[-2px]">&larr;</span> Back to {selectedCategory === "imported" ? "Files" : selectedCategory === "forms" ? "Forms" : "Meta Forms"}
           </button>
           <span className="mx-3 text-slate-300">|</span>
           <span className="text-sm font-bold text-slate-800">{selectedSubItem.name}</span>
+          {selectedCategory === "meta" && (
+            <span className="ml-3 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 px-2.5 py-0.5 text-xs font-semibold">
+              {selectedSubItem.count} {selectedSubItem.count === 1 ? "lead" : "leads"}
+            </span>
+          )}
         </div>
       )}
 
@@ -554,15 +606,21 @@ export function AdminContacts() {
                   </button>
                 )}
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                    {selectedCategory === "imported" ? <FileText size={24} /> : selectedCategory === "forms" ? <Tags size={24} /> : <Eye size={24} />}
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+                    selectedCategory === "imported" ? "bg-blue-50 text-blue-600" :
+                    selectedCategory === "forms" ? "bg-purple-50 text-purple-600" :
+                    "bg-indigo-50 text-indigo-600"
+                  }`}>
+                    {selectedCategory === "imported" ? <FileText size={24} /> : selectedCategory === "forms" ? <Tags size={24} /> : <Megaphone size={24} />}
                   </div>
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                    {item.count} contacts
+                    {item.count} {selectedCategory === "meta" ? (item.count === 1 ? "lead" : "leads") : "contacts"}
                   </span>
                 </div>
                 <h3 className="font-bold text-slate-800 line-clamp-2 leading-snug pr-8" title={item.name}>{item.name}</h3>
-                <p className="mt-2 text-xs font-medium text-slate-400 truncate">{item.type === "manual" ? "Manual Contacts" : selectedCategory === "imported" ? "Imported CSV / Excel" : selectedCategory === "forms" ? "Form Leads" : "Meta Leads"}</p>
+                <p className="mt-2 text-xs font-medium text-slate-400 truncate">
+                  {item.type === "manual" ? "Manual Contacts" : selectedCategory === "imported" ? "Imported CSV / Excel" : selectedCategory === "forms" ? "Form Leads" : `Meta Instant Form${item.id && item.id !== "meta_general" ? ` · #${item.id}` : ""}`}
+                </p>
               </div>
             ))}
             {!((selectedCategory === "imported" ? hierarchyQuery.data?.categories?.imported?.items :
@@ -658,7 +716,7 @@ export function AdminContacts() {
 
       {/* ── Modals ── */}
       <AnimatePresence>
-        {viewing && <ContactDetails contact={viewing.contact} onClose={() => setViewing(null)} onEdit={() => beginEdit(viewing.row)} />}
+        {viewing && <ContactDetails contact={viewing.contact} row={viewing.row} onClose={() => setViewing(null)} onEdit={() => beginEdit(viewing.row)} />}
         {editorOpen && <ContactEditor editing={editing !== null} form={form} pending={save.isPending} setForm={setForm} tagOptions={tagOptions} setTagOptions={setTagOptions} onClose={() => setEditorOpen(false)} onSubmit={() => save.mutate()} />}
         {isCreateGroupOpen && (
           <CreateGroupModal
@@ -817,13 +875,58 @@ function CreateGroupModal({ name, pending, onNameChange, onClose, onSubmit }: {
   );
 }
 
-function ContactDetails({ contact, onClose, onEdit }: { contact: Contact; onClose: () => void; onEdit: () => void }) {
+function ContactDetails({ contact, row, onClose, onEdit }: { contact: Contact; row?: RecordRow; onClose: () => void; onEdit: () => void }) {
+  const customEntries = useMemo(() => {
+    if (!row?.data) return [];
+    const excluded = new Set([
+      "name", "full_name", "first_name", "last_name", "email", "phone", "phone_no", "phone_number",
+      "source", "_source", "__source__", "activity", "tags", "list", "score", "status",
+      "field_data", "custom_questions", "__col_order__", "routing_logs", "sub_source_type",
+      "sub_source_id", "sub_source_name", "initial_upload", "initial_upload_id"
+    ]);
+    const res: { label: string; value: string }[] = [];
+    for (const [k, v] of Object.entries(row.data)) {
+      if (!k.startsWith("_") && !excluded.has(k.toLowerCase())) {
+        const valStr = formatCellValue(v);
+        if (valStr) {
+          const label = k.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+          res.push({ label, value: valStr });
+        }
+      }
+    }
+    return res;
+  }, [row]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-blue-600">Contact details</p><h2 className="mt-1 text-2xl font-black text-slate-950">{contact.name}</h2></div><button className="icon-button" onClick={onClose}><X /></button></div>
-        <dl className="grid gap-5 p-6 sm:grid-cols-2"><Detail label="Email" value={contact.email} /><Detail label="Phone number" value={contact.phone_no || "—"} /><Detail label="Status" value={contact.status} /><Detail label="List" value={contact.list} /><div className="sm:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-slate-400">Tags</dt><dd className="mt-2 flex flex-wrap gap-2">{contact.tags.length ? contact.tags.map(tag => <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700" key={tag}>{tag}</span>) : "—"}</dd></div><Detail label="Activity" value={contact.activity} /></dl>
-        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4"><button className="secondary-button" onClick={onClose}>Close</button><button className="primary-button min-h-10 px-5" onClick={onEdit}><Pencil size={16} />Edit contact</button></div>
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-blue-600">Contact details</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950">{contact.name}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose}><X /></button>
+        </div>
+        <dl className="grid gap-5 p-6 sm:grid-cols-2 max-h-[60vh] overflow-y-auto">
+          <Detail label="Email" value={contact.email} />
+          <Detail label="Phone number" value={contact.phone_no || "—"} />
+          <Detail label="Status" value={contact.status} />
+          <Detail label="List" value={contact.list} />
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-bold uppercase tracking-wider text-slate-400">Tags</dt>
+            <dd className="mt-2 flex flex-wrap gap-2">
+              {contact.tags.length ? contact.tags.map(tag => <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700" key={tag}>{tag}</span>) : "—"}
+            </dd>
+          </div>
+          <Detail label="Activity" value={contact.activity} />
+          {customEntries.map(entry => (
+            <Detail key={entry.label} label={entry.label} value={entry.value} />
+          ))}
+        </dl>
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button className="secondary-button" onClick={onClose}>Close</button>
+          <button className="primary-button min-h-10 px-5" onClick={onEdit}><Pencil size={16} />Edit contact</button>
+        </div>
       </motion.div>
     </div>
   );
