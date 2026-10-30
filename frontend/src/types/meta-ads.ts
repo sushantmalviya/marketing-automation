@@ -86,6 +86,18 @@ export interface MetaLeadForm {
   questions?: Array<{ key: string; label: string; type: string }>;
 }
 
+export interface MetaLeadTrigger {
+  id: string;
+  page_id: string;
+  page_name: string;
+  form_id: string;
+  form_name: string;
+  is_active: boolean;
+  last_lead_at?: string | null;
+  leads_count: number;
+  created_at?: string;
+}
+
 export interface MetaInsights {
   date_start?: string;
   date_stop?: string;

@@ -8,6 +8,7 @@ import type {
   MetaObjectStatus,
   MetaPage,
   MetaLeadForm,
+  MetaLeadTrigger,
   WebhookLead
 } from "@/types/meta-ads";
 
@@ -108,5 +109,17 @@ export const metaAdsService = {
         headers: { "Content-Type": "multipart/form-data" }
       })
     );
+  },
+  async getTriggers() {
+    return unwrap<MetaLeadTrigger[]>(await apiClient.get("/api/meta-ads/meta/triggers/"));
+  },
+  async createTrigger(payload: { page_id: string; page_name?: string; form_id?: string; form_name?: string; is_active?: boolean }) {
+    return unwrap<MetaLeadTrigger>(await apiClient.post("/api/meta-ads/meta/triggers/", payload));
+  },
+  async updateTrigger(id: string, payload: { is_active: boolean }) {
+    return unwrap<MetaLeadTrigger>(await apiClient.patch(`/api/meta-ads/meta/triggers/${id}/`, payload));
+  },
+  async deleteTrigger(id: string) {
+    return unwrap<{ message?: string }>(await apiClient.delete(`/api/meta-ads/meta/triggers/${id}/`));
   },
 };

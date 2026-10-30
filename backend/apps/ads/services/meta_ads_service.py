@@ -73,7 +73,7 @@ class MetaAdsService:
             }
             
         # Complete required permissions for Ads management, Insights, Pages, and Lead Retrieval
-        scopes = "ads_management,ads_read,read_insights,leads_retrieval,pages_show_list,pages_read_engagement,pages_manage_ads"
+        scopes = "ads_management,ads_read,read_insights,leads_retrieval,pages_show_list,pages_read_engagement,pages_manage_ads,pages_manage_metadata"
         return {
             "auth_url": (
                 f"https://www.facebook.com/{MetaAdsService.GRAPH_API_VERSION}/dialog/oauth?"
@@ -290,6 +290,29 @@ class MetaAdsService:
         )
         MetaAdsService._handle_api_response(response)
         return response.json()
+
+    @staticmethod
+    def unsubscribe_page_from_webhooks(page_access_token: str, page_id: str) -> Dict[str, Any]:
+        """
+        Unsubscribes the Facebook Page from the app's webhooks.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (page_access_token and page_access_token.startswith("mock_")):
+            return {"success": True, "message": "Mock page unsubscribed successfully"}
+
+        endpoint = f"{MetaAdsService.BASE_URL}/{page_id}/subscribed_apps"
+        response = requests.delete(
+            endpoint,
+            params={
+                "access_token": page_access_token,
+                "subscribed_fields": "leadgen"
+            }
+        )
+        try:
+            MetaAdsService._handle_api_response(response)
+            return response.json()
+        except Exception as e:
+            logger.warning(f"Failed to unsubscribe page {page_id} from webhooks: {e}")
+            return {"success": False, "error": str(e)}
 
     @staticmethod
     def search_targeting_interests(access_token: str, query: str) -> List[Dict[str, Any]]:
@@ -924,6 +947,18 @@ class MetaAdsService:
                 if not leadgen_id:
                     continue
 
+                # Filter by active MetaLeadTrigger if triggers are registered for this page
+                from apps.ads.models import MetaLeadTrigger
+                from django.db.models import Q
+                page_triggers = MetaLeadTrigger.objects.filter(page_id=page_id, is_active=True)
+                if page_triggers.exists():
+                    matching_triggers = page_triggers.filter(Q(form_id="all") | Q(form_id=form_id))
+                    if not matching_triggers.exists():
+                        logger.info(f"Skipping lead {leadgen_id}: form {form_id} does not match active triggers on page {page_id}")
+                        continue
+                else:
+                    matching_triggers = MetaLeadTrigger.objects.none()
+
                 lead_data, owner_user = cls.fetch_lead_with_credentials_fallback(leadgen_id, page_id=page_id)
                 if not lead_data:
                     logger.error(f"Could not retrieve lead {leadgen_id} details from Meta API.")
@@ -1025,6 +1060,14 @@ class MetaAdsService:
                         )
                     except Exception as c_err:
                         logger.error(f"Failed to upsert Contact or SystemEvent for lead {leadgen_id}: {c_err}")
+
+                # Update trigger stats if matched
+                if matching_triggers.exists():
+                    from django.utils import timezone
+                    for trig in matching_triggers:
+                        trig.leads_count += 1
+                        trig.last_lead_at = timezone.now()
+                        trig.save(update_fields=["leads_count", "last_lead_at"])
 
                 results.append({"leadgen_id": leadgen_id, "email": email, "name": full_name})
 

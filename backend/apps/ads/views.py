@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from .services.meta_ads_service import MetaAdsService, MetaTokenExpiredError
 import hmac
 import hashlib
-from .models import MetaUserCredential, MetaAdAccount, MetaPixelSettings, MetaCapiEventLog
+from .models import MetaUserCredential, MetaAdAccount, MetaPixelSettings, MetaCapiEventLog, MetaLeadTrigger
 from django.http import HttpResponse
 from django.conf import settings
 from django.db import models
@@ -740,3 +740,148 @@ class UploadMetaMediaView(APIView):
             return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaLeadTriggerListView(APIView):
+    """
+    List and create n8n-style Meta Lead Ads triggers for the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        triggers = MetaLeadTrigger.objects.filter(user=request.user)
+        data = [
+            {
+                "id": str(t.id),
+                "page_id": t.page_id,
+                "page_name": t.page_name,
+                "form_id": t.form_id,
+                "form_name": t.form_name,
+                "is_active": t.is_active,
+                "last_lead_at": t.last_lead_at.isoformat() if t.last_lead_at else None,
+                "leads_count": t.leads_count,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in triggers
+        ]
+        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        try:
+            page_id = str(request.data.get("page_id") or "").strip()
+            page_name = str(request.data.get("page_name") or page_id).strip()
+            form_id = str(request.data.get("form_id") or "all").strip()
+            form_name = str(request.data.get("form_name") or ("All Forms" if form_id == "all" else form_id)).strip()
+            is_active = request.data.get("is_active", True)
+
+            if not page_id:
+                return Response(
+                    {"status": "error", "message": "page_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Retrieve Page Access Token
+            credential = MetaUserCredential.objects.filter(user=request.user).first()
+            if not credential:
+                return Response(
+                    {"status": "error", "message": "Meta account not connected. Please connect your Facebook account first."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            page_token = MetaAdsService.get_page_access_token(credential.access_token, page_id)
+            if not page_token:
+                page_token = credential.access_token
+
+            # Subscribe page on Meta Graph API
+            sub_res = MetaAdsService.subscribe_page_to_webhooks(page_token, page_id)
+
+            # Create or update trigger
+            trigger, created = MetaLeadTrigger.objects.update_or_create(
+                user=request.user,
+                page_id=page_id,
+                form_id=form_id,
+                defaults={
+                    "page_name": page_name,
+                    "page_access_token": page_token,
+                    "form_name": form_name,
+                    "is_active": bool(is_active),
+                }
+            )
+
+            return Response({
+                "status": "success",
+                "message": f"Lead Ads trigger {'created' if created else 'updated'} successfully.",
+                "data": {
+                    "id": str(trigger.id),
+                    "page_id": trigger.page_id,
+                    "page_name": trigger.page_name,
+                    "form_id": trigger.form_id,
+                    "form_name": trigger.form_name,
+                    "is_active": trigger.is_active,
+                    "leads_count": trigger.leads_count,
+                    "meta_subscription": sub_res
+                }
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaLeadTriggerDetailView(APIView):
+    """
+    Toggle or delete a specific Meta Lead Ads trigger.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            if "is_active" in request.data:
+                trigger.is_active = bool(request.data["is_active"])
+                trigger.save(update_fields=["is_active"])
+
+                # If deactivated, check if any OTHER active trigger uses this page
+                if not trigger.is_active:
+                    other_active = MetaLeadTrigger.objects.filter(
+                        page_id=trigger.page_id,
+                        is_active=True
+                    ).exclude(id=trigger.id).exists()
+                    if not other_active:
+                        MetaAdsService.unsubscribe_page_from_webhooks(trigger.page_access_token, trigger.page_id)
+                else:
+                    # Reactivated: ensure subscribed
+                    MetaAdsService.subscribe_page_to_webhooks(trigger.page_access_token, trigger.page_id)
+
+            return Response({
+                "status": "success",
+                "message": "Trigger updated.",
+                "data": {
+                    "id": str(trigger.id),
+                    "is_active": trigger.is_active
+                }
+            }, status=status.HTTP_200_OK)
+        except MetaLeadTrigger.DoesNotExist:
+            return Response({"status": "error", "message": "Trigger not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        try:
+            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            page_id = trigger.page_id
+            page_token = trigger.page_access_token
+            trigger.delete()
+
+            # Clean up subscription if no other active triggers on this page
+            other_active = MetaLeadTrigger.objects.filter(page_id=page_id, is_active=True).exists()
+            if not other_active:
+                MetaAdsService.unsubscribe_page_from_webhooks(page_token, page_id)
+
+            return Response({"status": "success", "message": "Trigger deleted."}, status=status.HTTP_200_OK)
+        except MetaLeadTrigger.DoesNotExist:
+            return Response({"status": "error", "message": "Trigger not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

@@ -92,3 +92,27 @@ class MetaCapiEventLog(TimeStampedUUIDModel):
         db_table = "ads_meta_capi_event_logs"
 
 
+class MetaLeadTrigger(TimeStampedUUIDModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="meta_lead_triggers"
+    )
+    page_id = models.CharField(max_length=255)
+    page_name = models.CharField(max_length=255)
+    page_access_token = models.TextField()
+    form_id = models.CharField(max_length=255, default="all")  # "all" or specific form_id
+    form_name = models.CharField(max_length=255, default="All Forms")
+    is_active = models.BooleanField(default=True)
+    last_lead_at = models.DateTimeField(null=True, blank=True)
+    leads_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "ads_meta_lead_triggers"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.page_name} - {self.form_name} ({'Active' if self.is_active else 'Inactive'})"
+
+
+

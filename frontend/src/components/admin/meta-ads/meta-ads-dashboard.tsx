@@ -21,6 +21,7 @@ import { CampaignCreationStep } from "./CampaignCreationStep";
 import { AdSetCreationStep } from "./AdSetCreationStep";
 import { AdCreationStep } from "./AdCreationStep";
 import { CampaignUnifiedReviewStep } from "./CampaignUnifiedReviewStep";
+import { MetaLeadTriggerNode } from "./MetaLeadTriggerNode";
 
 const LocationTargetingMap = dynamic(
   () => import("./LocationTargetingMap"),
@@ -1265,6 +1266,12 @@ function LeadSyncTab() {
 
   return (
     <div className="space-y-6">
+      {/* n8n-Style Facebook Lead Ads Trigger Node */}
+      <MetaLeadTriggerNode
+        onSyncForm={(formId) => syncMutation.mutate(formId)}
+        isSyncing={syncMutation.isPending}
+      />
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Webhook Configuration Information */}
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

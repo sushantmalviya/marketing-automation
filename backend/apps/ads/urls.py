@@ -21,7 +21,9 @@ from .views import (
     MetaPagesListView,
     MetaPageLeadFormsView,
     MetaSubscribePageWebhookView,
-    MetaTargetingSearchInterestView
+    MetaTargetingSearchInterestView,
+    MetaLeadTriggerListView,
+    MetaLeadTriggerDetailView,
 )
 
 urlpatterns = [
@@ -32,6 +34,8 @@ urlpatterns = [
     path('meta/pages/', MetaPagesListView.as_view(), name='meta_pages_list'),
     path('meta/pages/<str:page_id>/forms/', MetaPageLeadFormsView.as_view(), name='meta_page_lead_forms'),
     path('meta/pages/<str:page_id>/subscribe/', MetaSubscribePageWebhookView.as_view(), name='meta_subscribe_page_webhook'),
+    path('meta/triggers/', MetaLeadTriggerListView.as_view(), name='meta_lead_triggers'),
+    path('meta/triggers/<uuid:pk>/', MetaLeadTriggerDetailView.as_view(), name='meta_lead_trigger_detail'),
     path('meta/targeting/search/', MetaTargetingSearchInterestView.as_view(), name='meta_targeting_search'),
     path('meta/insights/', MetaAdInsightsView.as_view(), name='meta_ad_insights'),
     path('meta/campaigns/create/', CreateMetaCampaignView.as_view(), name='create_meta_campaign'),
