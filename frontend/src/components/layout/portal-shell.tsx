@@ -496,9 +496,9 @@ export function PortalShell({ rolePath, children }: { rolePath: string; children
 
         <motion.div
           key={pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
           className="admin-page-transition p-4 sm:p-6 lg:p-8 flex-1 w-full max-w-full font-sans text-[15px] text-slate-800 dark:text-slate-200"
         >
           {children}

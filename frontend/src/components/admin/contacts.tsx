@@ -968,7 +968,7 @@ function ContactEditor({ editing, form, pending, setForm, tagOptions, setTagOpti
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4 backdrop-blur-sm">
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4 backdrop-blur-sm">
       <motion.form initial={{ opacity: 0, scale: .96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} className="max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white shadow-2xl" onSubmit={e => { e.preventDefault(); onSubmit(); }}>
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-blue-600">Audience workspace</p><h2 className="mt-1 text-2xl font-black">{editing ? "Edit" : "Add"} contact</h2></div><button type="button" className="icon-button" onClick={onClose}><X /></button></div>
         <div className="grid gap-4 p-6 sm:grid-cols-2">

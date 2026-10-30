@@ -296,8 +296,31 @@ html.dark .bi-textarea:focus { border-color:#a855f7; box-shadow:0 0 0 3px rgb(16
   background: #f9fafb;
   font-size: 14px;
 }
-.admin-motion-shell main { isolation:isolate; }
-.admin-motion-shell .admin-page-transition { min-height:100%; }
+.admin-motion-shell main {
+  isolation: auto;
+}
+.admin-motion-shell .admin-page-transition {
+  min-height: 100%;
+  transform: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL MODAL BACKDROP STANDARDS
+   Ensures every modal popup dims and blurs 100% of the viewport (including sidebar & header)
+   ═══════════════════════════════════════════════════════════ */
+/* Ensure all full-screen modal overlays sit unconditionally above the sidebar (z-20) and header (z-10) */
+div[class*="fixed"][class*="inset-0"][class*="z-50"],
+div[class*="fixed"][class*="inset-0"][class*="z-[50]"],
+div[class*="fixed"][class*="inset-0"][class*="z-[60]"] {
+  z-index: 60 !important;
+}
+
+/* Premium frosted glass backdrop blur for all full-screen modals across the entire app */
+div[class*="fixed"][class*="inset-0"][class*="backdrop-blur"],
+div[class*="fixed"][class*="inset-0"] > [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
+}
 .admin-motion-shell .sb-nav-link {
   min-height: 42px;
   border-radius: 10px;
