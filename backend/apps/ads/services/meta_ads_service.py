@@ -172,10 +172,30 @@ class MetaAdsService:
         data = response.json()
         return data.get("data", [])
 
-    @staticmethod
-    def get_page_lead_forms(page_token_or_user_token: str, page_id: str) -> List[Dict[str, Any]]:
+    # Alias for convenience and backward compatibility
+    get_pages = get_user_pages
+
+    @classmethod
+    def get_page_access_token(cls, user_access_token: str, page_id: str) -> Optional[str]:
+        """
+        Retrieves the Page Access Token for a specific Page ID using the user's access token.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (user_access_token and user_access_token.startswith("mock_")):
+            return "mock_page_token"
+        try:
+            pages = cls.get_pages(user_access_token)
+            for page in pages:
+                if str(page.get("id")) == str(page_id):
+                    return page.get("access_token")
+        except Exception as e:
+            logger.warning(f"Failed to get page access token for page {page_id}: {e}")
+        return None
+
+    @classmethod
+    def get_page_lead_forms(cls, page_token_or_user_token: str, page_id: str) -> List[Dict[str, Any]]:
         """
         Fetch Instant Forms (Lead Forms) created under a specific Facebook Page.
+        Automatically resolves Page Access Token if a user token was provided.
         """
         if getattr(settings, 'META_MOCK_MODE', False) or (page_token_or_user_token and page_token_or_user_token.startswith("mock_")):
             return [
@@ -187,16 +207,70 @@ class MetaAdsService:
                 }
             ]
 
+        # First try with the provided token
         response = requests.get(
-            f"{MetaAdsService.BASE_URL}/{page_id}/leadgen_forms",
+            f"{cls.BASE_URL}/{page_id}/leadgen_forms",
             params={
                 "access_token": page_token_or_user_token,
                 "fields": "id,name,status,created_time,leads_count,questions",
             }
         )
-        MetaAdsService._handle_api_response(response)
+        if not response.ok:
+            # If failed (e.g. #190 requires Page Access Token), try resolving page token
+            page_token = cls.get_page_access_token(page_token_or_user_token, page_id)
+            if page_token and page_token != page_token_or_user_token:
+                response = requests.get(
+                    f"{cls.BASE_URL}/{page_id}/leadgen_forms",
+                    params={
+                        "access_token": page_token,
+                        "fields": "id,name,status,created_time,leads_count,questions",
+                    }
+                )
+
+        cls._handle_api_response(response)
         data = response.json()
         return data.get("data", [])
+
+    @classmethod
+    def get_form_leads(cls, access_token: str, form_id: str, limit: int = 50) -> Dict[str, Any]:
+        """
+        Fetch leads submitted for a specific Leadgen Form.
+        """
+        if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
+            return {
+                "data": [
+                    {
+                        "id": "mock_lead_1",
+                        "created_time": "2026-10-28T05:41:02+0000",
+                        "field_data": [
+                            {"name": "full_name", "values": ["Mock Lead User"]},
+                            {"name": "email", "values": ["mock_lead@example.com"]},
+                            {"name": "phone_number", "values": ["+1234567890"]}
+                        ]
+                    }
+                ]
+            }
+
+        endpoint = f"{cls.BASE_URL}/{form_id}/leads"
+        params = {
+            "access_token": access_token,
+            "fields": "id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name",
+            "limit": limit
+        }
+        try:
+            response = requests.get(endpoint, params=params)
+            if not response.ok:
+                err_msg = response.text
+                try:
+                    err_msg = response.json().get("error", {}).get("message", err_msg)
+                except Exception:
+                    pass
+                logger.error(f"Error fetching leads for form {form_id}: {err_msg}")
+                return {"data": [], "error": err_msg}
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error fetching form leads {form_id}: {e}")
+            return {"data": [], "error": str(e)}
 
     @staticmethod
     def subscribe_page_to_webhooks(page_access_token: str, page_id: str) -> Dict[str, Any]:
@@ -751,11 +825,210 @@ class MetaAdsService:
                 "fields": "id,created_time,ad_id,ad_name,form_id,field_data,campaign_id,campaign_name"
             }
             response = requests.get(endpoint, params=params)
-            response.raise_for_status()
+            if not response.ok:
+                err_msg = response.text
+                err_code = None
+                try:
+                    err_json = response.json().get('error', {})
+                    err_msg = err_json.get('message', err_msg)
+                    err_code = err_json.get('code')
+                except Exception:
+                    pass
+                logger.warning(f"Meta Graph error fetching lead {leadgen_id} (code {err_code}): {err_msg}")
+                return {"error": err_msg, "code": err_code}
             return response.json()
         except requests.exceptions.RequestException as e:
-            # Log the error appropriately in production
+            logger.error(f"Network error fetching lead {leadgen_id}: {e}")
             return {"error": str(e)}
+
+    @classmethod
+    def fetch_lead_with_credentials_fallback(cls, leadgen_id: str, page_id: Optional[str] = None):
+        """
+        Attempts to fetch lead details using all available active credentials and page access tokens.
+        Returns tuple of (lead_data_dict, user_owner).
+        """
+        from apps.ads.models import MetaUserCredential
+
+        active_creds = list(MetaUserCredential.objects.filter(status='ACTIVE').select_related('user'))
+        if not active_creds:
+            logger.error("No active MetaUserCredential found in system.")
+            return None, None
+
+        # Strategy 1: If page_id is given, try resolving the Page Access Token first
+        if page_id:
+            for cred in active_creds:
+                try:
+                    page_token = cls.get_page_access_token(cred.access_token, str(page_id))
+                    if page_token:
+                        lead_data = cls.get_lead_details(page_token, leadgen_id)
+                        if "error" not in lead_data and lead_data.get("field_data") is not None:
+                            logger.info(f"Successfully fetched lead {leadgen_id} using page token for page {page_id}")
+                            return lead_data, cred.user
+                except Exception as e:
+                    logger.debug(f"Page token attempt failed for user {cred.user}: {e}")
+
+        # Strategy 2: Try each active credential's user access token
+        for cred in active_creds:
+            try:
+                lead_data = cls.get_lead_details(cred.access_token, leadgen_id)
+                if "error" not in lead_data and lead_data.get("field_data") is not None:
+                    logger.info(f"Successfully fetched lead {leadgen_id} using user token of {cred.user.email}")
+                    return lead_data, cred.user
+            except Exception as e:
+                logger.debug(f"User token attempt failed for user {cred.user}: {e}")
+
+        # Strategy 3: Check all managed pages across all credentials if page_id was not provided
+        if not page_id:
+            for cred in active_creds:
+                try:
+                    pages = cls.get_pages(cred.access_token)
+                    for page in pages:
+                        ptoken = page.get("access_token")
+                        if ptoken:
+                            lead_data = cls.get_lead_details(ptoken, leadgen_id)
+                            if "error" not in lead_data and lead_data.get("field_data") is not None:
+                                logger.info(f"Successfully fetched lead {leadgen_id} using page token of {page.get('name')}")
+                                return lead_data, cred.user
+                except Exception as e:
+                    logger.debug(f"All-pages scan attempt failed for user {cred.user}: {e}")
+
+        logger.error(f"Failed to fetch lead {leadgen_id} across all available credentials and pages.")
+        return None, None
+
+    @classmethod
+    def process_meta_leadgen_payload(cls, payload: dict) -> List[dict]:
+        """
+        Parses incoming Meta leadgen webhook payload, fetches lead data, and saves into CRM & Database.
+        """
+        from apps.campaigns.models import CustomerUpload, CustomerRecord
+        from apps.campaigns.services import ContactService
+        from apps.events.models import SystemEvent
+        from apps.ads.models import MetaUserCredential
+
+        results = []
+        entries = payload.get("entry", []) if isinstance(payload, dict) else []
+
+        for entry in entries:
+            page_id = str(entry.get("id") or "")
+            changes = entry.get("changes", [])
+            for change in changes:
+                if change.get("field") != "leadgen":
+                    continue
+                value = change.get("value", {})
+                leadgen_id = str(value.get("leadgen_id") or "")
+                page_id = str(value.get("page_id") or page_id or "")
+                form_id = str(value.get("form_id") or "")
+                ad_id = str(value.get("ad_id") or "")
+                campaign_id = str(value.get("campaign_id") or "")
+
+                if not leadgen_id:
+                    continue
+
+                lead_data, owner_user = cls.fetch_lead_with_credentials_fallback(leadgen_id, page_id=page_id)
+                if not lead_data:
+                    logger.error(f"Could not retrieve lead {leadgen_id} details from Meta API.")
+                    continue
+
+                if not owner_user:
+                    first_cred = MetaUserCredential.objects.filter(status='ACTIVE').first() or MetaUserCredential.objects.first()
+                    owner_user = first_cred.user if first_cred else None
+
+                field_data = lead_data.get("field_data", [])
+                email = None
+                full_name = "Unknown"
+                phone_number = None
+                custom_questions = {}
+
+                for field in field_data:
+                    fname = field.get("name", "")
+                    values = field.get("values", [])
+                    if values:
+                        val = values[0]
+                        if fname in ("email", "user_email"):
+                            email = val
+                        elif fname in ("full_name", "name", "first_name"):
+                            full_name = val
+                        elif fname in ("phone_number", "phone", "contact_number"):
+                            phone_number = val
+                        else:
+                            custom_questions[fname] = val if len(values) == 1 else values
+
+                campaign_name = lead_data.get("campaign_name") or f"Meta Campaign {campaign_id}" if campaign_id else "Meta Webhooks"
+                
+                # Ensure CustomerUpload has a non-null uploaded_by
+                upload_defaults = {"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
+                if owner_user:
+                    upload, _ = CustomerUpload.objects.get_or_create(
+                        file_name="Meta Webhooks",
+                        uploaded_by=owner_user,
+                        defaults=upload_defaults
+                    )
+                else:
+                    from apps.accounts.models import User
+                    fallback_user = User.objects.filter(is_superuser=True).first() or User.objects.first()
+                    upload, _ = CustomerUpload.objects.get_or_create(
+                        file_name="Meta Webhooks",
+                        uploaded_by=fallback_user,
+                        defaults=upload_defaults
+                    )
+                    owner_user = fallback_user
+
+                meta_payload = {
+                    'email': email or "",
+                    'name': full_name,
+                    'phone': phone_number or "",
+                    'source': 'meta',
+                    '__source__': 'meta',
+                    '_source': 'meta',
+                    'lead_id': leadgen_id,
+                    'ad_id': str(lead_data.get("ad_id") or ad_id or ""),
+                    'ad_name': lead_data.get("ad_name") or "Meta Lead Form Ad",
+                    'campaign_id': str(campaign_id or lead_data.get("campaign_id") or ""),
+                    'campaign_name': campaign_name,
+                    'form_id': str(lead_data.get("form_id") or form_id or ""),
+                    'custom_questions': custom_questions,
+                    'field_data': field_data
+                }
+
+                # Avoid duplicate entries for the same lead_id
+                existing_record = CustomerRecord.objects.filter(
+                    upload=upload,
+                    data__lead_id=leadgen_id
+                ).first()
+
+                if not existing_record:
+                    record = CustomerRecord.objects.create(
+                        upload=upload,
+                        data=meta_payload
+                    )
+                else:
+                    record = existing_record
+
+                # Upsert into Contact model
+                if owner_user and (email or phone_number):
+                    try:
+                        contact, _ = ContactService.upsert_contact(
+                            owner=owner_user,
+                            payload=meta_payload,
+                            default_source="meta",
+                            initial_upload=upload,
+                            sub_source_type="meta_campaign",
+                            sub_source_id=campaign_id or form_id or "meta_lead",
+                            sub_source_name=campaign_name,
+                        )
+                        SystemEvent.objects.create(
+                            event_type=SystemEvent.EventType.WEBHOOK,
+                            event_name="META_LEAD_RECEIVED",
+                            user_identifier=contact.email or contact.phone or f"contact_{contact.id}",
+                            contact=contact,
+                            metadata=meta_payload
+                        )
+                    except Exception as c_err:
+                        logger.error(f"Failed to upsert Contact or SystemEvent for lead {leadgen_id}: {c_err}")
+
+                results.append({"leadgen_id": leadgen_id, "email": email, "name": full_name})
+
+        return results
 
     @classmethod
     def get_campaign_insights(cls, access_token: str, campaign_id: str, date_preset: str = 'last_30d', time_range: dict = None, breakdowns: str = None) -> dict:

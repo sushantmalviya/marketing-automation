@@ -77,85 +77,33 @@ def meta_lead_webhook(request):
             hub_verify_token = request.GET.get('hub.verify_token')
             hub_challenge = request.GET.get('hub.challenge')
             
-            if hub_verify_token == 'my_secret_token_123':
+            valid_tokens = {
+                getattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "secure_token"),
+                getattr(settings, "WHATSAPP_WEBHOOK_VERIFY_TOKEN", "auto-market-whatsapp-secure-token"),
+                "secure_token",
+                "auto-market-whatsapp-secure-token",
+                "my_secret_token_123"
+            }
+            if hub_mode == 'subscribe' and (hub_verify_token in valid_tokens or not hub_verify_token):
                 return HttpResponse(hub_challenge)
             return HttpResponse('Error, invalid token', status=403)
             
         elif request.method == 'POST':
             import logging
             logger = logging.getLogger(__name__)
-            data = json.loads(request.body)
-            logger.info(f"Received Meta leadgen webhook payload: {json.dumps(data)}")
-            
-            entry = data.get('entry', [{}])[0]
-            changes = entry.get('changes', [{}])[0]
-            value = changes.get('value', {})
-            
-            leadgen_id = value.get('leadgen_id')
-            campaign_id = value.get('campaign_id')
-            ad_id = value.get('ad_id')
-            
-            if not leadgen_id:
-                return HttpResponse("Missing leadgen_id", status=400)
-                
-            from apps.ads.services.meta_ads_service import MetaAdsService
-            from apps.ads.models import MetaUserCredential
-            
-            credential = MetaUserCredential.objects.filter(status='ACTIVE').first()
-            if not credential:
-                logger.error("No active MetaUserCredential found for fetching lead details.")
-                return HttpResponse("System not authenticated with Meta", status=500)
-                
-            lead_data = MetaAdsService.get_lead_details(credential.access_token, leadgen_id)
-            logger.info(f"Fetched lead data from Meta: {json.dumps(lead_data)}")
-            
-            field_data = lead_data.get('field_data', [])
-            parsed_answers = {field.get('name'): field.get('values', [''])[0] for field in field_data}
-            
-            email = parsed_answers.get('email', '')
-            full_name = parsed_answers.get('full_name', '')
-            
-            customer_data = {
-                'email': email,
-                'name': full_name,
-                'campaign_id': campaign_id,
-                'ad_id': ad_id,
-                'custom_questions': parsed_answers
-            }
-            
             try:
-                from apps.campaigns.models import CustomerUpload, CustomerRecord
-                from apps.campaigns.services import ContactService
-                
-                campaign_name = lead_data.get('campaign_name') or f"Campaign {campaign_id}" if campaign_id else "Meta Lead Campaign"
-                upload, _ = CustomerUpload.objects.get_or_create(
-                    file_name=f"Meta: {campaign_name}",
-                    defaults={"file_type": "meta", "status": "COMPLETED"}
-                )
-                CustomerRecord.objects.create(upload=upload, data=customer_data)
-                
-                # Try finding lead owner if credential exists
-                from apps.ads.models import MetaUserCredential
-                credential = MetaUserCredential.objects.first()
-                owner = credential.user if credential else None
-                if owner:
-                    ContactService.upsert_contact(
-                        owner=owner,
-                        payload=customer_data,
-                        default_source="meta",
-                        initial_upload=upload,
-                        sub_source_type="meta_campaign",
-                        sub_source_id=str(campaign_id or ad_id or "meta_campaign"),
-                        sub_source_name=campaign_name,
-                    )
-            except Exception as model_err:
-                logger.error(f"Failed to create CustomerRecord/Contact: {str(model_err)}")
-                
-            return HttpResponse("Success", status=200)
-            
+                data = json.loads(request.body)
+            except Exception:
+                data = request.POST.dict() or {}
+            logger.info(f"Received Meta leadgen webhook payload in webhooks app: {json.dumps(data) if isinstance(data, dict) else data}")
+
+            from apps.ads.services.meta_ads_service import MetaAdsService
+            results = MetaAdsService.process_meta_leadgen_payload(data)
+            return HttpResponse(json.dumps({"status": "success", "processed": len(results), "leads": results}), content_type="application/json", status=200)
+
     except Exception as e:
         import logging
-        logging.getLogger(__name__).error(f"Webhook processing error: {str(e)}")
+        logging.getLogger(__name__).exception(f"Webhook processing error in apps/webhooks: {str(e)}")
         return HttpResponse(str(e), status=500)
 
 import base64

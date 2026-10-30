@@ -1224,6 +1224,23 @@ function LeadSyncTab() {
     }
   });
 
+  const formsQuery = useQuery({
+    queryKey: ["meta-page-lead-forms", selectedPageForSub],
+    queryFn: () => metaAdsService.getPageLeadForms(selectedPageForSub),
+    enabled: !!selectedPageForSub,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: (formId: string) => metaAdsService.syncHistoricalLeads(formId),
+    onSuccess: (data) => {
+      toast.success(`Synced ${data.synced ?? 0} leads from Meta Form!`);
+      leads.refetch();
+    },
+    onError: (err) => {
+      toast.error(parseApiError(err));
+    }
+  });
+
   const [webhookEnv, setWebhookEnv] = useState<"render" | "local">("render");
   const renderWebhookUrl = "https://marketing-automation-uo4q.onrender.com/api/meta-ads/meta/webhook/";
   const localWebhookUrl = "http://localhost:8000/api/meta-ads/meta/webhook/";
@@ -1390,6 +1407,42 @@ function LeadSyncTab() {
                   {subscribeMutation.isPending ? "Subscribing..." : "Subscribe Page"}
                 </button>
               </div>
+
+              {/* Instant Lead Forms List & Manual Pull */}
+              {formsQuery.isLoading && (
+                <div className="text-[11px] text-slate-400 italic">Checking for Instant Forms on page...</div>
+              )}
+              {formsQuery.data && formsQuery.data.length > 0 && (
+                <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span>Instant Forms on Page ({formsQuery.data.length})</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Sync historical/test leads anytime</span>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                    {formsQuery.data.map((form) => (
+                      <div key={form.id} className="flex items-center justify-between rounded bg-slate-50 border border-slate-100 px-2.5 py-1.5 text-[11px]">
+                        <div className="truncate mr-2">
+                          <span className="font-semibold text-slate-800">{form.name}</span>
+                          <span className="ml-1 text-[10px] text-slate-400 font-mono">({form.id})</span>
+                          {form.status && (
+                            <span className={`ml-1.5 rounded px-1 py-0.2 text-[9px] font-bold ${form.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
+                              {form.status}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={syncMutation.isPending}
+                          onClick={() => syncMutation.mutate(form.id)}
+                          className="rounded bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white px-2 py-0.5 text-[10px] font-bold text-blue-700 transition disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {syncMutation.isPending ? "Syncing..." : "Sync Leads"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
