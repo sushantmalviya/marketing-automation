@@ -77,37 +77,145 @@ logger = logging.getLogger(__name__)
 class WhatsAppConnectionViewSet(viewsets.ModelViewSet):
     """
     CRUD ViewSet for managing WhatsApp Cloud API connections per organization.
-    Enforces tenant isolation: users only see and manage their own organization's connections.
+    Enforces strict tenant isolation and single active WhatsApp number per organization.
     """
     serializer_class = WhatsAppConnectionSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        from apps.common.ownership import is_super_admin, get_managed_user_ids
-        user = self.request.user
-        if is_super_admin(user):
-            return WhatsAppConnection.objects.all().order_by("-created_at")
-
-        managed_ids = get_managed_user_ids(user)
-        managed_ids.append(user.id)
-        return WhatsAppConnection.objects.filter(
-            organization_id__in=managed_ids
+        from apps.common.ownership import scope_queryset_by_org
+        return scope_queryset_by_org(
+            WhatsAppConnection.objects.filter(is_active=True),
+            self.request.user,
+            user_field="connected_by",
         ).order_by("-created_at")
 
-    def perform_create(self, serializer):
-        serializer.save(organization=self.request.user)
+    def create(self, request, *args, **kwargs):
+        from apps.common.ownership import get_user_organization
+        from apps.integrations.utils.crypto import encrypt_token
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_number_id = serializer.validated_data["phone_number_id"].strip()
+        raw_token = serializer.validated_data.get("access_token", "")
+        is_active = serializer.validated_data.get("is_active", True)
+
+        org = get_user_organization(request.user)
+        scope_kwargs = {"organization": org} if org is not None else {"organization__isnull": True, "connected_by": request.user}
+
+        # Enforce single active WhatsApp number per organization
+        if is_active:
+            WhatsAppConnection.objects.filter(**scope_kwargs).exclude(phone_number_id=phone_number_id).update(is_active=False)
+
+        defaults = {
+            "connected_by": request.user,
+            "is_active": is_active,
+        }
+        if raw_token:
+            defaults["encrypted_access_token"] = encrypt_token(raw_token)
+
+        lookup = {"organization": org, "phone_number_id": phone_number_id} if org is not None else {
+            "organization__isnull": True,
+            "connected_by": request.user,
+            "phone_number_id": phone_number_id,
+        }
+        existing = WhatsAppConnection.objects.filter(**lookup).first()
+        if existing:
+            for k, v in defaults.items():
+                setattr(existing, k, v)
+            existing.save()
+            conn = existing
+            created = False
+        else:
+            create_kwargs = {
+                "organization": org,
+                "connected_by": request.user,
+                "phone_number_id": phone_number_id,
+                "is_active": is_active,
+                "encrypted_access_token": defaults.get("encrypted_access_token", ""),
+            }
+            conn = WhatsAppConnection.objects.create(**create_kwargs)
+            created = True
+
+        # Keep SenderIdentity in sync for manual WhatsApp connections
+        if is_active and conn.encrypted_access_token:
+            ident_scope = {"organization": org} if org is not None else {"organization__isnull": True, "user": request.user}
+            SenderIdentity.objects.filter(provider="WHATSAPP_CLOUD", **ident_scope).exclude(phone_number_id=phone_number_id).delete()
+            ident_defaults = {
+                "user": request.user,
+                "organization": org,
+                "email": phone_number_id,
+                "display_name": f"WhatsApp ({phone_number_id})",
+                "connection_type": "API_KEY",
+                "status": "CONNECTED",
+                "encrypted_credentials": {
+                    "phone_number_id": phone_number_id,
+                    "access_token": conn.encrypted_access_token,
+                },
+            }
+            existing_ident = SenderIdentity.objects.filter(
+                phone_number_id=phone_number_id,
+                provider="WHATSAPP_CLOUD",
+                **ident_scope,
+            ).first()
+            if existing_ident:
+                for k, v in ident_defaults.items():
+                    setattr(existing_ident, k, v)
+                existing_ident.save()
+            else:
+                SenderIdentity.objects.create(
+                    phone_number_id=phone_number_id,
+                    provider="WHATSAPP_CLOUD",
+                    **ident_defaults,
+                )
+
+        out = self.get_serializer(conn)
+        return Response(out.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def perform_destroy(self, instance):
+        if instance.organization_id:
+            SenderIdentity.objects.filter(
+                organization_id=instance.organization_id,
+                provider="WHATSAPP_CLOUD",
+                phone_number_id=instance.phone_number_id,
+            ).delete()
+        elif instance.connected_by_id:
+            SenderIdentity.objects.filter(
+                organization__isnull=True,
+                user_id=instance.connected_by_id,
+                provider="WHATSAPP_CLOUD",
+                phone_number_id=instance.phone_number_id,
+            ).delete()
+        super().perform_destroy(instance)
 
 
 class CommunicationEventListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        events = CommunicationEvent.objects.filter(
-            Q(campaign__created_by=request.user) |
-            Q(campaign__task__created_by=request.user) |
-            Q(execution__automation__owner=request.user) |
-            Q(whatsapp_connection__organization=request.user)
-        ).order_by("-created_at")[:200]
+        from apps.common.ownership import get_user_organization, is_platform_superuser
+
+        user = request.user
+        if is_platform_superuser(user):
+            events = CommunicationEvent.objects.all()
+        else:
+            org = get_user_organization(user)
+            if org is not None:
+                events = CommunicationEvent.objects.filter(
+                    Q(campaign__created_by__organization=org)
+                    | Q(execution__automation__owner__organization=org)
+                    | Q(whatsapp_connection__organization=org)
+                ).distinct()
+            else:
+                events = CommunicationEvent.objects.filter(
+                    Q(campaign__created_by=user)
+                    | Q(campaign__task__created_by=user)
+                    | Q(execution__automation__owner=user)
+                    | Q(whatsapp_connection__connected_by=user)
+                ).distinct()
+
+        events = events.order_by("-created_at")[:200]
         serializer = CommunicationEventSerializer(
             events,
             many=True,
@@ -309,7 +417,8 @@ class WhatsAppWebhookView(APIView):
                                     "type": msg_type,
                                     "text": text_body,
                                     "timestamp": timestamp,
-                                    "tenant_user_id": str(identity.user_id) if identity else None,
+                                    "tenant_user_id": str(identity.user_id) if (identity and identity.user_id) else None,
+                                    "tenant_organization_id": str(identity.organization_id) if (identity and identity.organization_id) else None,
                                 }
                             )
 
@@ -352,7 +461,8 @@ class WhatsAppWebhookView(APIView):
                                     "text": text_body,
                                     "from": sender_phone,
                                     "timestamp": timestamp,
-                                    "tenant_user_id": str(identity.user_id) if identity else None,
+                                    "tenant_user_id": str(identity.user_id) if (identity and identity.user_id) else None,
+                                    "tenant_organization_id": str(identity.organization_id) if (identity and identity.organization_id) else None,
                                 },
                             )
 
@@ -403,7 +513,8 @@ class WhatsAppWebhookView(APIView):
                                     "type": hist_type,
                                     "text": hist_body,
                                     "timestamp": hist_ts,
-                                    "tenant_user_id": str(identity.user_id) if identity else None,
+                                    "tenant_user_id": str(identity.user_id) if (identity and identity.user_id) else None,
+                                    "tenant_organization_id": str(identity.organization_id) if (identity and identity.organization_id) else None,
                                 },
                             )
 

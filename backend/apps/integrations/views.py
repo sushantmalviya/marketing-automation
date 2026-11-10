@@ -10,26 +10,42 @@ from rest_framework.permissions import IsAuthenticated
 from apps.integrations.models import SocialConnection
 from apps.integrations.serializers import SocialConnectionSerializer, OAuthCallbackSerializer
 from apps.integrations.services.oauth_service import OAuthService
-from apps.accounts.permissions import IsAdminOrSuperAdmin
+from apps.accounts.permissions import IsAdminOrSuperAdmin, get_request_role
+from apps.common.ownership import get_user_organization, scope_queryset_by_org
 
 
 logger = logging.getLogger(__name__)
 
+
+def _build_oauth_redirect_url(base_url: str, params: dict, portal_prefix: str = None) -> str:
+    parsed = urllib.parse.urlsplit(base_url)
+    path = parsed.path
+    if portal_prefix in ("admin", "user"):
+        if path.startswith("/admin/"):
+            path = f"/{portal_prefix}/" + path[len("/admin/"):]
+        elif path.startswith("/user/"):
+            path = f"/{portal_prefix}/" + path[len("/user/"):]
+
+    existing_qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    for k, v in params.items():
+        existing_qs[k] = [v]
+    query_str = urllib.parse.urlencode(existing_qs, doseq=True)
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, query_str, parsed.fragment))
+
+
 class SocialConnectionViewSet(viewsets.ModelViewSet):
     """
-    API endpoints for managing social media connections.
+    API endpoints for managing social media connections scoped to the user's organization.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = SocialConnectionSerializer
     
     def get_queryset(self):
-        from apps.common.ownership import get_tenant_owner_profile
-        tenant_owner = get_tenant_owner_profile(self.request.user)
-            
-        if tenant_owner:
-            return SocialConnection.objects.filter(user=tenant_owner)
-            
-        return SocialConnection.objects.none()
+        return scope_queryset_by_org(
+            SocialConnection.objects.all(),
+            self.request.user,
+            user_field="user__user",
+        )
 
     @action(detail=False, methods=['get'], url_path='connect/(?P<platform>[^/.]+)')
     def connect(self, request, platform=None):
@@ -38,12 +54,13 @@ class SocialConnectionViewSet(viewsets.ModelViewSet):
         or returns JSON for API clients.
         """
         try:
-            from apps.common.ownership import get_tenant_owner_profile
-            tenant_owner = get_tenant_owner_profile(request.user)
-            if not tenant_owner:
-                return Response({"error": "No tenant owner found for user."}, status=status.HTTP_400_BAD_REQUEST)
-                
-            url = OAuthService.generate_auth_url(tenant_owner, platform)
+            org = get_user_organization(request.user)
+            ma_user = request.user.ma_users.first() if hasattr(request.user, "ma_users") else None
+            if not ma_user and org is None:
+                return Response({"error": "No organization or profile found for user."}, status=status.HTTP_400_BAD_REQUEST)
+
+            portal_prefix = "admin" if get_request_role(request.user) == "ADMIN" else "user"
+            url = OAuthService.generate_auth_url(request.user, platform, portal_prefix=portal_prefix)
             
             # Check if API client expects JSON
             accept_header = request.META.get('HTTP_ACCEPT', '')
@@ -73,27 +90,28 @@ class SocialConnectionViewSet(viewsets.ModelViewSet):
         if request.method == 'GET' and 'error' in request.GET:
             error_msg = request.GET.get('error', 'access_denied')
             logger.warning(f"OAuth error received in callback: {error_msg}")
-            return redirect(f"{success_url}?{platform.lower()}=failed&reason={urllib.parse.quote(error_msg)}")
+            return redirect(_build_oauth_redirect_url(success_url, {platform.lower(): "failed", "reason": error_msg}))
 
         data = request.GET if request.method == 'GET' else request.data
         serializer = OAuthCallbackSerializer(data=data)
         
         if not serializer.is_valid():
             logger.warning(f"Invalid callback data: {serializer.errors}")
-            return redirect(f"{success_url}?{platform.lower()}=failed&reason=invalid_callback")
+            return redirect(_build_oauth_redirect_url(success_url, {platform.lower(): "failed", "reason": "invalid_callback"}))
             
         state = serializer.validated_data['state']
         code = serializer.validated_data['code']
         
         try:
             connection = OAuthService.handle_callback(state, code, platform)
-            return redirect(f"{success_url}?{platform.lower()}=connected")
+            portal_prefix = getattr(connection, "_portal_prefix", None)
+            return redirect(_build_oauth_redirect_url(success_url, {platform.lower(): "connected"}, portal_prefix=portal_prefix))
         except ValueError as e:
             # e.g., 'invalid_state', 'token_exchange_failed'
-            return redirect(f"{success_url}?{platform.lower()}=failed&reason={urllib.parse.quote(str(e))}")
+            return redirect(_build_oauth_redirect_url(success_url, {platform.lower(): "failed", "reason": str(e)}))
         except Exception as e:
             logger.exception(f"Unexpected error handling OAuth callback for {platform}")
-            return redirect(f"{success_url}?{platform.lower()}=failed&reason=internal_error")
+            return redirect(_build_oauth_redirect_url(success_url, {platform.lower(): "failed", "reason": "internal_error"}))
 
     @action(detail=True, methods=['post'])
     def validate(self, request, pk=None):
@@ -101,9 +119,7 @@ class SocialConnectionViewSet(viewsets.ModelViewSet):
         Validates if the connection's token is still active.
         """
         connection = self.get_object()
-        from apps.common.ownership import get_tenant_owner_profile
-        tenant_owner = get_tenant_owner_profile(request.user)
-        is_valid = OAuthService.validate_connection(str(connection.id), tenant_owner)
+        is_valid = OAuthService.validate_connection(str(connection.id), request.user)
         
         # Refresh from db to get updated status
         connection.refresh_from_db()
@@ -118,9 +134,7 @@ class SocialConnectionViewSet(viewsets.ModelViewSet):
         """
         connection = self.get_object()
         try:
-            from apps.common.ownership import get_tenant_owner_profile
-            tenant_owner = get_tenant_owner_profile(request.user)
-            OAuthService.disconnect_account(str(connection.id), tenant_owner)
+            OAuthService.disconnect_account(str(connection.id), request.user)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
             logger.exception("Failed to disconnect account.")

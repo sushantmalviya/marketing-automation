@@ -53,6 +53,7 @@ class Dispatcher:
                     to=recipient,
                     message=delivery.rendered_message,
                     campaign=delivery.campaign,
+                    organization=getattr(delivery.campaign, "created_by", None),
                 )
             
             elif channel_code == "WHATSAPP":

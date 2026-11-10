@@ -117,7 +117,7 @@ class AWSSESSender(BaseEmailSender):
         display_name = self.sender_identity.display_name
         from_header = f"{display_name} <{from_email}>" if display_name else from_email
 
-        tenant_id = str(self.sender_identity.user_id) if self.sender_identity.user_id else ""
+        tenant_id = str(self.sender_identity.organization_id or self.sender_identity.user_id or "")
 
         ses_service = AWSSESService()
         result = ses_service.send_email(

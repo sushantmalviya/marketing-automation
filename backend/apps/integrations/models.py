@@ -54,9 +54,19 @@ class SocialConnection(TimeStampedUUIDModel):
         REVOKED = "REVOKED", "Revoked"
         ERROR = "ERROR", "Error"
 
+    organization = models.ForeignKey(
+        'accounts.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="social_connections",
+    )
+
     user = models.ForeignKey(
         'accounts.MAUser',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="social_connections"
     )
     
@@ -82,10 +92,39 @@ class SocialConnection(TimeStampedUUIDModel):
 
     class Meta:
         db_table = "integration_social_connections"
-        unique_together = [("user", "platform", "platform_account_id")]
+        indexes = [
+            models.Index(fields=["organization", "platform"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "platform", "platform_account_id"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_social_org_platform_account",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "platform", "platform_account_id"],
+                condition=models.Q(organization__isnull=True, user__isnull=False),
+                name="uniq_social_user_platform_account",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is None and getattr(self.user, "user_id", None):
+                org_id = getattr(self.user.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.platform} - {self.account_name} ({self.user.user.email})"
+        if self.organization_id:
+            owner_label = str(self.organization)
+        elif self.user_id and getattr(self.user, "user_id", None):
+            owner_label = self.user.user.email
+        else:
+            owner_label = "Unassigned"
+        return f"{self.platform} - {self.account_name} ({owner_label})"
 
     def get_access_token(self):
         from apps.integrations.utils.crypto import decrypt_token

@@ -2,18 +2,30 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock3, Copy, Download, ExternalLink, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListChecks, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, Mic, MoreVertical, Pencil, Phone, Play, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Tag, Target, ThumbsUp, Trash2, Underline, User, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
+import { AlertTriangle, BarChart3, Bold, Bookmark, Braces, CalendarClock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CircleDot, Copy, Download, ExternalLink, Eye, Facebook, FileText, Heart, Image as ImageIcon, Instagram, Italic, Link2, Linkedin, List, ListOrdered, LoaderCircle, Mail, Megaphone, MessageCircle, MessageSquare, MoreVertical, Pencil, Phone, Play, Plus, RefreshCw, Repeat2, Save, Search, Send, Share2, ShieldCheck, Sparkles, Tag, Target, ThumbsUp, Trash2, Underline, UserRound, Users, WandSparkles, X, Info as InfoIcon } from "lucide-react";
 import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import axios from "axios";
 import { toast } from "sonner";
 import { apiClient, parseApiError, resolveApiUrl } from "@/services/api-client";
 import { authService } from "@/services/auth.service";
 import { useDateRange } from "@/components/ui/date-range-picker";
 import { useAuth } from "@/providers/auth-provider";
 import { PromptEnhancerModal } from "@/components/user/prompt-enhancer-modal";
+import {
+  BrandIdentityBadge,
+  CreditEstimateBanner,
+  ImageGenerationHistorySection,
+  ImageOptionsPanel,
+  generateClientIdempotencyKey,
+  type AIImageAspectRatio,
+  type AIImageModelKey,
+  type AIImageQuality,
+  type ImageEstimateResponse,
+} from "@/components/user/ai-image-generator";
 import { TemplatePickerModal } from "@/components/modules/template-picker";
 import { WhatsAppPreview } from "@/components/user/templates/whatsapp-builder/whatsapp-preview";
 import { parseWhatsAppTemplate, serializeWhatsAppMetadata, compileWhatsAppMessage } from "@/components/user/templates/whatsapp-builder/whatsapp-serializer";
@@ -36,13 +48,19 @@ type AudiencePreviewPage = { audience: { id: number; name: string }; total_custo
 type CampaignDraft = { task: string; audience: string; selectedChannelIds: number[]; name: string; description: string; template_id: string; template_name: string; channel: string; subject: string; body: string; scheduled_at: string; channelTemplates: Record<string, ChannelTemplate> };
 type GeneratedContent = { id: string; content_type: string; platform: string; status: string; created_at: string; versions: { id: string; version_number: number; prompt: string; text_content: string; image_url: string | null; created_at: string }[] };
 type ContentPlatformData = { id: string; platform: string; status: string; approval_status: string; error_message?: string; scheduled_datetime: string | null; published_datetime: string | null; caption_text?: string; hashtags?: string; cta?: string; location_id?: string; first_comment?: string; caption: { caption_text: string; hashtags: string; cta: string } | null; images: { asset_url?: string; asset_name?: string }[] };
-type ContentDraftData = { id: string; original_prompt: string; enhanced_prompt: string; workflow_state: string; platforms: ContentPlatformData[]; created_at: string; updated_at: string };
+type ContentDraftData = { id: string; original_prompt: string; enhanced_prompt: string; image_model?: AIImageModelKey; image_quality?: AIImageQuality; image_aspect_ratio?: AIImageAspectRatio; workflow_state: string; platforms: ContentPlatformData[]; created_at: string; updated_at: string };
+type PaginatedOrList<T> = T[] | { results?: T[] };
+type AudienceOption = { id: number | string; name: string; contacts_count?: number };
+type CampaignDetailChannel = { channel_id?: number; id?: number; channel?: number | string; template_id?: number; template_name?: string; subject?: string; body?: string };
+type CampaignDetailResponse = { task_id?: number; audience_id?: number; selected_channel_ids?: number[]; name?: string; description?: string; scheduled_at?: string | null; status?: string; channels?: CampaignDetailChannel[] };
+type ContentDraftPayload = { original_prompt: string; platforms: string[]; preset_image_id?: string; image_model?: AIImageModelKey; image_quality?: AIImageQuality; image_aspect_ratio?: AIImageAspectRatio };
+type CampaignSavePayload = { name: string; description: string; task?: number; audience?: number };
+type ExtendedProfile = Awaited<ReturnType<typeof authService.profile>> & { name?: string | null };
 
 const campaignTone: Record<string, string> = { DRAFT: "bg-slate-100 text-slate-700", PENDING_APPROVAL: "bg-amber-50 text-amber-700 ring-1 ring-amber-200", APPROVED: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200", SCHEDULED: "bg-blue-50 text-blue-700 ring-1 ring-blue-200", SENDING: "bg-violet-50 text-violet-700 ring-1 ring-violet-200", COMPLETED: "bg-green-50 text-green-700 ring-1 ring-green-200", FAILED: "bg-red-50 text-red-600 ring-1 ring-red-200", REJECTED: "bg-slate-100 text-slate-500" };
 const taskTone: Record<string, string> = { ASSIGNED: "bg-violet-50 text-violet-700", PENDING: "bg-amber-50 text-amber-700", IN_PROGRESS: "bg-blue-50 text-blue-700", SUBMITTED: "bg-cyan-50 text-cyan-700", APPROVED: "bg-emerald-50 text-emerald-700", COMPLETED: "bg-emerald-50 text-emerald-700", REJECTED: "bg-red-50 text-red-600" };
 const priorityTone: Record<string, string> = { HIGH: "bg-red-50 text-red-600 ring-1 ring-red-200", MEDIUM: "bg-amber-50 text-amber-600 ring-1 ring-amber-200", LOW: "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200" };
 const pieColors = ["#3b82f6", "#f59e0b", "#10b981", "#6366f1", "#a855f7", "#22c55e", "#f43f5e", "#94a3b8"];
-const editorTools = [{ label: "Bold", icon: Bold, cmd: "bold" }, { label: "Italic", icon: Italic, cmd: "italic" }, { label: "Underline", icon: Underline, cmd: "underline" }, { label: "Bulleted list", icon: List, cmd: "insertUnorderedList" }, { label: "Numbered list", icon: ListOrdered, cmd: "insertOrderedList" }, { label: "Link", icon: Link2, cmd: "createLink" }, { label: "Image", icon: ImageIcon, cmd: "insertImage" }, { label: "Variable", icon: Braces, cmd: "insertVariable" }] as const;
 const campaignDraftKey = "auto_market_campaign_draft";
 const emptyCampaignDraft: CampaignDraft = { task: "", audience: "", selectedChannelIds: [], name: "", description: "", template_id: "", template_name: "", channel: "", subject: "", body: "", scheduled_at: "", channelTemplates: {} };
 const contentPlatforms = [{ value: "INSTAGRAM", label: "Instagram", icon: Instagram, tone: "text-pink-600" }, { value: "FACEBOOK", label: "Facebook", icon: Facebook, tone: "text-blue-600" }, { value: "LINKEDIN", label: "LinkedIn", icon: Linkedin, tone: "text-sky-700" }, { value: "X", label: "X", icon: null, tone: "text-slate-950" }] as const;
@@ -51,9 +69,6 @@ const storeCampaignDraft = (draft: CampaignDraft | null) => { if (typeof window 
 const pretty = (value: string) => value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 const formatDate = (value: string) => new Date(value).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const compactNumber = (value: number) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-const customerValue = (data: Record<string, unknown>, ...keys: string[]) => { const normalized = Object.fromEntries(Object.entries(data).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ""), value])); for (const key of keys) { const value = normalized[key.toLowerCase().replace(/[^a-z0-9]/g, "")]; if (value !== undefined && value !== null && String(value).trim()) return String(value) } return "" };
-const customerName = (data: Record<string, unknown>) => customerValue(data, "name", "full_name", "customer_name") || [customerValue(data, "first_name", "firstname"), customerValue(data, "last_name", "lastname")].filter(Boolean).join(" ") || "Customer";
-const renderCustomerText = (text: string, data: Record<string, unknown>) => text.replace(/\{\{(.*?)\}\}/g, (_, field: string) => customerValue(data, field.trim()));
 
 // Dummy trend data for sparklines
 const generateTrend = () => Array.from({ length: 8 }, () => Math.floor(Math.random() * 40) + 10);
@@ -158,7 +173,7 @@ export function UserDashboard() {
 export function UserPerformance() {
   const { startDate, endDate, picker } = useDateRange();
   const { campaigns, dashboard } = useWorkspaceData(startDate, endDate); const campaignRows = useMemo(() => campaigns.data?.results ?? [], [campaigns.data]); const delivery = dashboard.data?.deliveries;
-  const approvedCampaigns = campaignRows.filter(row => ["APPROVED", "SCHEDULED", "SENDING", "COMPLETED"].includes(row.status)).length; const submittedCampaigns = campaignRows.filter(row => row.status !== "DRAFT").length; const approvalRate = submittedCampaigns ? Math.round(approvedCampaigns / submittedCampaigns * 100) : 0; const audienceReached = campaignRows.reduce((sum, row) => sum + (row.contacts || 0), 0); const successRate = delivery?.success_rate ?? (campaignRows.reduce((sum, row) => sum + row.sent, 0) ? Math.round(campaignRows.reduce((sum, row) => sum + row.delivered, 0) / campaignRows.reduce((sum, row) => sum + row.sent, 0) * 100) : 0);
+  const audienceReached = campaignRows.reduce((sum, row) => sum + (row.contacts || 0), 0); const successRate = delivery?.success_rate ?? (campaignRows.reduce((sum, row) => sum + row.sent, 0) ? Math.round(campaignRows.reduce((sum, row) => sum + row.delivered, 0) / campaignRows.reduce((sum, row) => sum + row.sent, 0) * 100) : 0);
   const months = useMemo(() => Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setMonth(date.getMonth() - (6 - index)); const inMonth = (value: string) => { const item = new Date(value); return item.getMonth() === date.getMonth() && item.getFullYear() === date.getFullYear() }; return { month: date.toLocaleDateString("en-US", { month: "short" }), reach: campaignRows.filter(row => inMonth(row.created_at)).reduce((sum, row) => sum + (row.contacts || 0), 0), campaigns: campaignRows.filter(row => inMonth(row.created_at) && !["DRAFT", "REJECTED", "CANCELLED"].includes(row.status)).length } }), [campaignRows]);
   const activity = useMemo(() => campaignRows.map(row => ({ id: `campaign-${row.id}`, title: `Campaign “${row.campaign_name}” ${pretty(row.status).toLowerCase()}`, date: row.created_at, icon: Megaphone, tone: "bg-violet-500" })).sort((a, b) => +new Date(b.date) - +new Date(a.date)).slice(0, 5), [campaignRows]);
   const statCards = [
@@ -220,15 +235,40 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
   const [enhancerOpen, setEnhancerOpen] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [includeCaption, setIncludeCaption] = useState(true);
+  const [model, setModel] = useState<AIImageModelKey>("google_nano_banana");
+  const [quality, setQuality] = useState<AIImageQuality>("STANDARD");
+  const [aspectRatio, setAspectRatio] = useState<AIImageAspectRatio>("1:1");
+  const activeIdempotencyKeyRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<"GENERATOR" | "CALENDAR" | "DRAFTS" | "PUBLISHED">("GENERATOR");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
-  const history = useQuery({ queryKey: ["user-content-history"], queryFn: async () => { const res = await apiClient.get<any>("/api/content/content-drafts/"); return Array.isArray(res.data) ? res.data : (res.data.results ?? []); } });
+  const estimateQuery = useQuery({
+    queryKey: [
+      "ai-content-estimate",
+      model,
+      quality,
+      aspectRatio,
+      !assetId,
+      includeCaption ? selected.length : 0,
+    ],
+    queryFn: async () =>
+      (
+        await apiClient.post<ImageEstimateResponse>("/api/content/images/estimate/", {
+          model,
+          quality,
+          aspect_ratio: aspectRatio,
+          generate_image: !assetId,
+          caption_count: includeCaption ? selected.length : 0,
+        })
+      ).data,
+  });
+
+  const history = useQuery({ queryKey: ["user-content-history"], queryFn: async (): Promise<GeneratedContent[]> => { const res = await apiClient.get<PaginatedOrList<GeneratedContent>>("/api/content/content-drafts/"); return Array.isArray(res.data) ? res.data : (res.data.results ?? []); } });
   const draftsQuery = useQuery({
-    queryKey: ["user-content-drafts"], queryFn: async () => {
-      const res = await apiClient.get<any>("/api/content/content-drafts/");
+    queryKey: ["user-content-drafts"], queryFn: async (): Promise<ContentDraftData[]> => {
+      const res = await apiClient.get<PaginatedOrList<ContentDraftData>>("/api/content/content-drafts/");
       const all = Array.isArray(res.data) ? res.data : (res.data.results ?? []);
-      return (all as ContentDraftData[]).filter(d => d.workflow_state !== "PUBLISHED");
+      return all.filter(d => d.workflow_state !== "PUBLISHED");
     }
   });
 
@@ -245,7 +285,7 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
   useEffect(() => {
     if (assetId && !hasInitializedAsset.current) {
       hasInitializedAsset.current = true;
-      const payload: any = { original_prompt: "Custom Post with Preset Media", platforms: platformsToUse, preset_image_id: assetId };
+      const payload: ContentDraftPayload = { original_prompt: "Custom Post with Preset Media", platforms: platformsToUse, preset_image_id: assetId };
       apiClient.post<ContentDraftData>("/api/content/content-drafts/", payload, { timeout: 60000 })
         .then(res => {
           setDraftId(res.data.id);
@@ -261,16 +301,61 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
 
   const generate = useMutation({
     mutationFn: async () => {
-      const payload: any = { original_prompt: prompt.trim(), platforms: selected };
+      if (!activeIdempotencyKeyRef.current) {
+        activeIdempotencyKeyRef.current = generateClientIdempotencyKey();
+      }
+      const payload: ContentDraftPayload = {
+        original_prompt: prompt.trim(),
+        platforms: selected,
+        image_model: model,
+        image_quality: quality,
+        image_aspect_ratio: aspectRatio,
+      };
       if (assetId) payload.preset_image_id = assetId;
       const created = (await apiClient.post<ContentDraftData>("/api/content/content-drafts/", payload, { timeout: 60000 })).data;
       setDraftId(created.id); setCurrent(created);
       try {
         await apiClient.patch(`/api/content/content-drafts/${created.id}/`, { enhanced_prompt: prompt.trim() }, { timeout: 60000 });
-        await apiClient.post(`/api/content/content-drafts/${created.id}/regenerate/`, { reason: "Initial content generation", generate_images: !assetId, generate_captions: includeCaption }, { timeout: 240000 });
+        await apiClient.post(
+          `/api/content/content-drafts/${created.id}/regenerate/`,
+          {
+            reason: "Initial content generation",
+            generate_images: !assetId,
+            generate_captions: includeCaption,
+            model,
+            quality,
+            aspect_ratio: aspectRatio,
+            idempotency_key: activeIdempotencyKeyRef.current,
+          },
+          { timeout: 240000 }
+        );
         return (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${created.id}/`, { timeout: 60000 })).data;
       } catch (error) { try { setCurrent((await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${created.id}/`, { timeout: 60000 })).data) } catch { } throw error }
-    }, onSuccess: draft => { setCurrent(draft); toast.success("Prompt-based content generated"); void client.invalidateQueries({ queryKey: ["user-content-history"] }); void client.invalidateQueries({ queryKey: ["user-content-drafts"] }); }, onError: error => toast.error(parseApiError(error))
+    },
+    onSuccess: draft => {
+      activeIdempotencyKeyRef.current = null;
+      setCurrent(draft);
+      toast.success("Content generated successfully");
+      void client.invalidateQueries({ queryKey: ["user-content-history"] });
+      void client.invalidateQueries({ queryKey: ["user-content-drafts"] });
+      void client.invalidateQueries({ queryKey: ["ai-content-estimate"] });
+      void client.invalidateQueries({ queryKey: ["ai-image-history"] });
+      void client.invalidateQueries({ queryKey: ["sa-billing"] });
+    },
+    onError: error => {
+      activeIdempotencyKeyRef.current = null;
+      const responseData = axios.isAxiosError(error)
+        ? (error.response?.data as { refunded?: boolean; refunded_credits?: number } | undefined)
+        : undefined;
+      if (responseData?.refunded) {
+        toast.error(`${parseApiError(error)} (${responseData.refunded_credits ?? 0} credits automatically refunded.)`);
+      } else {
+        toast.error(parseApiError(error));
+      }
+      void client.invalidateQueries({ queryKey: ["ai-content-estimate"] });
+      void client.invalidateQueries({ queryKey: ["ai-image-history"] });
+      void client.invalidateQueries({ queryKey: ["sa-billing"] });
+    }
   });
   const save = useMutation({ mutationFn: (id: string) => apiClient.post(`/api/content/${id}/action/`, { action: "save_to_library" }), onSuccess: () => toast.success("Saved to Asset Library"), onError: error => toast.error(parseApiError(error)) });
   const removeDraft = useMutation({ mutationFn: (id: string) => apiClient.delete(`/api/content/content-drafts/${id}/`), onSuccess: () => { toast.success("Draft deleted"); void client.invalidateQueries({ queryKey: ["user-content-drafts"] }) }, onError: error => toast.error(parseApiError(error)) });
@@ -363,12 +448,13 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
 
     {/* ── Tab Content ── */}
     {activeTab === "GENERATOR" && (
-      <>
+      <div className="space-y-5">
         <section className="sa-card p-6">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-black">Your Prompt</h2>
             <CircleDot size={15} className="text-slate-400" />
-            {assetId && <span className="ml-2 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1"><ImageIcon size={12} />Preset Asset Attached</span>}
+            <BrandIdentityBadge estimate={estimateQuery.data} />
+            {assetId && <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1"><ImageIcon size={12} />Preset Asset Attached</span>}
             <div className="ml-auto flex items-center gap-2">
               {assetId && <Link href="/user/channels" className="text-xs text-red-500 hover:underline">Remove Asset</Link>}
               <Link href="/user/assets" className="secondary-button flex items-center gap-2 px-5 text-sm"><ImageIcon size={15} />{assetId ? "Change Asset" : "Add from Asset Library"}</Link>
@@ -380,16 +466,43 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <button type="button" className="secondary-button flex items-center gap-2 px-5 text-blue-600" disabled={!prompt.trim()} onClick={() => setEnhancerOpen(true)}><WandSparkles size={17} />Enhance Prompt</button>
-            <div className="flex items-center gap-3">
-              <button type="button" className="secondary-button flex items-center gap-2 px-5" disabled={!prompt} onClick={() => setPrompt("")}><Trash2 size={17} />Clear</button>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={includeCaption} onChange={event => setIncludeCaption(event.target.checked)} />Caption</label>
-              <button type="button" className="primary-button px-6" disabled={!prompt.trim() || !selected.length || generate.isPending} onClick={() => generate.mutate()}><Sparkles size={17} />{generate.isPending ? "Generating..." : "Generate Content"}</button>
-            </div>
+            <button type="button" className="secondary-button flex items-center gap-2 px-5" disabled={!prompt} onClick={() => setPrompt("")}><Trash2 size={17} />Clear</button>
           </div>
         </section>
-        <section className="sa-card mt-5 p-6">
-          <h2 className="font-black">Channels</h2>
-          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-4">
+
+        <section className="sa-card p-6 space-y-5">
+          <div>
+            <h2 className="font-black">Image Generation Settings</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Choose between Google Nano Banana 2.1 and OpenAI GPT Image 2.5 along with quality and framing. Brand Identity settings apply automatically.
+            </p>
+          </div>
+          {assetId ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+              Using your selected Asset Library image (no AI image generation credits will be charged).
+            </div>
+          ) : (
+            <ImageOptionsPanel
+              model={model}
+              quality={quality}
+              aspectRatio={aspectRatio}
+              estimate={estimateQuery.data}
+              onModelChange={setModel}
+              onQualityChange={setQuality}
+              onAspectRatioChange={setAspectRatio}
+            />
+          )}
+        </section>
+
+        <section className="sa-card p-6 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-black">Channels</h2>
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={includeCaption} onChange={event => setIncludeCaption(event.target.checked)} />
+              Caption
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
             {contentPlatforms.map(platform => {
               const Icon = platform.icon;
               const checked = selected.includes(platform.value);
@@ -400,8 +513,39 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
               </button>
             })}
           </div>
+
+          <CreditEstimateBanner
+            estimate={estimateQuery.data}
+            isLoading={estimateQuery.isLoading}
+            isError={estimateQuery.isError}
+            error={estimateQuery.error}
+          />
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="primary-button px-7 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={
+                !prompt.trim() ||
+                !selected.length ||
+                generate.isPending ||
+                estimateQuery.isError ||
+                Boolean(estimateQuery.data && !estimateQuery.data.sufficient_credits)
+              }
+              onClick={() => generate.mutate()}
+            >
+              <Sparkles size={17} />{generate.isPending ? "Generating..." : "Generate Content"}
+            </button>
+          </div>
         </section>
-      </>
+
+        <ImageGenerationHistorySection
+          onUseInPost={(generatedAssetId) => {
+            hasInitializedAsset.current = false;
+            router.push(`/user/channels?assetId=${generatedAssetId}`);
+          }}
+        />
+      </div>
     )}
 
     {activeTab === "CALENDAR" && (
@@ -470,7 +614,7 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
       history.isError ? <ErrorState error={history.error} /> : history.isLoading ? <Skeleton /> : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {(history.data ?? []).map((item: any, index: number) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
+            {(history.data ?? []).map((item, index: number) => <ContentPostCard item={item} index={index} key={item.id} onCopy={() => void copy(item.versions[0]?.text_content || "")} onDownload={() => download(item)} onSave={() => save.mutate(item.id)} />)}
           </div>
           {!history.isLoading && !history.data?.length && <Empty message="Generate your first post to see it here." />}
         </>
@@ -484,20 +628,82 @@ export function UserContentStudio({ draftId: initialDraftId }: { draftId?: strin
 
 function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenerateNew }: { draft: ContentDraftData; generating: boolean; onChange: (draft: ContentDraftData) => void; onBack: () => void; onGenerateNew: () => void }) {
   const client = useQueryClient();
-  const [activeId, setActiveId] = useState(draft.platforms[0]?.id ?? ""); const [edits, setEdits] = useState<Record<string, string>>({}); const [scheduleAt, setScheduleAt] = useState(""); const [firstComment, setFirstComment] = useState(""); const [location, setLocation] = useState(""); const [publishAs, setPublishAs] = useState("Feed Post"); const [busy, setBusy] = useState("");
-  const active = draft.platforms.find(item => item.id === activeId) ?? draft.platforms[0]; const caption = active ? (edits[active.id] ?? [active.caption?.caption_text, active.caption?.hashtags, active.caption?.cta].filter(Boolean).join("\n\n")) : ""; const image = resolveApiUrl(active?.images[0]?.asset_url); const meta = contentPlatforms.find(item => item.value === active?.platform); const ActiveIcon = meta?.icon; const isFacebook = active?.platform === "FACEBOOK"; const isInstagram = active?.platform === "INSTAGRAM"; const isLinkedIn = active?.platform === "LINKEDIN"; const isX = active?.platform === "X"; const contentLimit = isX ? 280 : isLinkedIn ? 3000 : 2200; const firstCommentLimit = isFacebook ? 800 : 300;
-  useEffect(() => {
-    if (active) {
-      if (active.first_comment !== undefined) setFirstComment(active.first_comment || "");
-      if (active.location_id !== undefined) setLocation(active.location_id || "");
-    }
-  }, [active?.id]);
+  const [activeId, setActiveId] = useState(draft.platforms[0]?.id ?? ""); const [edits, setEdits] = useState<Record<string, string>>({}); const [scheduleAt, setScheduleAt] = useState(""); const [firstCommentEdits, setFirstCommentEdits] = useState<Record<string, string>>({}); const [locationEdits, setLocationEdits] = useState<Record<string, string>>({}); const [publishAs, setPublishAs] = useState("Feed Post"); const [busy, setBusy] = useState("");
+  const [imageRegenOpen, setImageRegenOpen] = useState(false);
+  const [imageChangeNote, setImageChangeNote] = useState("");
+  const [regenModel, setRegenModel] = useState<AIImageModelKey>(draft.image_model ?? "google_nano_banana");
+  const [regenQuality, setRegenQuality] = useState<AIImageQuality>(draft.image_quality ?? "STANDARD");
+  const [regenRatio, setRegenRatio] = useState<AIImageAspectRatio>(draft.image_aspect_ratio ?? "1:1");
+  const regenIdemRef = useRef<string | null>(null);
+
+  const regenEstimateQuery = useQuery({
+    queryKey: ["ai-content-regen-estimate", draft.id, regenModel, regenQuality, regenRatio],
+    enabled: imageRegenOpen,
+    queryFn: async () =>
+      (
+        await apiClient.post<ImageEstimateResponse>("/api/content/images/estimate/", {
+          model: regenModel,
+          quality: regenQuality,
+          aspect_ratio: regenRatio,
+          generate_image: true,
+          caption_count: 0,
+        })
+      ).data,
+  });
+
+  const openImageRegenModal = () => {
+    setRegenModel(draft.image_model ?? "google_nano_banana");
+    setRegenQuality(draft.image_quality ?? "STANDARD");
+    setRegenRatio(draft.image_aspect_ratio ?? "1:1");
+    setImageChangeNote("");
+    regenIdemRef.current = null;
+    setImageRegenOpen(true);
+  };
+
+  const active = draft.platforms.find(item => item.id === activeId) ?? draft.platforms[0]; const caption = active ? (edits[active.id] ?? [active.caption?.caption_text, active.caption?.hashtags, active.caption?.cta].filter(Boolean).join("\n\n")) : ""; const firstComment = active ? (firstCommentEdits[active.id] ?? active.first_comment ?? "") : ""; const location = active ? (locationEdits[active.id] ?? active.location_id ?? "") : ""; const image = resolveApiUrl(active?.images[0]?.asset_url); const meta = contentPlatforms.find(item => item.value === active?.platform); const ActiveIcon = meta?.icon; const isFacebook = active?.platform === "FACEBOOK"; const isInstagram = active?.platform === "INSTAGRAM"; const isLinkedIn = active?.platform === "LINKEDIN"; const isX = active?.platform === "X"; const contentLimit = isX ? 280 : isLinkedIn ? 3000 : 2200; const firstCommentLimit = isFacebook ? 800 : 300;
   const refresh = async () => { const updated = (await apiClient.get<ContentDraftData>(`/api/content/content-drafts/${draft.id}/`, { timeout: 60000 })).data; onChange(updated); return updated };
-  const run = async (label: string, operation: () => Promise<void>) => { setBusy(label); try { await operation() } catch (error) { toast.error(parseApiError(error)) } finally { setBusy("") } };
+  const run = async (label: string, operation: () => Promise<void>) => { setBusy(label); try { await operation() } catch (error) { const responseData = axios.isAxiosError(error) ? (error.response?.data as { refunded?: boolean; refunded_credits?: number } | undefined) : undefined; if (responseData?.refunded) { toast.error(`${parseApiError(error)} (${responseData.refunded_credits ?? 0} credits automatically refunded.)`); } else { toast.error(parseApiError(error)); } } finally { setBusy("") } };
   const persist = async (showToast = true) => { if (!active) return; await apiClient.patch(`/api/content/content-drafts/${draft.id}/platforms/${active.id}/`, { caption_text: caption, hashtags: "", cta: "", first_comment: firstComment, location_id: location }, { timeout: 60000 }); await refresh(); if (showToast) toast.success("Draft saved") };
-  const regenerate = async (images: boolean, captions: boolean) => run(images ? "image" : "caption", async () => { await apiClient.post(`/api/content/content-drafts/${draft.id}/regenerate/`, { reason: images ? "Replace post image" : "Improve caption", generate_images: images, generate_captions: captions }, { timeout: 180000 }); await refresh(); if (captions) { setEdits({}); } toast.success(images ? "Post image regenerated" : "Caption regenerated") });
+  const regenerate = async (images: boolean, captions: boolean, options?: { changeReason?: string; model?: AIImageModelKey; quality?: AIImageQuality; aspectRatio?: AIImageAspectRatio }) =>
+    run(images ? "image" : "caption", async () => {
+      if (images && !regenIdemRef.current) {
+        regenIdemRef.current = generateClientIdempotencyKey();
+      }
+      try {
+        await apiClient.post(
+          `/api/content/content-drafts/${draft.id}/regenerate/`,
+          {
+            reason: images ? (options?.changeReason?.trim() || "Replace post image") : "Improve caption",
+            generate_images: images,
+            generate_captions: captions,
+            ...(images ? {
+              model: options?.model ?? regenModel,
+              quality: options?.quality ?? regenQuality,
+              aspect_ratio: options?.aspectRatio ?? regenRatio,
+              idempotency_key: regenIdemRef.current,
+            } : {}),
+          },
+          { timeout: 180000 }
+        );
+        await refresh();
+        if (captions) { setEdits({}); }
+        if (images) { setImageRegenOpen(false); setImageChangeNote(""); }
+        void client.invalidateQueries({ queryKey: ["ai-content-estimate"] });
+        void client.invalidateQueries({ queryKey: ["ai-content-regen-estimate"] });
+        void client.invalidateQueries({ queryKey: ["ai-image-history"] });
+        void client.invalidateQueries({ queryKey: ["sa-billing"] });
+        void client.invalidateQueries({ queryKey: ["user-content-drafts"] });
+        toast.success(images ? "Post image regenerated" : "Caption regenerated");
+      } finally {
+        if (images) {
+          regenIdemRef.current = null;
+          void client.invalidateQueries({ queryKey: ["ai-content-regen-estimate"] });
+          void client.invalidateQueries({ queryKey: ["ai-image-history"] });
+          void client.invalidateQueries({ queryKey: ["sa-billing"] });
+        }
+      }
+    });
   const schedule = () => run("schedule", async () => { if (!scheduleAt) throw new Error("Select a future date and time."); await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/schedule/`, { schedules: Object.fromEntries(draft.platforms.map(item => [item.platform, new Date(scheduleAt).toISOString()])) }, { timeout: 60000 }); await refresh(); toast.success("Content scheduled") });
-  const approval = () => run("approval", async () => { await persist(false); await apiClient.post(`/api/content/content-drafts/${draft.id}/request_approval/`, {}, { timeout: 60000 }); await refresh(); toast.success("Sent to Admin for approval") });
   const publish = () => run("publish", async () => { 
     await persist(false); 
     await apiClient.post(`/api/content/content-drafts/${draft.id}/publish/`, {}, { timeout: 60000 }); 
@@ -505,7 +711,7 @@ function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenera
     let updated = await refresh(); 
     let retries = 0;
     // Poll until no platforms are PENDING (max 45 seconds)
-    while (updated.platforms.some((p: any) => p.status === "PENDING") && retries < 15) {
+    while (updated.platforms.some((p) => p.status === "PENDING") && retries < 15) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         updated = await refresh();
         retries++;
@@ -517,8 +723,8 @@ function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenera
         client.invalidateQueries({ queryKey: ["user-content-drafts"] }); 
         onBack(); 
     } else { 
-        const failedPlatforms = updated.platforms.filter((p: any) => p.status === "FAILED").map((p: any) => p.platform); 
-        if (updated.platforms.some((p: any) => p.status === "PENDING")) {
+        const failedPlatforms = updated.platforms.filter((p) => p.status === "FAILED").map((p) => p.platform); 
+        if (updated.platforms.some((p) => p.status === "PENDING")) {
             toast.error("Publishing is taking longer than expected. It will continue in the background.");
             onBack();
         } else {
@@ -528,9 +734,96 @@ function ContentPreviewCustomize({ draft, generating, onChange, onBack, onGenera
   });
   return <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}><button className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-700" onClick={onBack}><ChevronLeft size={17} />Back to Content Studio</button><div className="flex flex-wrap items-start justify-between gap-4"><PageHeading title="Preview & Customize" subtitle="Review and refine your content before publishing." /><div className="flex gap-3"><button className="secondary-button px-5" disabled={generating || !!busy} onClick={() => void run("save", () => persist())}><Save size={17} />{busy === "save" ? "Saving..." : "Save to Drafts"}</button></div></div>{generating && <div className="mt-5 flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-800 shadow-sm"><LoaderCircle className="animate-spin" size={20} /><div><p>Generating your prompt-based image and captions…</p><p className="mt-1 text-xs font-normal text-blue-600">The preview is open. It will update automatically when AI generation finishes.</p></div></div>}
     <div className="mt-6 grid overflow-hidden rounded-xl border border-slate-200 bg-white sm:grid-cols-4">{draft.platforms.map(platform => { const item = contentPlatforms.find(entry => entry.value === platform.platform); const Icon = item?.icon; const isFailed = platform.status === "FAILED"; return <button className={`flex items-center justify-center gap-2 border-b-2 px-4 py-4 text-sm font-bold transition ${active?.id === platform.id ? "border-blue-600 bg-blue-50/40 text-blue-700" : "border-transparent hover:bg-slate-50"} ${isFailed ? "text-red-600" : ""}`} key={platform.id} onClick={() => setActiveId(platform.id)}>{Icon ? <Icon className={isFailed ? "text-red-600" : item?.tone} size={19} /> : <b>𝕏</b>}{item?.label}{isFailed && <span title={platform.error_message || "Publish failed"}><InfoIcon size={15} className="ml-1 text-red-500" /></span>}</button> })}</div>
-    <div className="mt-6 grid gap-6 xl:grid-cols-[1.02fr_.98fr]"><section><h2 className="mb-1 flex items-center gap-2 text-lg font-black">{ActiveIcon ? <ActiveIcon className={meta?.tone} size={20} /> : <b>𝕏</b>}{isFacebook ? "Facebook Post Preview" : isInstagram ? "Instagram Feed Preview" : isLinkedIn ? "LinkedIn Post Preview" : isX ? "X (Twitter) Post Preview" : `${meta?.label} Post Preview`}</h2>{(isFacebook || isLinkedIn || isX) && <p className="mb-4 text-sm text-slate-500">{isFacebook ? "This is how your post will appear in the Facebook feed." : isLinkedIn ? "This is how your post will appear on LinkedIn." : "This is how your post will appear on X."}</p>}<SocialContentPreview platform={active?.platform ?? "INSTAGRAM"} caption={caption} image={image} location={location} /></section><div className="space-y-4"><section className="sa-card p-5"><h2 className="font-black">{isFacebook || isLinkedIn || isX ? "Post Content" : "Caption"}</h2><label className="field mt-4">{isX && <span>Content</span>}{isLinkedIn && <span>Caption</span>}<textarea maxLength={contentLimit} rows={9} value={caption} onChange={event => active && setEdits(value => ({ ...value, [active.id]: event.target.value }))} /><small className="text-right">{caption.length} / {contentLimit}</small></label><div className="mt-4 flex flex-wrap justify-between gap-3"><button className="secondary-button px-4" disabled={!!busy} onClick={() => void regenerate(false, true)}><RefreshCw size={16} />{busy === "caption" ? "Regenerating..." : "Regenerate"}</button><button className="primary-button px-4" disabled={!!busy} onClick={() => void run("improve", () => persist())}><Sparkles size={16} />{isX ? "Improve Content" : "Improve Caption"}</button></div></section>
-      <section className="sa-card p-5"><h2 className="font-black">Post Settings</h2>{isX ? <><label className="field mt-4"><span>Who can reply?</span><select defaultValue="Everyone"><option>Everyone</option><option>Accounts you follow</option><option>Verified accounts</option><option>Only accounts you mention</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to your post</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow replies</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Show engagement metrics</label></div></> : isLinkedIn ? <><label className="field mt-4"><span>Who can see this post?</span><select defaultValue="Anyone"><option>Anyone</option><option>Connections only</option><option>Group members</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Notify connections</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow comments</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label></div></> : <><div className="mt-4 flex flex-wrap gap-5 text-sm">{isFacebook ? <><label className="flex items-center gap-2"><input checked={publishAs !== "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page")} />Your Page</label><label className="flex items-center gap-2"><input checked={publishAs === "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page and Groups")} />Your Page and Groups</label></> : <><label className="flex items-center gap-2"><input checked={publishAs !== "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Feed Post")} />Feed Post</label><label className="flex items-center gap-2"><input checked={publishAs === "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Reel")} />Reel</label></>}</div><label className="field mt-4"><span>First Comment (Optional)</span><textarea maxLength={firstCommentLimit} rows={3} value={firstComment} onChange={event => setFirstComment(event.target.value)} /><small className="text-right">{firstComment.length} / {firstCommentLimit}</small></label>{isFacebook ? <label className="field mt-4"><span>Audience</span><select defaultValue="Public"><option>Public</option><option>Friends</option><option>Only me</option></select></label> : <label className="field mt-4"><span>Location (Optional)</span><input value={location} onChange={event => setLocation(event.target.value)} /></label>}</>}{!isLinkedIn && <label className="field mt-4"><span>{isX ? "Schedule (Optional)" : "Schedule"}</span><input min={new Date().toISOString().slice(0, 16)} type="datetime-local" value={scheduleAt} onChange={event => setScheduleAt(event.target.value)} /></label>}</section></div></div>
-    <div className="sa-card sticky bottom-3 mt-6 flex flex-wrap justify-between gap-3 p-4"><div className="flex gap-3"><button className="secondary-button px-5" onClick={() => document.querySelector<HTMLTextAreaElement>("textarea[maxlength]")?.focus()}><FileText size={16} />Edit Content</button><button className="secondary-button px-5" onClick={onGenerateNew}><Sparkles size={16} />Generate New</button></div><div className="flex gap-3"><button className="primary-button px-7" disabled={!!busy} onClick={publish}><Send size={17} />{busy === "publish" ? "Publishing..." : "Publish Now"}</button><button className="primary-button px-7" disabled={!!busy} onClick={schedule}><CalendarClock size={17} />{busy === "schedule" ? "Scheduling..." : "Schedule"}</button></div></div></motion.div>;
+    <div className="mt-6 grid gap-6 xl:grid-cols-[1.02fr_.98fr]"><section><div className="mb-1 flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-lg font-black">{ActiveIcon ? <ActiveIcon className={meta?.tone} size={20} /> : <b>𝕏</b>}{isFacebook ? "Facebook Post Preview" : isInstagram ? "Instagram Feed Preview" : isLinkedIn ? "LinkedIn Post Preview" : isX ? "X (Twitter) Post Preview" : `${meta?.label} Post Preview`}</h2><button type="button" className="secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs" disabled={generating || !!busy} onClick={openImageRegenModal}><RefreshCw size={14} />{busy === "image" ? "Regenerating Image..." : "Regenerate Image"}</button></div>{(isFacebook || isLinkedIn || isX) && <p className="mb-4 text-sm text-slate-500">{isFacebook ? "This is how your post will appear in the Facebook feed." : isLinkedIn ? "This is how your post will appear on LinkedIn." : "This is how your post will appear on X."}</p>}<SocialContentPreview platform={active?.platform ?? "INSTAGRAM"} caption={caption} image={image} location={location} /></section><div className="space-y-4"><section className="sa-card p-5"><h2 className="font-black">{isFacebook || isLinkedIn || isX ? "Post Content" : "Caption"}</h2><label className="field mt-4">{isX && <span>Content</span>}{isLinkedIn && <span>Caption</span>}<textarea maxLength={contentLimit} rows={9} value={caption} onChange={event => active && setEdits(value => ({ ...value, [active.id]: event.target.value }))} /><small className="text-right">{caption.length} / {contentLimit}</small></label><div className="mt-4 flex flex-wrap justify-between gap-3"><button className="secondary-button px-4" disabled={!!busy} onClick={() => void regenerate(false, true)}><RefreshCw size={16} />{busy === "caption" ? "Regenerating..." : "Regenerate"}</button><button className="primary-button px-4" disabled={!!busy} onClick={() => void run("improve", () => persist())}><Sparkles size={16} />{isX ? "Improve Content" : "Improve Caption"}</button></div></section>
+      <section className="sa-card p-5"><h2 className="font-black">Post Settings</h2>{isX ? <><label className="field mt-4"><span>Who can reply?</span><select defaultValue="Everyone"><option>Everyone</option><option>Accounts you follow</option><option>Verified accounts</option><option>Only accounts you mention</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to your post</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow replies</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Show engagement metrics</label></div></> : isLinkedIn ? <><label className="field mt-4"><span>Who can see this post?</span><select defaultValue="Anyone"><option>Anyone</option><option>Connections only</option><option>Group members</option></select></label><div className="mt-4 space-y-3 text-sm"><p className="font-semibold">Add to</p><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Notify connections</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow comments</label><label className="flex items-center gap-2"><input defaultChecked type="checkbox" />Allow reposts</label></div></> : <><div className="mt-4 flex flex-wrap gap-5 text-sm">{isFacebook ? <><label className="flex items-center gap-2"><input checked={publishAs !== "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page")} />Your Page</label><label className="flex items-center gap-2"><input checked={publishAs === "Your Page and Groups"} name="publishAs" type="radio" onChange={() => setPublishAs("Your Page and Groups")} />Your Page and Groups</label></> : <><label className="flex items-center gap-2"><input checked={publishAs !== "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Feed Post")} />Feed Post</label><label className="flex items-center gap-2"><input checked={publishAs === "Reel"} name="publishAs" type="radio" onChange={() => setPublishAs("Reel")} />Reel</label></>}</div><label className="field mt-4"><span>First Comment (Optional)</span><textarea maxLength={firstCommentLimit} rows={3} value={firstComment} onChange={event => active && setFirstCommentEdits(value => ({ ...value, [active.id]: event.target.value }))} /><small className="text-right">{firstComment.length} / {firstCommentLimit}</small></label>{isFacebook ? <label className="field mt-4"><span>Audience</span><select defaultValue="Public"><option>Public</option><option>Friends</option><option>Only me</option></select></label> : <label className="field mt-4"><span>Location (Optional)</span><input value={location} onChange={event => active && setLocationEdits(value => ({ ...value, [active.id]: event.target.value }))} /></label>}</>}{!isLinkedIn && <label className="field mt-4"><span>{isX ? "Schedule (Optional)" : "Schedule"}</span><input min={new Date().toISOString().slice(0, 16)} type="datetime-local" value={scheduleAt} onChange={event => setScheduleAt(event.target.value)} /></label>}</section></div></div>
+    <div className="sa-card sticky bottom-3 mt-6 flex flex-wrap justify-between gap-3 p-4"><div className="flex gap-3"><button className="secondary-button px-5" onClick={() => document.querySelector<HTMLTextAreaElement>("textarea[maxlength]")?.focus()}><FileText size={16} />Edit Content</button><button className="secondary-button px-5" onClick={onGenerateNew}><Sparkles size={16} />Generate New</button></div><div className="flex gap-3"><button className="primary-button px-7" disabled={!!busy} onClick={publish}><Send size={17} />{busy === "publish" ? "Publishing..." : "Publish Now"}</button><button className="primary-button px-7" disabled={!!busy} onClick={schedule}><CalendarClock size={17} />{busy === "schedule" ? "Scheduling..." : "Schedule"}</button></div></div>
+    {imageRegenOpen && (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+        <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Regenerate Post Image</h3>
+              <p className="text-xs text-slate-500">
+                Tell AI what changes you want to make to the visual before regenerating.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Close"
+              className="icon-button"
+              disabled={busy === "image"}
+              onClick={() => setImageRegenOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <label className="block space-y-2">
+            <span className="block text-sm font-bold text-slate-800">
+              What changes would you like to make? <b className="text-red-500">*</b>
+            </span>
+            <textarea
+              rows={3}
+              maxLength={1000}
+              value={imageChangeNote}
+              onChange={(e) => setImageChangeNote(e.target.value)}
+              placeholder="e.g., Make the background warmer sunset gold, zoom out slightly, and place the product cleanly in the center..."
+              className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3.5 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+
+          <ImageOptionsPanel
+            model={regenModel}
+            quality={regenQuality}
+            aspectRatio={regenRatio}
+            estimate={regenEstimateQuery.data}
+            onModelChange={setRegenModel}
+            onQualityChange={setRegenQuality}
+            onAspectRatioChange={setRegenRatio}
+          />
+
+          <CreditEstimateBanner
+            estimate={regenEstimateQuery.data}
+            isLoading={regenEstimateQuery.isLoading}
+            isError={regenEstimateQuery.isError}
+            error={regenEstimateQuery.error}
+          />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              className="secondary-button px-5"
+              disabled={busy === "image"}
+              onClick={() => setImageRegenOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="primary-button px-6 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={
+                !imageChangeNote.trim() ||
+                busy === "image" ||
+                regenEstimateQuery.isError ||
+                Boolean(regenEstimateQuery.data && !regenEstimateQuery.data.sufficient_credits)
+              }
+              onClick={() =>
+                void regenerate(true, false, {
+                  changeReason: imageChangeNote,
+                  model: regenModel,
+                  quality: regenQuality,
+                  aspectRatio: regenRatio,
+                })
+              }
+            >
+              <RefreshCw size={15} className={busy === "image" ? "animate-spin" : ""} />
+              {busy === "image" ? "Regenerating Image..." : "Regenerate Image"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </motion.div>;
 }
 
 function SocialContentPreview({ platform, caption, image, location }: { platform: string; caption: string; image?: string; location: string }) {
@@ -562,12 +855,9 @@ export function UserTasks() {
 }
 
 export function UserCampaigns() {
-  const client = useQueryClient(); const [page, setPage] = useState(1); const [search, setSearch] = useState(""); const [status, setStatus] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [resumeDraft, setResumeDraft] = useState(false); const [viewing, setViewing] = useState<Campaign | null>(null); const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null); const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null); const [form, setForm] = useState({ audience: "", name: "", description: "" }); const [scheduleOpen, setScheduleOpen] = useState(false); const [scheduleDate, setScheduleDate] = useState("");
+  const client = useQueryClient(); const [page, setPage] = useState(1); const [search, setSearch] = useState(""); const [status, setStatus] = useState(""); const [createOpen, setCreateOpen] = useState(false); const [resumeDraft, setResumeDraft] = useState(false); const [viewing, setViewing] = useState<Campaign | null>(null); const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null); const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null); const [scheduleOpen, setScheduleOpen] = useState(false); const [scheduleDate, setScheduleDate] = useState(""); const [scheduleMin, setScheduleMin] = useState("");
   useEffect(() => { const timer = window.setTimeout(() => { if (new URLSearchParams(window.location.search).has("resume") && readCampaignDraft()) { setResumeDraft(true); setCreateOpen(true); window.history.replaceState(null, "", "/user/campaigns") } }, 0); return () => window.clearTimeout(timer) }, []);
   const campaigns = useQuery({ queryKey: ["user-campaigns", page, search, status], queryFn: async () => (await apiClient.get<CampaignPage>("/api/campaigns/my/", { params: { page, search, status: status || undefined } })).data });
-  const audiences = useQuery({ queryKey: ["audiences-list"], queryFn: async () => (await apiClient.get<any[]>("/api/audiences/")).data });
-  const create = useMutation({ mutationFn: () => apiClient.post("/api/campaigns/create/", { audience: Number(form.audience), name: form.name, description: form.description }), onSuccess: () => { toast.success("Campaign created"); setCreateOpen(false); setForm({ audience: "", name: "", description: "" }); void client.invalidateQueries({ queryKey: ["user-campaigns"] }) }, onError: error => toast.error(parseApiError(error)) });
-  const submit = useMutation({ mutationFn: (id: number) => apiClient.post(`/api/campaigns/${id}/submit/`, {}), onSuccess: () => { toast.success("Campaign submitted for approval"); setViewing(null); void client.invalidateQueries({ queryKey: ["user-campaigns"] }) }, onError: error => toast.error(parseApiError(error)) });
   const send = useMutation({ mutationFn: (id: number) => apiClient.post("/api/campaigns/send/", { campaign: id }), onSuccess: () => { toast.success("Campaign sent successfully!"); setViewing(null); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }, onError: error => toast.error(parseApiError(error)) });
   const schedule = useMutation({ mutationFn: ({ id, at }: { id: number; at: string }) => apiClient.post("/api/campaigns/schedule/", { campaign: id, scheduled_at: new Date(at).toISOString() }), onSuccess: () => { toast.success("Campaign scheduled!"); setViewing(null); setScheduleOpen(false); setScheduleDate(""); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }, onError: error => toast.error(parseApiError(error)) });
   const remove = useMutation({ mutationFn: (id: number) => apiClient.delete(`/api/campaigns/${id}/delete/`), onSuccess: () => { toast.success("Campaign deleted"); setDeleteTarget(null); void client.invalidateQueries({ queryKey: ["user-campaigns"] }); void client.invalidateQueries({ queryKey: ["user-campaigns-dashboard"] }) }, onError: error => toast.error(parseApiError(error)) });
@@ -575,12 +865,12 @@ export function UserCampaigns() {
   // Fetch full campaign details for editing
   const loadCampaignForEdit = async (campaign: Campaign) => {
     try {
-      const response = await apiClient.get(`/api/campaigns/${campaign.id}/detail/`);
+      const response = await apiClient.get<CampaignDetailResponse>(`/api/campaigns/${campaign.id}/detail/`);
       const fullData = response.data;
 
       const selectedIds: number[] = fullData.selected_channel_ids && Array.isArray(fullData.selected_channel_ids) && fullData.selected_channel_ids.length > 0
         ? fullData.selected_channel_ids
-        : (fullData.channels ? fullData.channels.map((ch: any) => ch.channel_id || ch.id).filter(Boolean) : []);
+        : (fullData.channels ? fullData.channels.map((ch) => ch.channel_id || ch.id).filter((id): id is number => Boolean(id)) : []);
 
       const editDraft: CampaignDraft = {
         task: fullData.task_id ? String(fullData.task_id) : (campaign.task_id ? String(campaign.task_id) : ""),
@@ -598,7 +888,7 @@ export function UserCampaigns() {
       };
 
       if (fullData.channels && Array.isArray(fullData.channels)) {
-        fullData.channels.forEach((ch: any) => {
+        fullData.channels.forEach((ch) => {
           const chKey = String(ch.channel_id || ch.id || ch.channel);
           editDraft.channelTemplates[chKey] = {
             template_id: ch.template_id ? String(ch.template_id) : "",
@@ -625,6 +915,7 @@ export function UserCampaigns() {
   if (createOpen) {
     return (
       <CampaignWizard
+        key={editingCampaign?.id ?? (resumeDraft ? "resume" : "new")}
         assignments={[]}
         initialDraft={resumeDraft ? readCampaignDraft() : null}
         editingCampaignId={editingCampaign?.id}
@@ -868,7 +1159,10 @@ export function UserCampaigns() {
                       <span className="text-[11px] text-slate-500">Send campaign immediately</span>
                     </button>
                     <button
-                      onClick={() => setScheduleOpen(true)}
+                      onClick={() => {
+                        setScheduleMin(new Date(Date.now() + 60000).toISOString().slice(0, 16));
+                        setScheduleOpen(true);
+                      }}
                       className="flex flex-col items-center gap-2 rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 py-5 text-center transition hover:border-indigo-400 hover:bg-indigo-100"
                     >
                       <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-indigo-600 shadow-sm">
@@ -887,7 +1181,7 @@ export function UserCampaigns() {
                     </p>
                     <input
                       type="datetime-local"
-                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                      min={scheduleMin}
                       value={scheduleDate}
                       onChange={(e) => setScheduleDate(e.target.value)}
                       className="h-11 w-full rounded-xl border border-indigo-200 bg-white px-4 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
@@ -988,27 +1282,20 @@ export function UserCampaigns() {
 function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel, onCreated }: { assignments: Assignment[]; initialDraft: CampaignDraft | null; editingCampaignId?: number; onCancel: () => void; onCreated: () => void }) {
   const user = useQuery({ queryKey: ["auth-profile"], queryFn: authService.profile });
   const [testVariables, setTestVariables] = useState<Record<string, string>>({});
-  const router = useRouter();
   const [step, setStep] = useState(1);
   const [channelIndex, setChannelIndex] = useState(0);
   const [form, setForm] = useState<CampaignDraft>(() => initialDraft ? { ...emptyCampaignDraft, ...initialDraft } : { ...emptyCampaignDraft });
-
-  useEffect(() => {
-    if (initialDraft) {
-      setForm({ ...emptyCampaignDraft, ...initialDraft });
-    }
-  }, [initialDraft]);
-  const [previewPage, setPreviewPage] = useState(1);
-  const [previewSearch, setPreviewSearch] = useState("");
+  const [previewPage] = useState(1);
+  const [previewSearch] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [previewChannelIdx, setPreviewChannelIdx] = useState(0);
-  const [previewCustomerIdx, setPreviewCustomerIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleMin, setScheduleMin] = useState("");
 
   const channels = useQuery({ queryKey: ["channels"], queryFn: async () => (await apiClient.get<Channel[]>("/api/channels/")).data });
-  const audiences = useQuery({ queryKey: ["audiences-list"], queryFn: async () => (await apiClient.get<any[]>("/api/audiences/")).data });
+  const audiences = useQuery({ queryKey: ["audiences-list"], queryFn: async () => (await apiClient.get<AudienceOption[]>("/api/audiences/")).data });
 
   const selectedAssignment = assignments.find(row => String(row.task.id) === form.task);
   const audiencePreview = useQuery({
@@ -1038,7 +1325,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
   const doSave = async (action: "draft" | "send" | "schedule", targetScheduleDate?: string) => {
     setSaving(true);
     try {
-      const payload: any = {
+      const payload: CampaignSavePayload = {
         name: form.name.trim(),
         description: form.description.trim(),
       };
@@ -1230,7 +1517,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                   <span>Select Target Audience <b className="text-red-500">*</b></span>
                   <select value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
                     <option value="">Select Audience Group</option>
-                    {(audiences.data ?? []).map((aud: any) => (
+                    {(audiences.data ?? []).map((aud) => (
                       <option value={aud.id} key={aud.id}>{aud.name} ({aud.contacts_count ?? 0} contacts)</option>
                     ))}
                   </select>
@@ -1331,9 +1618,12 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                         {waData.header.type === "IMAGE" && waData.header.mediaUrl ? (
                           <div className="flex items-center gap-3">
                             <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-200">
-                              <img
-                                src={resolveApiUrl(waData.header.mediaUrl)}
+                              <NextImage
+                                unoptimized
+                                src={resolveApiUrl(waData.header.mediaUrl) || waData.header.mediaUrl}
                                 alt="Header preview"
+                                width={96}
+                                height={64}
                                 className="h-full w-full object-cover"
                                 onError={(e) => {
                                   (e.currentTarget as HTMLElement).style.display = "none";
@@ -1437,9 +1727,12 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                         {smsData.headerType === "IMAGE" && smsData.mediaUrl ? (
                           <div className="flex items-center gap-3">
                             <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-200">
-                              <img
-                                src={resolveApiUrl(smsData.mediaUrl)}
+                              <NextImage
+                                unoptimized
+                                src={resolveApiUrl(smsData.mediaUrl) || smsData.mediaUrl}
                                 alt="Header preview"
+                                width={96}
+                                height={64}
                                 className="h-full w-full object-cover"
                                 onError={(e) => {
                                   (e.currentTarget as HTMLElement).style.display = "none";
@@ -1643,7 +1936,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                               <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">{v}</span>
                               <input
                                 className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                                value={testVariables[v] !== undefined ? testVariables[v] : (v === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "")}
+                                value={testVariables[v] !== undefined ? testVariables[v] : (v === 'name' ? ((user.data as ExtendedProfile | undefined)?.name || user.data?.first_name || "John Doe") : "")}
                                 onChange={e => setTestVariables(prev => ({ ...prev, [v]: e.target.value }))}
                                 placeholder={`Enter ${v}...`}
                               />
@@ -1670,7 +1963,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                   if (!text || typeof text !== "string") return "";
                   return text.replace(/\{\{(.*?)\}\}/g, (match, v) => {
                     const cleanV = v.trim();
-                    const val = testVariables[cleanV] !== undefined ? testVariables[cleanV] : (cleanV === 'name' ? ((user.data as any)?.name || user.data?.first_name || "John Doe") : "");
+                    const val = testVariables[cleanV] !== undefined ? testVariables[cleanV] : (cleanV === 'name' ? ((user.data as ExtendedProfile | undefined)?.name || user.data?.first_name || "John Doe") : "");
                     return val || `{{${cleanV}}}`;
                   });
                 };
@@ -1686,7 +1979,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
                           subject={resolvedSubject}
                           html={resolvedBody}
                           senderName={form.name || "Brand Email"}
-                          recipientEmail={testVariables["email"] || ((user.data as any)?.email) || "alex.morgan@example.com"}
+                          recipientEmail={testVariables["email"] || ((user.data as ExtendedProfile | undefined)?.email) || "alex.morgan@example.com"}
                         />
                       </div>
                     )}
@@ -1771,7 +2064,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
           </button>}
           {step === 3 && <>
             <button type="button" className="secondary-button px-5" disabled={saving} onClick={() => void doSave("draft")}>{saving ? "Saving..." : "Save as Draft"}</button>
-            <button type="button" className="secondary-button px-5 flex items-center gap-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" disabled={saving} onClick={() => setScheduleOpen(true)}><CalendarClock size={16} />Schedule</button>
+            <button type="button" className="secondary-button px-5 flex items-center gap-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" disabled={saving} onClick={() => { setScheduleMin(new Date(Date.now() + 60000).toISOString().slice(0, 16)); setScheduleOpen(true); }}><CalendarClock size={16} />Schedule</button>
             <button type="button" className="primary-button px-6 flex items-center gap-2" disabled={saving} onClick={() => void doSave("send")}><Send size={16} />{saving ? "Launching..." : "Launch Now"}</button>
           </>}
         </div>
@@ -1786,7 +2079,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
             <p className="text-xs text-slate-500">Pick date &amp; time for automated sending:</p>
             <input
               type="datetime-local"
-              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+              min={scheduleMin}
               value={scheduleDate}
               onChange={e => setScheduleDate(e.target.value)}
               className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500"
@@ -1900,27 +2193,54 @@ function RichBodyEditor({ value, onChange, placeholder }: { value: string; onCha
   };
 
   const tools = [
-    { id: "bold", label: "Bold (Ctrl+B)", icon: Bold, act: () => exec("bold") },
-    { id: "italic", label: "Italic (Ctrl+I)", icon: Italic, act: () => exec("italic") },
-    { id: "underline", label: "Underline (Ctrl+U)", icon: Underline, act: () => exec("underline") },
-    { id: "ul", label: "Bullet list", icon: List, act: () => exec("insertUnorderedList") },
-    { id: "ol", label: "Numbered list", icon: ListOrdered, act: () => exec("insertOrderedList") },
-    { id: "link", label: "Insert link", icon: Link2, act: () => { editorRef.current?.focus(); setShowLink(v => !v); setShowImg(false); setShowVar(false); } },
-    { id: "image", label: "Insert image", icon: ImageIcon, act: () => { editorRef.current?.focus(); setShowImg(v => !v); setShowLink(false); setShowVar(false); } },
-    { id: "variable", label: "Insert variable", icon: Braces, act: () => { editorRef.current?.focus(); setShowVar(v => !v); setShowLink(false); setShowImg(false); } },
+    { id: "bold", label: "Bold (Ctrl+B)", icon: Bold },
+    { id: "italic", label: "Italic (Ctrl+I)", icon: Italic },
+    { id: "underline", label: "Underline (Ctrl+U)", icon: Underline },
+    { id: "ul", label: "Bullet list", icon: List },
+    { id: "ol", label: "Numbered list", icon: ListOrdered },
+    { id: "link", label: "Insert link", icon: Link2 },
+    { id: "image", label: "Insert image", icon: ImageIcon },
+    { id: "variable", label: "Insert variable", icon: Braces },
   ] as const;
+
+  const handleToolClick = (id: (typeof tools)[number]["id"]) => {
+    if (id === "bold" || id === "italic" || id === "underline") {
+      exec(id);
+      return;
+    }
+    if (id === "ul") {
+      exec("insertUnorderedList");
+      return;
+    }
+    if (id === "ol") {
+      exec("insertOrderedList");
+      return;
+    }
+    editorRef.current?.focus();
+    if (id === "link") {
+      setShowLink(v => !v); setShowImg(false); setShowVar(false);
+      return;
+    }
+    if (id === "image") {
+      setShowImg(v => !v); setShowLink(false); setShowVar(false);
+      return;
+    }
+    if (id === "variable") {
+      setShowVar(v => !v); setShowLink(false); setShowImg(false);
+    }
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white transition-shadow focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
 
       {/* ── Toolbar ── */}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-slate-50/80 px-2 py-1.5">
-        {tools.map(({ id, label, icon: Icon, act }) => (
+        {tools.map(({ id, label, icon: Icon }) => (
           <button key={id} type="button" title={label}
             onMouseDown={e => {
               // preventDefault keeps focus in editor, then we manually run the command
               e.preventDefault();
-              act();
+              handleToolClick(id);
             }}
             className={`grid h-9 w-9 place-items-center rounded-lg transition hover:bg-blue-50 hover:text-blue-600 ${activeFormats.has(id) ? "bg-blue-100 text-blue-700" : "text-slate-500"}`}>
             <Icon size={17} />
@@ -1979,15 +2299,10 @@ function RichBodyEditor({ value, onChange, placeholder }: { value: string; onCha
   );
 }
 
-function WizardProgress({ step }: { step: number }) { const stages = ["Campaign Details", "Template & Audience", "Review & Schedule"]; return <div className="mt-9 grid grid-cols-3">{stages.map((label, index) => { const number = index + 1; const active = number <= step; return <div className="relative text-center" key={label}>{index > 0 && <span className={`absolute right-1/2 top-3 h-px w-full ${number <= step ? "bg-blue-500" : "bg-slate-200"}`} />}<span className={`relative z-10 mx-auto grid h-7 w-7 place-items-center rounded-full border-2 text-xs font-bold transition ${active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500"}`}>{number < step ? "✓" : number}</span><p className={`mt-3 text-xs font-semibold sm:text-sm ${number === step ? "text-slate-950" : "text-slate-500"}`}>{label}</p></div> })}</div> }
-
-function PreviewStat({ icon: Icon, label, value, tone = "blue" }: { icon: React.ComponentType<{ size?: number }>; label: string; value: string; tone?: "blue" | "orange" }) { return <div className="flex min-h-20 items-center gap-4 rounded-xl border border-slate-200 bg-white p-4"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${tone === "orange" ? "bg-orange-50 text-orange-500" : "bg-blue-50 text-blue-600"}`}><Icon size={21} /></span><div className="min-w-0"><p className="text-xs text-slate-500">{label}</p><strong className="mt-1 block truncate text-sm text-slate-950" title={value}>{value}</strong></div></div> }
-
 function PageHeading({ title, subtitle }: { title: string; subtitle: string }) { return <div><span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />LIVE WORKSPACE</span><h1 className="sa-title mt-2 normal-case">{title}</h1><p className="sa-subtitle">{subtitle}</p></div> }
 function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) { return <label className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} /><input className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100" placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} /></label> }
 function Select({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <select className="h-12 rounded-xl border border-slate-200 bg-white px-4 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" value={value} onChange={event => onChange(event.target.value)}><option value="">{label}</option>{options.map(option => <option value={option} key={option}>{pretty(option)}</option>)}</select> }
 function Badge({ className = "", children }: { className?: string; children: React.ReactNode }) { return <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span> }
-function ChannelGlyph({ name }: { name: string }) { const normalized = name.toUpperCase(); const Icon = normalized.includes("WHATS") || normalized.includes("SMS") ? MessageCircle : Mail; return <Icon size={19} /> }
 function ChannelIcon({ name }: { name: string }) {
   const n = name.toUpperCase();
   if (n.includes("WHATS")) return (
@@ -2017,4 +2332,3 @@ function Info({ label, value }: { label: string; value: string }) { return <div>
 function Empty({ message }: { message: string }) { return <div className="p-12 text-center text-sm text-slate-500"><CircleDot className="mx-auto mb-3 text-slate-300" />{message}</div> }
 function Skeleton() { return <div className="space-y-3 p-5">{[1, 2, 3, 4, 5].map(item => <div className="h-14 animate-pulse rounded-xl bg-slate-100" key={item} />)}</div> }
 function ErrorState({ error }: { error: unknown }) { return <div className="sa-card p-10 text-center text-red-600">{parseApiError(error)}</div> }
-function weekRange() { const end = new Date(); const start = new Date(); start.setDate(end.getDate() - 6); return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` }

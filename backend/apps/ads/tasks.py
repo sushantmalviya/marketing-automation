@@ -18,7 +18,10 @@ def sync_daily_ad_insights():
     
     for account in active_accounts:
         try:
-            credential = MetaUserCredential.objects.get(user=account.user)
+            if account.organization_id:
+                credential = MetaUserCredential.objects.get(organization_id=account.organization_id)
+            else:
+                credential = MetaUserCredential.objects.get(organization__isnull=True, user=account.user)
             access_token = credential.access_token
             
             # Fetch daily insights
@@ -29,7 +32,7 @@ def sync_daily_ad_insights():
             logger.info(f"Successfully synced insights for account {account.account_id}: {data}")
             
         except MetaUserCredential.DoesNotExist:
-            logger.warning(f"No Meta credential found for user {account.user_id}")
+            logger.warning(f"No Meta credential found for organization {account.organization_id} / user {account.user_id}")
         except Exception as e:
             logger.error(f"Failed to sync insights for account {account.account_id}: {e}")
 
@@ -44,12 +47,19 @@ def sync_missed_leads():
     
     for account in active_accounts:
         try:
-            credential = MetaUserCredential.objects.get(user=account.user)
+            if account.organization_id:
+                credential = MetaUserCredential.objects.get(organization_id=account.organization_id)
+            else:
+                credential = MetaUserCredential.objects.get(organization__isnull=True, user=account.user)
             access_token = credential.access_token
             
+            upload_owner = account.user or credential.user
+            if not upload_owner and account.organization_id:
+                from django.contrib.auth import get_user_model
+                upload_owner = get_user_model().objects.filter(organization_id=account.organization_id, is_active=True).first()
             upload, _ = CustomerUpload.objects.get_or_create(
                 file_name="Meta Webhooks",
-                uploaded_by=account.user
+                uploaded_by=upload_owner,
             )
             
             # In a full implementation, you would:

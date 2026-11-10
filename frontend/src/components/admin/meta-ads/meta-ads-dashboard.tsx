@@ -67,7 +67,7 @@ export function MetaAdsDashboard() {
   const accounts = useQuery({
     queryKey: ["meta-ad-accounts", code],
     queryFn: () => {
-      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/ads` : undefined;
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}${pathname}` : undefined;
       return metaAdsService.getAdAccounts(code, redirectUri);
     },
     retry: false,
@@ -88,7 +88,7 @@ export function MetaAdsDashboard() {
   // Call the backend to retrieve the Meta OAuth redirect URL
   const connectMetaMutation = useMutation({
     mutationFn: () => {
-      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/ads` : undefined;
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}${pathname}` : undefined;
       return metaAdsService.getAuthorizationUrl(redirectUri);
     },
     onSuccess: (data) => {

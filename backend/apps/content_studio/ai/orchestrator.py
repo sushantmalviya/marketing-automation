@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from .providers.gemini_provider import GeminiProvider
 from .providers.huggingface_provider import HuggingFaceProvider
+from .providers.openai_provider import OpenAIProvider
 from .prompt_builders import (
     SpecPromptBuilder,
     QuestionPromptBuilder,
@@ -21,18 +22,15 @@ class AIOrchestrator:
     """
     
     def __init__(self):
-        default_text_provider = getattr(settings, "DEFAULT_TEXT_PROVIDER", "gemini")
+        default_text_provider = (getattr(settings, "DEFAULT_TEXT_PROVIDER", "openai") or "openai").lower()
         if default_text_provider == "huggingface" and getattr(settings, "HF_TOKEN", None):
             self.text_provider = HuggingFaceProvider()
-        else:
+        elif default_text_provider == "gemini":
             self.text_provider = GeminiProvider()
-        # Use Hugging Face when explicitly configured; otherwise reuse the
-        # configured Gemini key so prompt-based image generation still works.
-        self.image_provider = (
-            HuggingFaceProvider()
-            if getattr(settings, "HF_TOKEN", None)
-            else GeminiProvider()
-        )
+        else:
+            self.text_provider = OpenAIProvider()
+        # Use Google Nano Banana 2.1 as the default image provider in Content Studio.
+        self.image_provider = GeminiProvider()
 
     def _clean_json_response(self, text: str) -> str:
         text = text.strip()
@@ -78,7 +76,7 @@ class AIOrchestrator:
     def extract_spec_and_questions(self, user_prompt: str, brand_identity: dict) -> dict:
         """
         Single-call optimised version: extracts the content spec AND generates
-        clarifying questions in one Gemini request, cutting latency roughly in half.
+        10 contextual clarifying questions in one request.
 
         Returns: {"content_spec": {...}, "questions": [...]}
         """
@@ -87,7 +85,7 @@ You are an expert marketing strategist and creative director.
 Given the user's raw content idea, do TWO things in a SINGLE JSON response:
 
 1. Extract a structured content spec.
-2. Generate up to 8 highly relevant multiple-choice questions to collect the missing details needed to produce excellent content.
+2. Generate 10 contextual multiple-choice (or short-text) questions to collect the missing details needed to produce excellent content.
 
 USER INPUT:
 "{user_prompt}"
@@ -102,6 +100,7 @@ BRAND IDENTITY:
 - Desired Call to Action: {brand_identity.get('call_to_action', 'Not provided')}
 
 INSTRUCTIONS:
+- Return exactly 10 relevant contextual questions tailored to the user's input and gaps not already covered by Brand Identity.
 - Be concise. Keep option text under 60 characters.
 - Return ONLY valid JSON matching the schema below. No markdown, no prose.
 
@@ -127,7 +126,7 @@ EXPECTED JSON SCHEMA:
 
         raw_response = self.text_provider.generate_text(
             prompt,
-            max_tokens=1500,
+            max_tokens=3000,
             temperature=0.5,
             json_response=True,
         )
@@ -156,13 +155,18 @@ EXPECTED JSON SCHEMA:
         Generates an image specific to the platform.
         """
         builder = ImagePromptBuilder()
-        image_prompt = builder.build(enhanced_prompt, brand_identity, platform, size)
-        
+        image_prompt = builder.build(
+            user_prompt=enhanced_prompt,
+            brand_identity=brand_identity,
+            platform=platform,
+            aspect_ratio=size,
+        )
+
         if reason:
-            image_prompt += f"\n\nUSER FEEDBACK FOR REGENERATION: Please explicitly apply this feedback when generating the image: {reason}"
-            
-        logger.info(f"Generated optimized image prompt: {image_prompt}")
-        
+            image_prompt += f"\n\nRefinement note: {reason}"
+
+        logger.info("Generated visual image prompt for platform %s", platform)
+
         return self.image_provider.generate_image(image_prompt, size)
 
     def build_and_generate_caption(self, enhanced_prompt: str, platform: str, brand_identity: dict, reason: str = "") -> str:

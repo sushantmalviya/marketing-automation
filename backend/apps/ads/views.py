@@ -10,8 +10,59 @@ from django.http import HttpResponse
 from django.conf import settings
 from django.db import models
 from apps.campaigns.models import CustomerRecord
+from apps.common.ownership import get_user_organization, scope_queryset_by_org
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
+
+
+def _get_org_meta_credential(user):
+    cred = scope_queryset_by_org(MetaUserCredential.objects.all(), user).first()
+    if not cred:
+        raise MetaUserCredential.DoesNotExist()
+    return cred
+
+
+def _upsert_org_meta_credential(user, access_token):
+    org = get_user_organization(user)
+    if org is not None:
+        cred = MetaUserCredential.objects.filter(organization=org).first()
+        if cred:
+            cred.access_token = access_token
+            cred.user = user
+            cred.status = "ACTIVE"
+            cred.save()
+            return cred
+        return MetaUserCredential.objects.create(
+            organization=org,
+            user=user,
+            access_token=access_token,
+            status="ACTIVE",
+        )
+    cred = MetaUserCredential.objects.filter(organization__isnull=True, user=user).first()
+    if cred:
+        cred.access_token = access_token
+        cred.status = "ACTIVE"
+        cred.save()
+        return cred
+    return MetaUserCredential.objects.create(
+        user=user,
+        access_token=access_token,
+        status="ACTIVE",
+    )
+
+
+def _get_or_create_org_pixel_settings(user):
+    org = get_user_organization(user)
+    if org is not None:
+        obj = MetaPixelSettings.objects.filter(organization=org).first()
+        if obj:
+            return obj
+        return MetaPixelSettings.objects.create(organization=org, user=user)
+    obj = MetaPixelSettings.objects.filter(organization__isnull=True, user=user).first()
+    if obj:
+        return obj
+    return MetaPixelSettings.objects.create(user=user)
+
 
 class MetaAuthURLView(APIView):
     """
@@ -29,19 +80,19 @@ class MetaAuthURLView(APIView):
 class DisconnectMetaAccountView(APIView):
     """
     Triggered when the user clicks 'Disconnect' in the frontend.
-    Completely removes the user's Meta credentials and connected ad accounts.
+    Completely removes the organization's Meta credentials and connected ad accounts.
     """
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        MetaUserCredential.objects.filter(user=request.user).delete()
-        MetaAdAccount.objects.filter(user=request.user).delete()
+        scope_queryset_by_org(MetaUserCredential.objects.all(), request.user).delete()
+        scope_queryset_by_org(MetaAdAccount.objects.all(), request.user).delete()
         return Response({"status": "success", "message": "Meta account disconnected successfully."}, status=status.HTTP_200_OK)
 
 
 class MetaAdAccountsView(APIView):
     """
-    Triggered when the frontend needs to display the user's available Meta Ad Accounts
+    Triggered when the frontend needs to display the organization's available Meta Ad Accounts
     (e.g., in a settings or dashboard page).
     """
     permission_classes = [IsAuthenticated]
@@ -52,12 +103,9 @@ class MetaAdAccountsView(APIView):
             redirect_uri = request.query_params.get("redirect_uri")
             if code:
                 access_token = MetaAdsService.exchange_code_for_token(code, redirect_uri=redirect_uri)
-                MetaUserCredential.objects.update_or_create(
-                    user=request.user,
-                    defaults={"access_token": access_token}
-                )
+                _upsert_org_meta_credential(request.user, access_token)
             else:
-                credential = MetaUserCredential.objects.get(user=request.user)
+                credential = _get_org_meta_credential(request.user)
                 access_token = credential.access_token
 
             if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
@@ -102,7 +150,7 @@ class MetaPagesListView(APIView):
 
     def get(self, request):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             pages = MetaAdsService.get_user_pages(credential.access_token)
             return Response({"status": "success", "data": pages}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -120,7 +168,7 @@ class MetaPageLeadFormsView(APIView):
 
     def get(self, request, page_id):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             forms = MetaAdsService.get_page_lead_forms(credential.access_token, page_id)
             return Response({"status": "success", "data": forms}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -138,7 +186,7 @@ class MetaSubscribePageWebhookView(APIView):
 
     def post(self, request, page_id):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             page_token = request.data.get("page_access_token") or credential.access_token
             res = MetaAdsService.subscribe_page_to_webhooks(page_token, page_id)
             return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
@@ -160,7 +208,7 @@ class MetaTargetingSearchInterestView(APIView):
             query = request.query_params.get("q", "").strip()
             if not query:
                 return Response({"status": "success", "data": []}, status=status.HTTP_200_OK)
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             results = MetaAdsService.search_targeting_interests(credential.access_token, query)
             return Response({"status": "success", "data": results}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -179,7 +227,7 @@ class MetaAdInsightsView(APIView):
 
     def get(self, request):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             access_token = credential.access_token
             
             account_id = request.query_params.get("account_id")
@@ -250,7 +298,7 @@ class CreateMetaCampaignView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             
             data = MetaAdsService.create_campaign(credential.access_token, account_id, request.data)
             return Response({"status": "success", "data": data}, status=status.HTTP_201_CREATED)
@@ -271,7 +319,7 @@ class CreateMetaCampaignView(APIView):
 class SelectMetaAdAccountView(APIView):
     """
     Triggered when the user selects a specific Meta Ad Account to connect.
-    Saves or updates the selected account.
+    Saves or updates the selected account for the organization.
     """
     permission_classes = [IsAuthenticated]
 
@@ -286,15 +334,26 @@ class SelectMetaAdAccountView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        MetaAdAccount.objects.update_or_create(
-            user=request.user,
-            account_id=account_id,
-            defaults={
-                "name": name,
-                "currency": currency,
-                "is_active": True
-            }
-        )
+        org = get_user_organization(request.user)
+        existing = scope_queryset_by_org(
+            MetaAdAccount.objects.filter(account_id=account_id),
+            request.user,
+        ).first()
+        if existing:
+            existing.user = request.user
+            existing.name = name
+            existing.currency = currency
+            existing.is_active = True
+            existing.save()
+        else:
+            MetaAdAccount.objects.create(
+                organization=org,
+                user=request.user,
+                account_id=account_id,
+                name=name,
+                currency=currency,
+                is_active=True,
+            )
 
         return Response(
             {"status": "success", "message": "Ad account selected successfully."}, 
@@ -318,7 +377,7 @@ class MetaAdCampaignsListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             access_token = credential.access_token
 
             after_cursor = request.query_params.get("after")
@@ -359,7 +418,7 @@ class UpdateMetaCampaignView(APIView):
 
     def post(self, request, campaign_id):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             endpoint = f"{MetaAdsService.BASE_URL}/{campaign_id}"
             params = {
                 "access_token": credential.access_token,
@@ -392,7 +451,7 @@ class UpdateMetaCampaignStatusView(APIView):
                     {"status": "error", "message": "status is required in request body."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             res = MetaAdsService.update_campaign_status(credential.access_token, campaign_id, status_val)
             return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -407,7 +466,7 @@ class DeleteMetaCampaignView(APIView):
 
     def delete(self, request, campaign_id):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             res = MetaAdsService.delete_campaign(credential.access_token, campaign_id)
             return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -474,11 +533,12 @@ class MetaWebhookLeadsView(APIView):
 
     def get(self, request):
         try:
-            target_user = request.user
-            records = CustomerRecord.objects.filter(
-                models.Q(upload__file_type="meta") | models.Q(data__source="meta") | models.Q(upload__file_name__startswith="Meta"),
-                upload__uploaded_by=target_user
-            ).order_by('-created_at')
+            org = get_user_organization(request.user)
+            base_q = models.Q(upload__file_type="meta") | models.Q(data__source="meta") | models.Q(upload__file_name__startswith="Meta")
+            if org is not None:
+                records = CustomerRecord.objects.filter(base_q, upload__uploaded_by__organization=org).order_by('-created_at')
+            else:
+                records = CustomerRecord.objects.filter(base_q, upload__uploaded_by=request.user).order_by('-created_at')
             
             data = []
             for r in records:
@@ -503,7 +563,7 @@ class MetaPixelSettingsView(APIView):
 
     def get(self, request):
         try:
-            settings_obj, _ = MetaPixelSettings.objects.get_or_create(user=request.user)
+            settings_obj = _get_or_create_org_pixel_settings(request.user)
             data = {
                 "pixel_id": settings_obj.pixel_id or "",
                 "access_token": settings_obj.access_token or "",
@@ -516,7 +576,9 @@ class MetaPixelSettingsView(APIView):
 
     def post(self, request):
         try:
-            settings_obj, _ = MetaPixelSettings.objects.get_or_create(user=request.user)
+            org = get_user_organization(request.user)
+            settings_obj = _get_or_create_org_pixel_settings(request.user)
+            settings_obj.user = request.user
             settings_obj.pixel_id = request.data.get("pixel_id", "").strip()
             settings_obj.access_token = request.data.get("access_token", "").strip()
             settings_obj.test_event_code = request.data.get("test_event_code", "").strip()
@@ -528,6 +590,7 @@ class MetaPixelSettingsView(APIView):
             if settings_obj.pixel_id and (settings_obj.test_event_code or is_test_action):
                 test_triggered = True
                 MetaCapiEventLog.objects.create(
+                    organization=org,
                     user=request.user,
                     event_name="PageView" if not is_test_action else "Lead",
                     pixel_id=settings_obj.pixel_id,
@@ -550,7 +613,7 @@ class MetaCapiEventLogsView(APIView):
 
     def get(self, request):
         try:
-            logs = MetaCapiEventLog.objects.filter(user=request.user).order_by('-created_at')[:20]
+            logs = scope_queryset_by_org(MetaCapiEventLog.objects.all(), request.user).order_by('-created_at')[:20]
             data = []
             for log in logs:
                 data.append({
@@ -576,7 +639,7 @@ class UpdateMetaObjectStatusView(APIView):
                     {"status": "error", "message": "status is required in request body."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             res = MetaAdsService.update_object_status(credential.access_token, object_id, status_val)
             return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -596,7 +659,7 @@ class UpdateMetaAdsetBudgetView(APIView):
                     {"status": "error", "message": "budget is required in request body."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             res = MetaAdsService.update_adset_budget(credential.access_token, adset_id, int(budget))
             return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
@@ -610,7 +673,7 @@ class SyncMetaFormLeadsView(APIView):
 
     def post(self, request, form_id):
         try:
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             # Try getting leads using the user's token
             res = MetaAdsService.get_form_leads(credential.access_token, form_id)
             if not res.get('data'):
@@ -635,11 +698,26 @@ class SyncMetaFormLeadsView(APIView):
             form_info = MetaAdsService.get_form_info(credential.access_token, str(form_id))
             form_name = form_info.get("name") or f"Meta Form {form_id}"
 
-            upload, _ = CustomerUpload.objects.get_or_create(
-                file_name=f"Meta Form: {form_name}",
-                uploaded_by=request.user,
-                defaults={"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
-            )
+            org = get_user_organization(request.user)
+            upload_name = f"Meta Form: {form_name}"
+            if org is not None:
+                upload = CustomerUpload.objects.filter(
+                    file_name=upload_name,
+                    uploaded_by__organization=org,
+                ).first()
+                if not upload:
+                    upload = CustomerUpload.objects.create(
+                        file_name=upload_name,
+                        uploaded_by=request.user,
+                        file_type="meta",
+                        status=CustomerUpload.Status.COMPLETED,
+                    )
+            else:
+                upload, _ = CustomerUpload.objects.get_or_create(
+                    file_name=upload_name,
+                    uploaded_by=request.user,
+                    defaults={"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
+                )
 
             for lead in leads_data:
                 field_data = lead.get("field_data", [])
@@ -741,7 +819,7 @@ class UploadMetaMediaView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            credential = MetaUserCredential.objects.get(user=request.user)
+            credential = _get_org_meta_credential(request.user)
             res = MetaAdsService.upload_media(credential.access_token, account_id, media_type, file_obj)
             
             if "error" in res:
@@ -758,12 +836,12 @@ class UploadMetaMediaView(APIView):
 
 class MetaLeadTriggerListView(APIView):
     """
-    List and create n8n-style Meta Lead Ads triggers for the authenticated user.
+    List and create n8n-style Meta Lead Ads triggers for the authenticated organization.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        triggers = MetaLeadTrigger.objects.filter(user=request.user)
+        triggers = scope_queryset_by_org(MetaLeadTrigger.objects.all(), request.user)
         data = [
             {
                 "id": str(t.id),
@@ -794,8 +872,8 @@ class MetaLeadTriggerListView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Retrieve Page Access Token
-            credential = MetaUserCredential.objects.filter(user=request.user).first()
+            # Retrieve Page Access Token from organization credential
+            credential = scope_queryset_by_org(MetaUserCredential.objects.all(), request.user).first()
             if not credential:
                 return Response(
                     {"status": "error", "message": "Meta account not connected. Please connect your Facebook account first."},
@@ -809,18 +887,32 @@ class MetaLeadTriggerListView(APIView):
             # Subscribe page on Meta Graph API
             sub_res = MetaAdsService.subscribe_page_to_webhooks(page_token, page_id)
 
-            # Create or update trigger
-            trigger, created = MetaLeadTrigger.objects.update_or_create(
-                user=request.user,
-                page_id=page_id,
-                form_id=form_id,
-                defaults={
-                    "page_name": page_name,
-                    "page_access_token": page_token,
-                    "form_name": form_name,
-                    "is_active": bool(is_active),
-                }
-            )
+            # Create or update trigger scoped to organization
+            org = get_user_organization(request.user)
+            existing = scope_queryset_by_org(
+                MetaLeadTrigger.objects.filter(page_id=page_id, form_id=form_id),
+                request.user,
+            ).first()
+            if existing:
+                existing.user = request.user
+                existing.page_name = page_name
+                existing.page_access_token = page_token
+                existing.form_name = form_name
+                existing.is_active = bool(is_active)
+                existing.save()
+                trigger, created = existing, False
+            else:
+                trigger = MetaLeadTrigger.objects.create(
+                    organization=org,
+                    user=request.user,
+                    page_id=page_id,
+                    form_id=form_id,
+                    page_name=page_name,
+                    page_access_token=page_token,
+                    form_name=form_name,
+                    is_active=bool(is_active),
+                )
+                created = True
 
             return Response({
                 "status": "success",
@@ -851,7 +943,7 @@ class MetaLeadTriggerDetailView(APIView):
 
     def patch(self, request, pk):
         try:
-            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            trigger = scope_queryset_by_org(MetaLeadTrigger.objects.all(), request.user).get(id=pk)
             if "is_active" in request.data:
                 trigger.is_active = bool(request.data["is_active"])
                 trigger.save(update_fields=["is_active"])
@@ -883,7 +975,7 @@ class MetaLeadTriggerDetailView(APIView):
 
     def delete(self, request, pk):
         try:
-            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            trigger = scope_queryset_by_org(MetaLeadTrigger.objects.all(), request.user).get(id=pk)
             page_id = trigger.page_id
             page_token = trigger.page_access_token
             trigger.delete()

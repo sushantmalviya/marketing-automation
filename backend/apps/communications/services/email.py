@@ -10,25 +10,30 @@ def send_email(subject, message, recipients, sender=None, execution=None, campai
     import re
     from django.conf import settings
 
-    # Resolve active SenderIdentity using multi-tier fallback chain
+    # Resolve active SenderIdentity strictly within the organization (never fall back across tenants)
     identity = sender_identity
 
     if not identity:
-        # 1. Try finding by associated user (campaign.created_by or execution.automation.owner)
+        from apps.common.ownership import get_user_organization
+
         user = getattr(campaign, "created_by", None) or getattr(getattr(execution, "automation", None), "owner", None)
-        if user:
+        org = get_user_organization(user) if user else None
+        email_providers = ["AWS_SES", "CUSTOM_SMTP", "GMAIL", "MICROSOFT", "YAHOO"]
+
+        if org is not None:
+            qs = SenderIdentity.objects.filter(organization=org, provider__in=email_providers, status="CONNECTED")
             if sender:
-                identity = SenderIdentity.objects.filter(user=user, email__iexact=sender, status="CONNECTED").first()
+                identity = qs.filter(email__iexact=sender).first()
             if not identity:
-                identity = SenderIdentity.objects.filter(user=user, status="CONNECTED").first()
-
-        # 2. Try finding by explicit sender email address if passed in config
-        if not identity and sender:
-            identity = SenderIdentity.objects.filter(email__iexact=sender, status="CONNECTED").first()
-
-        # 3. Fallback: Automatically pick any active connected SenderIdentity in database
-        if not identity:
-            identity = SenderIdentity.objects.filter(status="CONNECTED").first()
+                identity = qs.first()
+        elif user is not None:
+            qs = SenderIdentity.objects.filter(
+                organization__isnull=True, user=user, provider__in=email_providers, status="CONNECTED"
+            )
+            if sender:
+                identity = qs.filter(email__iexact=sender).first()
+            if not identity:
+                identity = qs.first()
 
     custom_sender_provider = get_sender_provider(identity) if identity else None
 

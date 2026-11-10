@@ -4,13 +4,21 @@ from apps.common.models import TimeStampedUUIDModel
 
 class Wallet(TimeStampedUUIDModel):
 
+    organization = models.OneToOneField(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="credit_wallet",
+    )
     balance = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "wallets"
 
     def __str__(self):
-        return f"Wallet - Balance: {self.balance}"
+        org_label = self.organization.name if self.organization_id else "Default"
+        return f"Wallet ({org_label}) - Balance: {self.balance}"
 
 
 class Transaction(TimeStampedUUIDModel):
@@ -36,6 +44,14 @@ class Transaction(TimeStampedUUIDModel):
         null=True,
         db_index=True,
         help_text="ID of the related entity (e.g. GeneratedContent ID or Payment ID)"
+    )
+    idempotency_key = models.CharField(
+        max_length=128,
+        blank=True,
+        null=True,
+        unique=True,
+        db_index=True,
+        help_text="Unique key preventing duplicate debits or refunds."
     )
 
     class Meta:

@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
+from apps.common.ownership import scope_queryset_by_org
 from apps.integrations.models import SocialConnection
 from apps.integrations.providers.x import XProvider
 
@@ -9,13 +10,14 @@ logger = logging.getLogger(__name__)
 class XAnalyticsService:
     @classmethod
     def get_connection(cls, user, connection_id: Optional[str] = None) -> Optional[SocialConnection]:
-        qs = SocialConnection.objects.filter(
-            platform=SocialConnection.PlatformChoices.X,
-            connection_status=SocialConnection.ConnectionStatus.CONNECTED,
+        qs = scope_queryset_by_org(
+            SocialConnection.objects.filter(
+                platform=SocialConnection.PlatformChoices.X,
+                connection_status=SocialConnection.ConnectionStatus.CONNECTED,
+            ),
+            user,
+            user_field="user__user",
         )
-        if hasattr(user, 'ma_users') and user.ma_users.exists():
-            ma_user = user.ma_users.first()
-            qs = qs.filter(user=ma_user)
 
         if connection_id:
             return qs.filter(id=connection_id).first()

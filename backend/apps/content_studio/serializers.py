@@ -1,14 +1,44 @@
 from rest_framework import serializers
-from .models import BrandVoice, ContentTemplate
+from .models import BrandVoice, ContentTemplate, ImageGenerationJob
+
 
 class BrandVoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = BrandVoice
         fields = [
             'id', 'brand_description', 'target_audience', 'tone',
-            'content_pillars', 'unique_value', 'guidelines', 'call_to_action', 
+            'content_pillars', 'unique_value', 'guidelines', 'call_to_action',
+            'logo_url', 'logo_asset', 'include_logo_in_images',
+            'reference_images', 'include_reference_images',
+            'brand_colors', 'visual_style',
             'created_at', 'updated_at'
         ]
+
+    def validate_brand_colors(self, value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [c.strip() for c in value.split(",") if c.strip()][:12]
+        if not isinstance(value, list):
+            raise serializers.ValidationError("brand_colors must be a list of color strings.")
+        return [str(c).strip() for c in value if str(c).strip()][:12]
+
+    def validate_reference_images(self, value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("reference_images must be a list.")
+        cleaned = []
+        for item in value[:10]:
+            if isinstance(item, str) and item.strip():
+                cleaned.append({"url": item.strip(), "name": "Brand Reference"})
+            elif isinstance(item, dict) and str(item.get("url") or "").strip():
+                cleaned.append({
+                    "url": str(item["url"]).strip(),
+                    "asset_id": str(item["asset_id"]) if item.get("asset_id") else None,
+                    "name": str(item.get("name") or "Brand Reference")[:255],
+                })
+        return cleaned
 
 class ContentTemplateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,6 +94,7 @@ class ContentDraftSerializer(serializers.ModelSerializer):
         model = ContentDraft
         fields = [
             'id', 'owner', 'owner_name', 'content_type', 'original_prompt', 'enhanced_prompt',
+            'image_model', 'image_quality', 'image_aspect_ratio',
             'workflow_state', 'current_version', 'platforms', 'approvals', 'versions',
             'created_at', 'updated_at'
         ]
@@ -79,10 +110,16 @@ class ContentDraftCreateSerializer(serializers.Serializer):
         min_length=1
     )
     preset_image_id = serializers.UUIDField(required=False, allow_null=True)
+    image_model = serializers.CharField(required=False, default="google_nano_banana")
+    image_quality = serializers.CharField(required=False, default="STANDARD")
+    image_aspect_ratio = serializers.CharField(required=False, default="1:1")
 
 class ContentDraftUpdateSerializer(serializers.Serializer):
     original_prompt = serializers.CharField(required=False, allow_blank=True)
     enhanced_prompt = serializers.CharField(required=False, allow_blank=True)
+    image_model = serializers.CharField(required=False)
+    image_quality = serializers.CharField(required=False)
+    image_aspect_ratio = serializers.CharField(required=False)
 
 class AnalyzePromptSerializer(serializers.Serializer):
     prompt = serializers.CharField(required=True)
@@ -104,3 +141,55 @@ class ContentScheduleSerializer(serializers.Serializer):
             if v and v <= now:
                 raise serializers.ValidationError(f"Scheduled time for {k} must be in the future.")
         return value
+
+
+class ImageEstimateRequestSerializer(serializers.Serializer):
+    model = serializers.CharField(required=False, default="google_nano_banana")
+    quality = serializers.CharField(required=False, default="STANDARD")
+    aspect_ratio = serializers.CharField(required=False, default="1:1")
+    generate_image = serializers.BooleanField(required=False, default=True)
+    caption_count = serializers.IntegerField(required=False, default=0, min_value=0, max_value=20)
+
+
+class ImageGenerateRequestSerializer(serializers.Serializer):
+    prompt = serializers.CharField(required=True, allow_blank=False, max_length=4000)
+    model = serializers.CharField(required=True)
+    quality = serializers.CharField(required=True)
+    aspect_ratio = serializers.CharField(required=True)
+    idempotency_key = serializers.CharField(required=False, allow_blank=True, max_length=128)
+
+
+class ImageGenerationJobSerializer(serializers.ModelSerializer):
+    asset_id = serializers.UUIDField(source="asset.id", read_only=True, allow_null=True)
+    asset_name = serializers.CharField(source="asset.name", read_only=True, allow_null=True)
+    model_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ImageGenerationJob
+        fields = [
+            "id",
+            "prompt",
+            "final_prompt",
+            "brand_identity_applied",
+            "reference_image_count",
+            "provider",
+            "model_key",
+            "model_label",
+            "provider_model_id",
+            "quality",
+            "aspect_ratio",
+            "mapped_parameters",
+            "status",
+            "estimated_credits",
+            "charged_credits",
+            "refunded_credits",
+            "image_url",
+            "asset_id",
+            "asset_name",
+            "error_message",
+            "created_at",
+        ]
+
+    def get_model_label(self, obj):
+        from .ai.image_specs import MODEL_DISPLAY_LABELS
+        return MODEL_DISPLAY_LABELS.get(obj.model_key, obj.model_key)

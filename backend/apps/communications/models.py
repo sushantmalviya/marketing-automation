@@ -15,9 +15,18 @@ class WhatsAppConnection(models.Model):
         editable=False,
     )
     organization = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        "accounts.Organization",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="whatsapp_connections",
+    )
+    connected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_whatsapp_connections",
     )
     phone_number_id = models.CharField(
         max_length=100,
@@ -42,12 +51,32 @@ class WhatsAppConnection(models.Model):
         db_table = "whatsapp_connection"
         indexes = [
             models.Index(fields=["organization", "is_active"]),
+            models.Index(fields=["connected_by", "is_active"]),
             models.Index(fields=["phone_number_id"]),
         ]
-        unique_together = [("organization", "phone_number_id")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "phone_number_id"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_whatsapp_org_phone",
+            ),
+            models.UniqueConstraint(
+                fields=["connected_by", "phone_number_id"],
+                condition=models.Q(organization__isnull=True, connected_by__isnull=False),
+                name="uniq_whatsapp_user_phone",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.connected_by_id:
+            org_id = getattr(self.connected_by, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"WhatsApp Connection: {self.phone_number_id} ({self.organization})"
+        owner_label = self.organization or self.connected_by or "Unassigned"
+        return f"WhatsApp Connection: {self.phone_number_id} ({owner_label})"
 
     def get_access_token(self) -> str:
         """Decrypts and returns the raw access token."""
@@ -162,9 +191,18 @@ class DomainAuthentication(models.Model):
         default=uuid.uuid4,
         editable=False,
     )
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="domain_authentications",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="domain_authentications",
     )
     domain = models.CharField(max_length=255, db_index=True)
@@ -189,12 +227,20 @@ class DomainAuthentication(models.Model):
         db_table = "domain_authentication"
         ordering = ["-created_at"]
         indexes = [
+            models.Index(fields=["organization", "status"]),
             models.Index(fields=["user", "status"]),
             models.Index(fields=["domain"]),
         ]
         constraints = [
             models.UniqueConstraint(fields=["domain"], name="unique_domain_global"),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.domain} ({self.status})"
@@ -228,9 +274,18 @@ class SenderIdentity(models.Model):
         default=uuid.uuid4,
         editable=False,
     )
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="sender_identities",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="sender_identities",
     )
     domain_auth = models.ForeignKey(
@@ -266,11 +321,19 @@ class SenderIdentity(models.Model):
         db_table = "sender_identity"
         ordering = ["-created_at"]
         indexes = [
+            models.Index(fields=["organization", "provider"]),
             models.Index(fields=["user", "provider"]),
             models.Index(fields=["email"]),
             models.Index(fields=["phone_number_id"]),
             models.Index(fields=["waba_id"]),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.email} ({self.provider}) - {self.status}"

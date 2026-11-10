@@ -6,14 +6,23 @@ from django.conf import settings
 from apps.common.models import TimeStampedUUIDModel
 
 class MetaAdAccount(TimeStampedUUIDModel):
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="meta_ad_accounts",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="meta_ad_accounts"
     )
     account_id = models.CharField(
         max_length=255,
-        unique=True,
+        db_index=True,
         help_text="Meta Ad Account ID"
     )
     name = models.CharField(
@@ -41,16 +50,44 @@ class MetaAdAccount(TimeStampedUUIDModel):
     class Meta:
         db_table = "ads_meta_ad_accounts"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "account_id"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_meta_ad_account_org_id",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "account_id"],
+                condition=models.Q(organization__isnull=True, user__isnull=False),
+                name="uniq_meta_ad_account_user_id",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.account_id})"
 
 
 class MetaUserCredential(TimeStampedUUIDModel):
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
+    organization = models.ForeignKey(
+        "accounts.Organization",
         on_delete=models.CASCADE,
-        related_name="meta_credential"
+        null=True,
+        blank=True,
+        related_name="meta_credentials",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meta_credentials"
     )
     access_token = models.TextField()
     meta_user_id = models.CharField(max_length=255, null=True, blank=True)
@@ -59,12 +96,40 @@ class MetaUserCredential(TimeStampedUUIDModel):
 
     class Meta:
         db_table = "ads_meta_credentials"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_meta_credential_org",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(organization__isnull=True, user__isnull=False),
+                name="uniq_meta_credential_user",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
 
 class MetaPixelSettings(TimeStampedUUIDModel):
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
+    organization = models.ForeignKey(
+        "accounts.Organization",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="meta_pixel_settings",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="meta_pixel_settings"
     )
     pixel_id = models.CharField(max_length=255, blank=True, null=True)
@@ -74,12 +139,40 @@ class MetaPixelSettings(TimeStampedUUIDModel):
 
     class Meta:
         db_table = "ads_meta_pixel_settings"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_meta_pixel_org",
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=models.Q(organization__isnull=True, user__isnull=False),
+                name="uniq_meta_pixel_user",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
 
 class MetaCapiEventLog(TimeStampedUUIDModel):
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="meta_capi_event_logs",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="meta_capi_event_logs"
     )
     event_name = models.CharField(max_length=100)
@@ -91,11 +184,27 @@ class MetaCapiEventLog(TimeStampedUUIDModel):
     class Meta:
         db_table = "ads_meta_capi_event_logs"
 
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
+
 
 class MetaLeadTrigger(TimeStampedUUIDModel):
+    organization = models.ForeignKey(
+        "accounts.Organization",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="meta_lead_triggers",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="meta_lead_triggers"
     )
     page_id = models.CharField(max_length=255)
@@ -110,6 +219,20 @@ class MetaLeadTrigger(TimeStampedUUIDModel):
     class Meta:
         db_table = "ads_meta_lead_triggers"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "page_id", "form_id"],
+                condition=models.Q(organization__isnull=False),
+                name="uniq_meta_lead_trigger_org_page_form",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.organization_id is None and self.user_id:
+            org_id = getattr(self.user, "organization_id", None)
+            if org_id is not None:
+                self.organization_id = org_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.page_name} - {self.form_name} ({'Active' if self.is_active else 'Inactive'})"

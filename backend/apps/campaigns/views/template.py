@@ -123,7 +123,7 @@ class TemplateSubmitAPIView(APIView):
             
         from apps.communications.services.whatsapp import submit_whatsapp_template
         try:
-            template = submit_whatsapp_template(template)
+            template = submit_whatsapp_template(template, user=request.user)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except RuntimeError as e:

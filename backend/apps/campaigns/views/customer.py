@@ -654,11 +654,17 @@ class ContactHierarchyAPIView(APIView):
         from apps.ads.models import MetaLeadTrigger, MetaUserCredential
         from apps.ads.services.meta_ads_service import MetaAdsService
         from apps.campaigns.models import CustomerRecord
+        from apps.common.ownership import get_user_organization, scope_queryset_by_org
         from django.db.models import Q
 
-        active_cred = MetaUserCredential.objects.filter(user=user, status='ACTIVE').first() or MetaUserCredential.objects.filter(status='ACTIVE').first()
+        active_cred = scope_queryset_by_org(
+            MetaUserCredential.objects.filter(status='ACTIVE'),
+            user,
+        ).first()
 
-        meta_records = CustomerRecord.objects.filter(upload__uploaded_by=user).filter(
+        org = get_user_organization(user)
+        meta_upload_filter = Q(upload__uploaded_by__organization=org) if org is not None else Q(upload__uploaded_by=user)
+        meta_records = CustomerRecord.objects.filter(meta_upload_filter).filter(
             Q(upload__file_type="meta") | Q(data__source="meta")
         )
 
@@ -689,7 +695,10 @@ class ContactHierarchyAPIView(APIView):
                 form_names[fid] = fname
 
         # 3. Include configured MetaLeadTriggers even if count is 0
-        triggers = MetaLeadTrigger.objects.filter(user=user, is_active=True).exclude(form_id="all")
+        triggers = scope_queryset_by_org(
+            MetaLeadTrigger.objects.filter(is_active=True).exclude(form_id="all"),
+            user,
+        )
         for trig in triggers:
             fid = str(trig.form_id)
             if fid not in form_counts:
