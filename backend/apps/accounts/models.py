@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from .managers import UserManager
@@ -21,6 +22,8 @@ class Organization(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = models.Manager()
 
     def __str__(self):
         return f"{self.name} ({self.external_company_id})"
@@ -53,6 +56,8 @@ class OrganizationSubscription(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = models.Manager()
+
     def is_rent_valid(self):
         from django.utils import timezone
         if self.rent_status != "ACTIVE":
@@ -81,6 +86,8 @@ class OrganizationUsageLedger(models.Model):
     ai_prompts_processed = models.PositiveIntegerField(default=0)
     total_payg_cost_deducted = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = models.Manager()
 
     class Meta:
         unique_together = ("organization", "period_start", "period_end")
@@ -118,6 +125,8 @@ class UserUsageLedger(models.Model):
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     metadata = models.JSONField(default=dict, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    objects = models.Manager()
 
     def __str__(self):
         return f"{self.user} - {self.action_type} x{self.quantity} (${self.total_cost})"
@@ -158,7 +167,7 @@ class User(AbstractUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
-    objects = UserManager()
+    objects: Any = UserManager()
 
     def __str__(self):
         return self.email
@@ -202,8 +211,10 @@ class MAUser(models.Model):
         help_text="If True, the user's content must be approved before publishing."
     )
 
+    objects = models.Manager()
+
     def __str__(self):
-        if self.user_id:
+        if self.user:
             return f"{self.user.email} ({self.role})"
         return "No User"
 

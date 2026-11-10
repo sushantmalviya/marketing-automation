@@ -296,8 +296,31 @@ html.dark .bi-textarea:focus { border-color:#a855f7; box-shadow:0 0 0 3px rgb(16
   background: #f9fafb;
   font-size: 14px;
 }
-.admin-motion-shell main { isolation:isolate; }
-.admin-motion-shell .admin-page-transition { min-height:100%; }
+.admin-motion-shell main {
+  isolation: auto;
+}
+.admin-motion-shell .admin-page-transition {
+  min-height: 100%;
+  transform: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL MODAL BACKDROP STANDARDS
+   Ensures every modal popup dims and blurs 100% of the viewport (including sidebar & header)
+   ═══════════════════════════════════════════════════════════ */
+/* Ensure all full-screen modal overlays sit unconditionally above the sidebar (z-20) and header (z-10) */
+div[class*="fixed"][class*="inset-0"][class*="z-50"],
+div[class*="fixed"][class*="inset-0"][class*="z-[50]"],
+div[class*="fixed"][class*="inset-0"][class*="z-[60]"] {
+  z-index: 60 !important;
+}
+
+/* Premium frosted glass backdrop blur for all full-screen modals across the entire app */
+div[class*="fixed"][class*="inset-0"][class*="backdrop-blur"],
+div[class*="fixed"][class*="inset-0"] > [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
+}
 .admin-motion-shell .sb-nav-link {
   min-height: 42px;
   border-radius: 10px;
@@ -963,11 +986,63 @@ html.dark .shadow-xl  { box-shadow: 0 20px 56px rgba(0,0,0,.65) !important; }
 html.dark .shadow-2xl { box-shadow: 0 32px 80px rgba(0,0,0,.7) !important; }
 
 
-@layer components {
-  .page-title, .sa-title {
-    @apply text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight;
-  }
-  .page-subtitle, .sa-subtitle {
-    @apply mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium;
+.page-title, .sa-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+}
+html.dark .page-title, html.dark .sa-title {
+  color: #f1f5f9;
+}
+
+.page-subtitle, .sa-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: #64748b;
+  font-weight: 500;
+}
+html.dark .page-subtitle, html.dark .sa-subtitle {
+  color: #94a3b8;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM DASHBOARD MICRO-INTERACTIONS & MOTION SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+
+.dash-card {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.dash-card:hover {
+  transform: translateY(-3px);
+}
+
+.dash-row-interactive {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dash-row-interactive:hover {
+  transform: translateY(-1.5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-card,
+  .dash-card:hover,
+  .dash-row-interactive,
+  .dash-row-interactive:hover {
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
   }
 }
+

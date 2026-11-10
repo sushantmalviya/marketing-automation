@@ -1,5 +1,16 @@
 import { apiClient } from "@/services/api-client";
-import type { CreateMetaCampaignPayload, MetaAdAccount, MetaCampaign, MetaInsights, MetaLead, MetaObjectStatus } from "@/types/meta-ads";
+import type { 
+  CreateMetaCampaignPayload, 
+  MetaAdAccount, 
+  MetaCampaign, 
+  MetaInsights, 
+  MetaLead, 
+  MetaObjectStatus,
+  MetaPage,
+  MetaLeadForm,
+  MetaLeadTrigger,
+  WebhookLead
+} from "@/types/meta-ads";
 
 type ApiEnvelope<T> = { status?: string; data: T; message?: string };
 const unwrap = <T>(response: { data: ApiEnvelope<T> | T }): T => {
@@ -11,14 +22,34 @@ export type InsightsLevel = "account" | "campaign" | "adset" | "ad";
 export type InsightsTimeRange = string | { since: string; until: string };
 
 export const metaAdsService = {
-  async getAuthorizationUrl() {
-    return unwrap<{ auth_url: string; csrf_state?: string }>(await apiClient.get("/api/meta-ads/meta/auth-url/"));
+  async getAuthorizationUrl(redirectUri?: string) {
+    const params = redirectUri ? { redirect_uri: redirectUri } : undefined;
+    return unwrap<{ auth_url: string; csrf_state?: string }>(await apiClient.get("/api/meta-ads/meta/auth-url/", { params }));
   },
   async disconnectAccount() {
     return unwrap<unknown>(await apiClient.delete("/api/meta-ads/meta/disconnect/"));
   },
-  async getAdAccounts(code?: string) {
-    return unwrap<MetaAdAccount[]>(await apiClient.get("/api/meta-ads/meta/ad-accounts/", code ? { params: { code } } : undefined));
+  async getAdAccounts(code?: string, redirectUri?: string) {
+    const params: Record<string, string> = {};
+    if (code) params.code = code;
+    if (redirectUri) params.redirect_uri = redirectUri;
+    return unwrap<MetaAdAccount[]>(await apiClient.get("/api/meta-ads/meta/ad-accounts/", Object.keys(params).length ? { params } : undefined));
+  },
+  async getPages() {
+    return unwrap<MetaPage[]>(await apiClient.get("/api/meta-ads/meta/pages/"));
+  },
+  async getPageLeadForms(pageId: string) {
+    return unwrap<MetaLeadForm[]>(await apiClient.get(`/api/meta-ads/meta/pages/${pageId}/forms/`));
+  },
+  async subscribePageWebhook(pageId: string, pageAccessToken?: string) {
+    return unwrap<{ success: boolean; message?: string }>(
+      await apiClient.post(`/api/meta-ads/meta/pages/${pageId}/subscribe/`, { page_access_token: pageAccessToken })
+    );
+  },
+  async searchInterests(query: string) {
+    return unwrap<{ id: string; name: string; audience_size_lower_bound?: number }[]>(
+      await apiClient.get("/api/meta-ads/meta/targeting/search/", { params: { q: query } })
+    );
   },
   async setActiveAdAccount(account: Pick<MetaAdAccount, "account_id" | "name"> & { currency?: string }) {
     return unwrap<unknown>(await apiClient.post("/api/meta-ads/meta/ad-accounts/select/", account));
@@ -57,7 +88,7 @@ export const metaAdsService = {
     return unwrap<{ leads: MetaLead[]; synced?: number }>(await apiClient.post(`/api/meta-ads/meta/forms/${formId}/leads/sync/`));
   },
   async getWebhookLeads() {
-    return unwrap<{ id: number; email: string; name: string; created_at: string }[]>(await apiClient.get("/api/meta-ads/meta/leads/"));
+    return unwrap<WebhookLead[]>(await apiClient.get("/api/meta-ads/meta/leads/"));
   },
   async getPixelSettings() {
     return unwrap<{ pixel_id: string; access_token: string; test_event_code: string; is_active: boolean }>(await apiClient.get("/api/meta-ads/meta/pixel/"));
@@ -78,5 +109,17 @@ export const metaAdsService = {
         headers: { "Content-Type": "multipart/form-data" }
       })
     );
+  },
+  async getTriggers() {
+    return unwrap<MetaLeadTrigger[]>(await apiClient.get("/api/meta-ads/meta/triggers/"));
+  },
+  async createTrigger(payload: { page_id: string; page_name?: string; form_id?: string; form_name?: string; is_active?: boolean }) {
+    return unwrap<MetaLeadTrigger>(await apiClient.post("/api/meta-ads/meta/triggers/", payload));
+  },
+  async updateTrigger(id: string, payload: { is_active: boolean }) {
+    return unwrap<MetaLeadTrigger>(await apiClient.patch(`/api/meta-ads/meta/triggers/${id}/`, payload));
+  },
+  async deleteTrigger(id: string) {
+    return unwrap<{ message?: string }>(await apiClient.delete(`/api/meta-ads/meta/triggers/${id}/`));
   },
 };

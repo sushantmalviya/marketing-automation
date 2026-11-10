@@ -13,9 +13,8 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.http import Http404
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
-from .models import MAUser, OrganizationUsageLedger, UserUsageLedger
+from .models import MAUser, OrganizationUsageLedger, UserUsageLedger, User
 
-User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +91,9 @@ class UserManagementService:
             raise Http404("User not found.")
 
         # Enforce organization boundaries
-        if getattr(request_user, "organization_id", None) and target_user.organization_id != request_user.organization_id:
+        req_org_id = getattr(request_user, "organization_id", None)
+        target_org_id = getattr(target_user, "organization_id", None)
+        if req_org_id and target_org_id != req_org_id:
             raise PermissionDenied("You do not have permission to delete users from another organization.")
 
         target_ma_user = MAUser.objects.filter(user=target_user).first()

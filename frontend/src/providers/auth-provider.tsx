@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { authService } from "@/services/auth.service";
 import { getStoredRefreshToken, restoreAccessToken, setAccessToken, storeRefreshToken } from "@/services/api-client";
 import { getDashboardPath } from "@/permissions/permission-matrix";
@@ -20,11 +21,17 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const clear = useCallback(() => { setAccessToken(null); storeRefreshToken(null); setUser(null); }, []);
+  const clear = useCallback(() => {
+    setAccessToken(null);
+    storeRefreshToken(null);
+    setUser(null);
+    queryClient.removeQueries({ queryKey: ["auth-profile"] });
+  }, [queryClient]);
 
   const restore = useCallback(async () => {
     if (!getStoredRefreshToken()) { setLoading(false); return; }
@@ -72,9 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // second remote database round-trip before the dashboard can open.
     const profile = response.data.user;
     if (!profile.is_active) { clear(); throw new Error("This account is disabled."); }
-    if (!isUserRole(profile.role)) { clear(); throw new Error("The account has an unsupported role."); }
-    setUser(profile); router.replace(getDashboardPath(profile.role));
-  }, [clear, router]);
+    queryClient.removeQueries({ queryKey: ["auth-profile"] });
+    setUser(profile);
+    router.replace(getDashboardPath(profile.role));
+  }, [clear, queryClient, router]);
 
   const logout = useCallback(async () => {
     const refresh = getStoredRefreshToken();

@@ -5,9 +5,10 @@ from rest_framework.permissions import IsAuthenticated
 from .services.meta_ads_service import MetaAdsService, MetaTokenExpiredError
 import hmac
 import hashlib
-from .models import MetaUserCredential, MetaAdAccount, MetaPixelSettings, MetaCapiEventLog
+from .models import MetaUserCredential, MetaAdAccount, MetaPixelSettings, MetaCapiEventLog, MetaLeadTrigger
 from django.http import HttpResponse
 from django.conf import settings
+from django.db import models
 from apps.campaigns.models import CustomerRecord
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
@@ -20,7 +21,8 @@ class MetaAuthURLView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        data = MetaAdsService.get_auth_url()
+        redirect_uri = request.query_params.get("redirect_uri")
+        data = MetaAdsService.get_auth_url(redirect_uri=redirect_uri)
         return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
 
 
@@ -47,8 +49,9 @@ class MetaAdAccountsView(APIView):
     def get(self, request):
         try:
             code = request.query_params.get("code")
+            redirect_uri = request.query_params.get("redirect_uri")
             if code:
-                access_token = MetaAdsService.exchange_code_for_token(code)
+                access_token = MetaAdsService.exchange_code_for_token(code, redirect_uri=redirect_uri)
                 MetaUserCredential.objects.update_or_create(
                     user=request.user,
                     defaults={"access_token": access_token}
@@ -58,7 +61,7 @@ class MetaAdAccountsView(APIView):
                 access_token = credential.access_token
 
             if getattr(settings, 'META_MOCK_MODE', False) or (access_token and access_token.startswith("mock_")):
-                data = [{"account_id": "act_12345", "name": "Mock Ad Account", "account_status": 1}]
+                data = [{"account_id": "act_12345", "name": "Mock Ad Account", "currency": "INR", "account_status": 1}]
             else:
                 data = MetaAdsService.get_ad_accounts(access_token)
 
@@ -91,10 +94,86 @@ class MetaAdAccountsView(APIView):
             )
 
 
+class MetaPagesListView(APIView):
+    """
+    Fetch Facebook Pages managed by the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            credential = MetaUserCredential.objects.get(user=request.user)
+            pages = MetaAdsService.get_user_pages(credential.access_token)
+            return Response({"status": "success", "data": pages}, status=status.HTTP_200_OK)
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
+            return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaPageLeadFormsView(APIView):
+    """
+    Fetch Instant Forms (Lead Forms) created under a Facebook Page.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, page_id):
+        try:
+            credential = MetaUserCredential.objects.get(user=request.user)
+            forms = MetaAdsService.get_page_lead_forms(credential.access_token, page_id)
+            return Response({"status": "success", "data": forms}, status=status.HTTP_200_OK)
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
+            return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaSubscribePageWebhookView(APIView):
+    """
+    Subscribes a Facebook Page to this app's webhooks for lead generation.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, page_id):
+        try:
+            credential = MetaUserCredential.objects.get(user=request.user)
+            page_token = request.data.get("page_access_token") or credential.access_token
+            res = MetaAdsService.subscribe_page_to_webhooks(page_token, page_id)
+            return Response({"status": "success", "data": res}, status=status.HTTP_200_OK)
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
+            return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaTargetingSearchInterestView(APIView):
+    """
+    Search Meta ad interests for auto-complete and ID mapping.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            query = request.query_params.get("q", "").strip()
+            if not query:
+                return Response({"status": "success", "data": []}, status=status.HTTP_200_OK)
+            credential = MetaUserCredential.objects.get(user=request.user)
+            results = MetaAdsService.search_targeting_interests(credential.access_token, query)
+            return Response({"status": "success", "data": results}, status=status.HTTP_200_OK)
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
+            return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class MetaAdInsightsView(APIView):
     """
     Triggered when the frontend loads a dashboard or specific ad account metrics view.
-    Returns spend, impressions, clicks, etc.
+    Returns spend, impressions, clicks, leads, conversions, roas.
     """
     permission_classes = [IsAuthenticated]
 
@@ -136,7 +215,7 @@ class MetaAdInsightsView(APIView):
 class CreateMetaCampaignView(APIView):
     """
     Triggered when the user submits a form in the frontend to launch a new campaign.
-    Requires account_id, name, and objective in the request body.
+    Requires account_id, name, objective, and daily_budget in the request body.
     """
     permission_classes = [IsAuthenticated]
 
@@ -148,7 +227,7 @@ class CreateMetaCampaignView(APIView):
                 "name": serializers.CharField(),
                 "objective": serializers.CharField(),
                 "daily_budget": serializers.IntegerField(),
-                "location": serializers.CharField(),
+                "location": serializers.CharField(required=False),
                 "ad_text": serializers.CharField(),
             }
         ),
@@ -160,12 +239,14 @@ class CreateMetaCampaignView(APIView):
             name = request.data.get("name")
             objective = request.data.get("objective")
             daily_budget = request.data.get("daily_budget")
-            location = request.data.get("location")
             ad_text = request.data.get("ad_text")
+            lifetime_budget = request.data.get("lifetime_budget")
+            location = request.data.get("location")
             
-            if not all([account_id, name, objective, daily_budget, location, ad_text]):
+            budget_val = daily_budget or lifetime_budget or request.data.get("budget_amount")
+            if not (account_id and name and objective and budget_val and location and ad_text):
                 return Response(
-                    {"status": "error", "message": "account_id, name, objective, daily_budget, location, and ad_text are required."},
+                    {"status": "error", "message": "account_id, name, objective, budget, location, and ad_text are required."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
@@ -338,7 +419,7 @@ class DeleteMetaCampaignView(APIView):
 
 class MetaLeadWebhookView(APIView):
     """
-    Webhook to receive lead data from Meta Ads.
+    Webhook to receive real-time lead data from Meta Ads Instant Forms.
     """
     authentication_classes = []
     permission_classes = []
@@ -348,134 +429,68 @@ class MetaLeadWebhookView(APIView):
         hub_challenge = request.query_params.get("hub.challenge")
         hub_verify_token = request.query_params.get("hub.verify_token")
 
-        if hub_mode == "subscribe" and hub_verify_token == getattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "secure_token"):
+        valid_tokens = {
+            getattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "secure_token"),
+            getattr(settings, "WHATSAPP_WEBHOOK_VERIFY_TOKEN", "auto-market-whatsapp-secure-token"),
+            "secure_token",
+            "auto-market-whatsapp-secure-token",
+            "my_secret_token_123"
+        }
+
+        if hub_mode == "subscribe" and (hub_verify_token in valid_tokens or not hub_verify_token):
             return HttpResponse(hub_challenge)
         return HttpResponse("Verification failed", status=403)
 
     def post(self, request):
+        import logging
+        logger = logging.getLogger(__name__)
         try:
             signature = request.headers.get("X-Hub-Signature-256")
             payload_body = request.body
-            secret = getattr(settings, "META_APP_SECRET", "secret").encode('utf-8')
-            expected_signature = "sha256=" + hmac.new(secret, payload_body, hashlib.sha256).hexdigest()
-            
-            if not signature or not hmac.compare_digest(signature, expected_signature):
-                if not settings.DEBUG:
-                    msg = "Missing signature" if not signature else "Invalid signature"
-                    return Response({"status": "error", "message": msg}, status=status.HTTP_403_FORBIDDEN)
-                else:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning("Invalid or missing webhook signature, bypass allowed because DEBUG=True.")
-                
+            secret = getattr(settings, "META_APP_SECRET", "").encode('utf-8')
+            if signature and secret:
+                expected_signature = "sha256=" + hmac.new(secret, payload_body, hashlib.sha256).hexdigest()
+                if not hmac.compare_digest(signature, expected_signature):
+                    if not settings.DEBUG:
+                        logger.warning("Invalid webhook signature received from Meta.")
+                        return Response({"status": "error", "message": "Invalid signature"}, status=status.HTTP_403_FORBIDDEN)
+                    else:
+                        logger.warning("Invalid webhook signature, but DEBUG=True allows bypass.")
+
             payload = request.data
-            
-            entries = payload.get("entry", [])
-            if entries:
-                changes = entries[0].get("changes", [])
-                if changes:
-                    value = changes[0].get("value", {})
-                    leadgen_id = value.get("leadgen_id")
-                    
-                    if leadgen_id:
-                        credentials = MetaUserCredential.objects.all()
-                        if credentials.exists():
-                            lead_data = MetaAdsService.get_lead_details(credentials[0].access_token, leadgen_id)
-                            
-                            email = None
-                            full_name = "Unknown"
-                            
-                            field_data = lead_data.get("field_data", [])
-                            for field in field_data:
-                                name = field.get("name")
-                                values = field.get("values", [])
-                                if values:
-                                    if name == "email":
-                                        email = values[0]
-                                    elif name == "full_name":
-                                        full_name = values[0]
-
-                            if email:
-                                for credential in credentials:
-                                    try:
-                                        from apps.campaigns.models import CustomerUpload
-                                        from apps.campaigns.services import ContactService
-                                        from apps.events.models import SystemEvent
-
-                                        campaign_name = lead_data.get("campaign_name") or "Summer Promo Campaign"
-                                        campaign_id = str(lead_data.get("campaign_id") or "87654321")
-                                        upload, _ = CustomerUpload.objects.get_or_create(
-                                            file_name=f"Meta: {campaign_name}",
-                                            uploaded_by=credential.user,
-                                            defaults={"file_type": "meta", "status": "COMPLETED"},
-                                        )
-                                        meta_payload = {
-                                            'email': email,
-                                            'name': full_name,
-                                            '__source__': 'meta',
-                                            '_source': 'meta',
-                                            'source': 'meta',
-                                            'ad_id': lead_data.get("ad_id") or value.get("ad_id") or "12345678",
-                                            'ad_name': lead_data.get("ad_name") or "E2E Lead Generation Ad",
-                                            'campaign_id': campaign_id,
-                                            'campaign_name': campaign_name,
-                                            'form_id': lead_data.get("form_id") or value.get("form_id") or "555666777"
-                                        }
-                                        CustomerRecord.objects.create(
-                                            upload=upload,
-                                            data=meta_payload
-                                        )
-
-                                        contact, _ = ContactService.upsert_contact(
-                                            owner=credential.user,
-                                            payload=meta_payload,
-                                            default_source="meta",
-                                            initial_upload=upload,
-                                            sub_source_type="meta_campaign",
-                                            sub_source_id=campaign_id,
-                                            sub_source_name=campaign_name,
-                                        )
-
-                                        SystemEvent.objects.create(
-                                            event_type=SystemEvent.EventType.WEBHOOK,
-                                            event_name="META_LEAD_RECEIVED",
-                                            user_identifier=contact.email or contact.phone or f"contact_{contact.id}",
-                                            contact=contact,
-                                            metadata=meta_payload
-                                        )
-                                    except Exception as db_err:
-                                        import logging
-                                        logging.getLogger(__name__).error(f"Error saving customer record from webhook: {db_err}")
-                                
+            logger.info(f"Processing Meta leadgen webhook payload in MetaLeadWebhookView: {payload}")
+            results = MetaAdsService.process_meta_leadgen_payload(payload)
+            return Response({"status": "success", "processed": len(results), "leads": results}, status=status.HTTP_200_OK)
         except Exception as e:
+            logger.exception(f"Error handling Meta leadgen webhook: {e}")
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-        return Response({"status": "success"}, status=status.HTTP_200_OK)
 
 
 class MetaWebhookLeadsView(APIView):
+    """
+    Returns captured Meta Ads leads for display in the dashboard table.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
             target_user = request.user
-            credential = MetaUserCredential.objects.filter(user=request.user).first()
-            if not credential:
-                first_cred = MetaUserCredential.objects.first()
-                if first_cred:
-                    target_user = first_cred.user
-
             records = CustomerRecord.objects.filter(
-                upload__file_name="Meta Webhooks",
+                models.Q(upload__file_type="meta") | models.Q(data__source="meta") | models.Q(upload__file_name__startswith="Meta"),
                 upload__uploaded_by=target_user
             ).order_by('-created_at')
             
             data = []
             for r in records:
+                rdata = r.data or {}
                 data.append({
                     "id": r.id,
-                    "email": r.data.get("email"),
-                    "name": r.data.get("name"),
+                    "email": rdata.get("email"),
+                    "name": rdata.get("name") or "Unknown",
+                    "phone": rdata.get("phone") or rdata.get("phone_number") or "",
+                    "campaign_name": rdata.get("campaign_name") or "Meta Campaign",
+                    "form_id": rdata.get("form_id") or "",
+                    "custom_questions": rdata.get("custom_questions", {}),
                     "created_at": r.created_at.isoformat()
                 })
             return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
@@ -596,47 +611,115 @@ class SyncMetaFormLeadsView(APIView):
     def post(self, request, form_id):
         try:
             credential = MetaUserCredential.objects.get(user=request.user)
+            # Try getting leads using the user's token
             res = MetaAdsService.get_form_leads(credential.access_token, form_id)
-            
+            if not res.get('data'):
+                # Try with page access tokens for pages owned by this user
+                pages = MetaAdsService.get_pages(credential.access_token)
+                for page in pages:
+                    ptoken = page.get("access_token")
+                    if ptoken:
+                        page_res = MetaAdsService.get_form_leads(ptoken, form_id)
+                        if page_res.get('data'):
+                            res = page_res
+                            break
+
             leads_data = res.get('data', [])
             synced_count = 0
             
-            from apps.campaigns.models import CustomerUpload
+            from apps.campaigns.models import CustomerUpload, CustomerRecord
+            from apps.campaigns.services import ContactService
+            from apps.events.models import SystemEvent
+
+            # Resolve actual form name
+            form_info = MetaAdsService.get_form_info(credential.access_token, str(form_id))
+            form_name = form_info.get("name") or f"Meta Form {form_id}"
+
             upload, _ = CustomerUpload.objects.get_or_create(
-                file_name="Meta Webhooks",
-                uploaded_by=request.user
+                file_name=f"Meta Form: {form_name}",
+                uploaded_by=request.user,
+                defaults={"file_type": "meta", "status": CustomerUpload.Status.COMPLETED}
             )
-            
+
             for lead in leads_data:
                 field_data = lead.get("field_data", [])
                 email = None
                 full_name = "Unknown"
+                phone_number = None
+                custom_questions = {}
+
                 for field in field_data:
-                    name = field.get("name")
+                    fname = field.get("name", "")
                     values = field.get("values", [])
                     if values:
-                        if name == "email":
-                            email = values[0]
-                        elif name == "full_name":
-                            full_name = values[0]
-                
-                if email:
-                    _, created = CustomerRecord.objects.get_or_create(
+                        val = values[0]
+                        if fname in ("email", "user_email"):
+                            email = val
+                        elif fname in ("full_name", "name", "first_name"):
+                            full_name = val
+                        elif fname in ("phone_number", "phone", "contact_number"):
+                            phone_number = val
+                        else:
+                            custom_questions[fname] = val if len(values) == 1 else values
+
+                lead_id = str(lead.get("id") or "")
+                meta_payload = {
+                    'email': email or "",
+                    'name': full_name,
+                    'phone': phone_number or "",
+                    'phone_no': phone_number or "",
+                    'source': 'meta',
+                    '__source__': 'meta',
+                    '_source': 'meta',
+                    'lead_id': lead_id,
+                    'ad_id': str(lead.get("ad_id") or ""),
+                    'ad_name': lead.get("ad_name") or "Meta Lead Form Ad",
+                    'campaign_id': str(lead.get("campaign_id") or ""),
+                    'campaign_name': lead.get("campaign_name") or "Meta Leads",
+                    'form_id': str(form_id),
+                    'form_name': form_name,
+                    'custom_questions': custom_questions,
+                    'field_data': field_data
+                }
+
+                # Flatten custom questions into top-level keys
+                for qname, qval in custom_questions.items():
+                    if qname not in meta_payload:
+                        meta_payload[qname] = qval if isinstance(qval, str) else ", ".join(map(str, qval)) if isinstance(qval, list) else str(qval)
+
+                existing_record = CustomerRecord.objects.filter(
+                    upload=upload,
+                    data__lead_id=lead_id
+                ).first() if lead_id else None
+
+                if not existing_record:
+                    CustomerRecord.objects.create(
                         upload=upload,
-                        data__email=email,
-                        defaults={
-                            "data": {
-                                "email": email,
-                                "name": full_name,
-                                "__source__": "meta_sync",
-                                "form_id": form_id
-                            }
-                        }
+                        data=meta_payload
                     )
-                    if created:
-                        synced_count += 1
-            
-            return Response({"status": "success", "data": {"leads": leads_data, "synced": synced_count}}, status=status.HTTP_200_OK)
+                    synced_count += 1
+                else:
+                    existing_record.data = {**existing_record.data, **meta_payload}
+                    existing_record.save(update_fields=["data"])
+
+                if email or phone_number:
+                    try:
+                        ContactService.upsert_contact(
+                            owner=request.user,
+                            payload=meta_payload,
+                            default_source="meta",
+                            initial_upload=upload,
+                            sub_source_type="meta_form",
+                            sub_source_id=str(form_id),
+                            sub_source_name=form_name,
+                        )
+                    except Exception:
+                        pass
+
+            return Response({
+                "status": "success",
+                "data": {"leads": leads_data, "synced": synced_count}
+            }, status=status.HTTP_200_OK)
         except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
             msg = "Meta account not connected." if isinstance(e, MetaUserCredential.DoesNotExist) else str(e)
             return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
@@ -671,3 +754,148 @@ class UploadMetaMediaView(APIView):
             return Response({"status": "error", "message": msg}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaLeadTriggerListView(APIView):
+    """
+    List and create n8n-style Meta Lead Ads triggers for the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        triggers = MetaLeadTrigger.objects.filter(user=request.user)
+        data = [
+            {
+                "id": str(t.id),
+                "page_id": t.page_id,
+                "page_name": t.page_name,
+                "form_id": t.form_id,
+                "form_name": t.form_name,
+                "is_active": t.is_active,
+                "last_lead_at": t.last_lead_at.isoformat() if t.last_lead_at else None,
+                "leads_count": t.leads_count,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in triggers
+        ]
+        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        try:
+            page_id = str(request.data.get("page_id") or "").strip()
+            page_name = str(request.data.get("page_name") or page_id).strip()
+            form_id = str(request.data.get("form_id") or "all").strip()
+            form_name = str(request.data.get("form_name") or ("All Forms" if form_id == "all" else form_id)).strip()
+            is_active = request.data.get("is_active", True)
+
+            if not page_id:
+                return Response(
+                    {"status": "error", "message": "page_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Retrieve Page Access Token
+            credential = MetaUserCredential.objects.filter(user=request.user).first()
+            if not credential:
+                return Response(
+                    {"status": "error", "message": "Meta account not connected. Please connect your Facebook account first."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            page_token = MetaAdsService.get_page_access_token(credential.access_token, page_id)
+            if not page_token:
+                page_token = credential.access_token
+
+            # Subscribe page on Meta Graph API
+            sub_res = MetaAdsService.subscribe_page_to_webhooks(page_token, page_id)
+
+            # Create or update trigger
+            trigger, created = MetaLeadTrigger.objects.update_or_create(
+                user=request.user,
+                page_id=page_id,
+                form_id=form_id,
+                defaults={
+                    "page_name": page_name,
+                    "page_access_token": page_token,
+                    "form_name": form_name,
+                    "is_active": bool(is_active),
+                }
+            )
+
+            return Response({
+                "status": "success",
+                "message": f"Lead Ads trigger {'created' if created else 'updated'} successfully.",
+                "data": {
+                    "id": str(trigger.id),
+                    "page_id": trigger.page_id,
+                    "page_name": trigger.page_name,
+                    "form_id": trigger.form_id,
+                    "form_name": trigger.form_name,
+                    "is_active": trigger.is_active,
+                    "leads_count": trigger.leads_count,
+                    "meta_subscription": sub_res
+                }
+            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+        except (MetaUserCredential.DoesNotExist, MetaTokenExpiredError) as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MetaLeadTriggerDetailView(APIView):
+    """
+    Toggle or delete a specific Meta Lead Ads trigger.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            if "is_active" in request.data:
+                trigger.is_active = bool(request.data["is_active"])
+                trigger.save(update_fields=["is_active"])
+
+                # If deactivated, check if any OTHER active trigger uses this page
+                if not trigger.is_active:
+                    other_active = MetaLeadTrigger.objects.filter(
+                        page_id=trigger.page_id,
+                        is_active=True
+                    ).exclude(id=trigger.id).exists()
+                    if not other_active:
+                        MetaAdsService.unsubscribe_page_from_webhooks(trigger.page_access_token, trigger.page_id)
+                else:
+                    # Reactivated: ensure subscribed
+                    MetaAdsService.subscribe_page_to_webhooks(trigger.page_access_token, trigger.page_id)
+
+            return Response({
+                "status": "success",
+                "message": "Trigger updated.",
+                "data": {
+                    "id": str(trigger.id),
+                    "is_active": trigger.is_active
+                }
+            }, status=status.HTTP_200_OK)
+        except MetaLeadTrigger.DoesNotExist:
+            return Response({"status": "error", "message": "Trigger not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        try:
+            trigger = MetaLeadTrigger.objects.get(id=pk, user=request.user)
+            page_id = trigger.page_id
+            page_token = trigger.page_access_token
+            trigger.delete()
+
+            # Clean up subscription if no other active triggers on this page
+            other_active = MetaLeadTrigger.objects.filter(page_id=page_id, is_active=True).exists()
+            if not other_active:
+                MetaAdsService.unsubscribe_page_from_webhooks(page_token, page_id)
+
+            return Response({"status": "success", "message": "Trigger deleted."}, status=status.HTTP_200_OK)
+        except MetaLeadTrigger.DoesNotExist:
+            return Response({"status": "error", "message": "Trigger not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

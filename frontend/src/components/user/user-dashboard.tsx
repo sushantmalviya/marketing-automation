@@ -578,11 +578,16 @@ export function UserDashboard() {
       {/* ========================================================================= */}
       {/* GLOBAL HEADER BAR: Title, Tabs, Global Date Range Picker                  */}
       {/* ========================================================================= */}
-      <div className="flex flex-col gap-5 bg-white dark:bg-[#0c1222] p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="flex flex-col gap-5 bg-white dark:bg-[#0c1222] p-6 rounded-2xl border border-slate-200/90 dark:border-white/5 shadow-sm"
+      >
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shadow-xs">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
                 Live Marketing Hub
               </span>
@@ -599,11 +604,11 @@ export function UserDashboard() {
           <div className="relative">
             <button
               onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-sm hover:border-blue-400 transition"
+              className="group flex items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs hover:border-blue-400 dark:hover:border-blue-500/50 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 cursor-pointer"
             >
-              <CalendarDays size={16} className="text-blue-600 dark:text-blue-400" />
+              <CalendarDays size={16} className="text-blue-600 dark:text-blue-400 transition-transform duration-200 group-hover:scale-110" />
               <span>{dateRangeLabel}</span>
-              <ChevronDown size={14} className="text-slate-400" />
+              <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isDatePickerOpen ? "rotate-180" : ""}`} />
             </button>
 
             <AnimatePresence>
@@ -614,11 +619,12 @@ export function UserDashboard() {
                     initial={{ opacity: 0, y: 8, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
                     className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111827] p-4 shadow-2xl space-y-3"
                   >
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-white/10">
                       <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Global Date Range</span>
-                      <button onClick={() => setIsDatePickerOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                      <button onClick={() => setIsDatePickerOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors cursor-pointer">
                         <X size={16} />
                       </button>
                     </div>
@@ -632,10 +638,10 @@ export function UserDashboard() {
                               setDatePreset(preset);
                               if (preset !== "Custom") setIsDatePickerOpen(false);
                             }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition ${
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all duration-150 cursor-pointer ${
                               datePreset === preset
-                                ? "bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 font-bold"
-                                : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
+                                ? "bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 font-bold shadow-xs"
+                                : "text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-white/5"
                             }`}
                           >
                             <span>{preset}</span>
@@ -653,7 +659,7 @@ export function UserDashboard() {
                             type="date"
                             value={customStartDate}
                             onChange={(e) => setCustomStartDate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2 text-xs font-medium text-slate-800 dark:text-white"
+                            className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors"
                           />
                         </div>
                         <div>
@@ -662,12 +668,12 @@ export function UserDashboard() {
                             type="date"
                             value={customEndDate}
                             onChange={(e) => setCustomEndDate(e.target.value)}
-                            className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2 text-xs font-medium text-slate-800 dark:text-white"
+                            className="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-2 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors"
                           />
                         </div>
                         <button
                           onClick={() => setIsDatePickerOpen(false)}
-                          className="w-full mt-2 rounded-lg bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-700 transition"
+                          className="w-full mt-2 rounded-lg bg-blue-600 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-150 cursor-pointer"
                         >
                           Apply Range
                         </button>
@@ -688,53 +694,67 @@ export function UserDashboard() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`relative px-5 py-2.5 rounded-xl text-sm font-bold transition flex items-center gap-2 whitespace-nowrap ${
+                className={`group relative px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 flex items-center gap-2.5 whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.98] cursor-pointer ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+                    ? "text-white shadow-md shadow-blue-500/25"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-white/5"
                 }`}
               >
-                {tab === "Overview" && <BarChart3 size={16} />}
-                {tab === "Campaigns" && <Megaphone size={16} />}
-                {tab === "Automations" && <Workflow size={16} />}
-                {tab === "Content Studio" && <Share2 size={16} />}
-                <span>{tab}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTabBadge"
+                    className="absolute inset-0 bg-blue-600 rounded-xl -z-0"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                  />
+                )}
+                <span className={`relative z-10 transition-transform duration-200 ${isActive ? "scale-105" : "group-hover:scale-110 group-hover:-translate-y-0.5"}`}>
+                  {tab === "Overview" && <BarChart3 size={16} />}
+                  {tab === "Campaigns" && <Megaphone size={16} />}
+                  {tab === "Automations" && <Workflow size={16} />}
+                  {tab === "Content Studio" && <Share2 size={16} />}
+                </span>
+                <span className="relative z-10">{tab}</span>
               </button>
             );
           })}
         </div>
-      </div>
+      </motion.div>
 
       {/* ========================================================================= */}
       {/* TAB 1: OVERVIEW TAB CONTENT                                               */}
       {/* ========================================================================= */}
       {activeTab === "Overview" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="space-y-6"
+        >
           {/* Module Summary Cards */}
           <div className="grid gap-5 md:grid-cols-3">
             {/* Campaigns Card */}
             <div
               onClick={() => setActiveTab("Campaigns")}
-              className="group cursor-pointer rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-md hover:border-blue-400 transition"
+              className="dash-card group cursor-pointer rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-lg hover:border-blue-400/80 dark:hover:border-blue-500/40 active:scale-[0.99]"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2">
                     <Megaphone size={24} />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Campaigns</h3>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white transition-colors duration-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">Campaigns</h3>
                     <p className="text-xs text-slate-500 font-medium">Email, WhatsApp & SMS</p>
                   </div>
                 </div>
-                <button className="text-slate-400 group-hover:text-blue-600 transition">
+                <button className="text-slate-400 group-hover:text-blue-600 transition-all duration-200 group-hover:translate-x-1 cursor-pointer">
                   <ChevronRight size={20} />
                 </button>
               </div>
 
               <div className="mt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 dark:text-white">42</span>
+                  <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">42</span>
                   <span className="text-xs font-semibold text-slate-500">Total Campaigns</span>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 dark:border-white/5 pt-3 text-center">
@@ -754,33 +774,33 @@ export function UserDashboard() {
               </div>
               <div className="mt-4 text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:underline">
                 <span>View Campaigns</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={14} className="transition-transform duration-200 group-hover:translate-x-1" />
               </div>
             </div>
 
             {/* Automations Card */}
             <div
               onClick={() => setActiveTab("Automations")}
-              className="group cursor-pointer rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-md hover:border-emerald-400 transition"
+              className="dash-card group cursor-pointer rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-lg hover:border-emerald-400/80 dark:hover:border-emerald-500/40 active:scale-[0.99]"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2">
                     <Workflow size={24} />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Automations</h3>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white transition-colors duration-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">Automations</h3>
                     <p className="text-xs text-slate-500 font-medium">Workflows & Lead Funnels</p>
                   </div>
                 </div>
-                <button className="text-slate-400 group-hover:text-emerald-600 transition">
+                <button className="text-slate-400 group-hover:text-emerald-600 transition-all duration-200 group-hover:translate-x-1 cursor-pointer">
                   <ChevronRight size={20} />
                 </button>
               </div>
 
               <div className="mt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 dark:text-white">12</span>
+                  <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">12</span>
                   <span className="text-xs font-semibold text-slate-500">Total Automations</span>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 dark:border-white/5 pt-3 text-center">
@@ -800,33 +820,33 @@ export function UserDashboard() {
               </div>
               <div className="mt-4 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 group-hover:underline">
                 <span>View Automations</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={14} className="transition-transform duration-200 group-hover:translate-x-1" />
               </div>
             </div>
 
             {/* Content Studio Card */}
             <div
               onClick={() => setActiveTab("Content Studio")}
-              className="group cursor-pointer rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-md hover:border-purple-400 transition"
+              className="dash-card group cursor-pointer rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm hover:shadow-lg hover:border-purple-400/80 dark:hover:border-purple-500/40 active:scale-[0.99]"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/50 dark:text-purple-400 shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2">
                     <Share2 size={24} />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Content Studio</h3>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white transition-colors duration-200 group-hover:text-purple-600 dark:group-hover:text-purple-400">Content Studio</h3>
                     <p className="text-xs text-slate-500 font-medium">Social Media & AI Posts</p>
                   </div>
                 </div>
-                <button className="text-slate-400 group-hover:text-purple-600 transition">
+                <button className="text-slate-400 group-hover:text-purple-600 transition-all duration-200 group-hover:translate-x-1 cursor-pointer">
                   <ChevronRight size={20} />
                 </button>
               </div>
 
               <div className="mt-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 dark:text-white">126</span>
+                  <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">126</span>
                   <span className="text-xs font-semibold text-slate-500">Total Posts</span>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 dark:border-white/5 pt-3 text-center">
@@ -846,7 +866,7 @@ export function UserDashboard() {
               </div>
               <div className="mt-4 text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 group-hover:underline">
                 <span>View Content Studio</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={14} className="transition-transform duration-200 group-hover:translate-x-1" />
               </div>
             </div>
           </div>
@@ -854,37 +874,37 @@ export function UserDashboard() {
           {/* Upcoming Activity & Needs Attention Grid */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Upcoming Activity Widget */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/5">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Clock size={18} className="text-blue-600" />
+                      <Clock size={18} className="text-blue-600 dark:text-blue-400" />
                       Upcoming Activity
                     </h3>
                     <p className="text-xs text-slate-500">Chronological scheduled queue across all modules</p>
                   </div>
                   <button
                     onClick={() => setIsCalendarOpen(true)}
-                    className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 transition-all duration-150 cursor-pointer"
                   >
                     View All <ChevronRight size={14} />
                   </button>
                 </div>
 
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-2.5">
                   {CONTENT_POSTS_DATA.slice(0, 5).map((item) => (
                     <div
                       key={item.id}
                       onClick={() => setSelectedPost(item)}
-                      className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 cursor-pointer transition"
+                      className="dash-row-interactive group flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-white/5 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 hover:border-blue-200/60 dark:hover:border-blue-800/40 cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-extrabold text-slate-500 w-16 text-right shrink-0">
                           {item.scheduledTime.split(", ")[1]}
                         </span>
                         <PlatformBadge platform={item.platform} />
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                           {item.title}
                         </span>
                       </div>
@@ -896,7 +916,7 @@ export function UserDashboard() {
             </div>
 
             {/* Needs Attention Widget */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/5">
                   <div>
@@ -908,7 +928,7 @@ export function UserDashboard() {
                   </div>
                   <button
                     onClick={() => setIsViewAllNeedsAttentionOpen(true)}
-                    className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 transition-all duration-150 cursor-pointer"
                   >
                     View All <ChevronRight size={14} />
                   </button>
@@ -920,10 +940,10 @@ export function UserDashboard() {
                     <button
                       key={mod}
                       onClick={() => setNeedsAttentionFilter(mod)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
                         needsAttentionFilter === mod
-                          ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                          : "bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-400 hover:bg-slate-200"
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                          : "bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10"
                       }`}
                     >
                       {mod}
@@ -931,15 +951,15 @@ export function UserDashboard() {
                   ))}
                 </div>
 
-                <div className="mt-4 space-y-3">
+                <div className="mt-4 space-y-2.5">
                   {filteredNeedsAttention.slice(0, 5).map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition"
+                      className="dash-row-interactive group flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-white/5 hover:bg-slate-100/80 dark:hover:bg-white/10 hover:border-slate-300/80 dark:hover:border-white/15"
                     >
                       <div className="flex items-center gap-3">
                         <span
-                          className={`grid h-8 w-8 place-items-center rounded-lg text-xs font-bold shrink-0 ${
+                          className={`grid h-8 w-8 place-items-center rounded-lg text-xs font-bold shrink-0 transition-transform duration-200 group-hover:scale-105 ${
                             item.severity === "high"
                               ? "bg-red-50 text-red-600 dark:bg-red-950/50"
                               : item.severity === "warning"
@@ -960,7 +980,7 @@ export function UserDashboard() {
                       </div>
                       <button
                         onClick={() => toast.info(`Action triggered: ${item.actionLabel}`)}
-                        className="rounded-lg bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition"
+                        className="rounded-lg bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white hover:shadow-sm active:scale-95 transition-all duration-150 cursor-pointer"
                       >
                         {item.actionLabel}
                       </button>
@@ -972,7 +992,7 @@ export function UserDashboard() {
           </div>
 
           {/* Recent Activity Cross-Module Feed */}
-          <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/5">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
@@ -983,7 +1003,7 @@ export function UserDashboard() {
               </div>
               <button
                 onClick={() => setIsViewAllActivityOpen(true)}
-                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 transition-all duration-150 cursor-pointer"
               >
                 View All <ChevronRight size={14} />
               </button>
@@ -995,10 +1015,10 @@ export function UserDashboard() {
                 return (
                   <div
                     key={act.id}
-                    className="flex flex-col justify-between p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition"
+                    className="dash-card group flex flex-col justify-between p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-white/5 hover:bg-white dark:hover:bg-[#111827] hover:border-slate-200 dark:hover:border-white/10 hover:shadow-md transition-all duration-200"
                   >
                     <div className="flex items-center gap-2.5 mb-2">
-                      <span className={`grid h-8 w-8 place-items-center rounded-lg ${act.color}`}>
+                      <span className={`grid h-8 w-8 place-items-center rounded-lg ${act.color} transition-transform duration-200 group-hover:scale-110`}>
                         <Icon size={16} />
                       </span>
                       <span className="text-[10px] font-bold text-slate-400">{act.time}</span>
@@ -1016,11 +1036,16 @@ export function UserDashboard() {
       {/* TAB 2: CAMPAIGNS TAB CONTENT                                              */}
       {/* ========================================================================= */}
       {activeTab === "Campaigns" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="space-y-6"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Campaigns Dashboard</h2>
-              <p className="text-xs text-slate-500">Track key metrics and engagement across Email, WhatsApp & SMS</p>
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Campaigns Dashboard</h2>
+              <p className="text-xs text-slate-500 font-medium">Track key metrics and engagement across Email, WhatsApp & SMS</p>
             </div>
 
             {/* Channel Selection Dropdown placed at top right above cards */}
@@ -1030,7 +1055,7 @@ export function UserDashboard() {
                 <select
                   value={campaignChannelFilter}
                   onChange={(e) => setCampaignChannelFilter(e.target.value)}
-                  className="appearance-none rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0c1222] pl-9 pr-9 py-2 text-xs font-bold text-slate-800 dark:text-white shadow-sm outline-none focus:border-blue-500 cursor-pointer transition hover:border-blue-400"
+                  className="appearance-none rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0c1222] pl-9 pr-9 py-2 text-xs font-bold text-slate-800 dark:text-white shadow-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-all hover:border-blue-400"
                 >
                   <option value="All">All Channels</option>
                   <option value="Email">Email</option>
@@ -1046,30 +1071,30 @@ export function UserDashboard() {
           {/* Campaign Overview 6 Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
-              { label: "Total Campaigns", val: currentMetrics.totalCampaigns.val, change: currentMetrics.totalCampaigns.change, icon: Megaphone, bg: "bg-blue-50 text-blue-600" },
-              { label: "Sent", val: currentMetrics.sent.val, change: currentMetrics.sent.change, icon: Send, bg: "bg-indigo-50 text-indigo-600" },
-              { label: "Delivered", val: currentMetrics.delivered.val, change: currentMetrics.delivered.change, icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600" },
-              { label: "Opened", val: currentMetrics.opened.val, change: currentMetrics.opened.change, icon: Eye, bg: "bg-purple-50 text-purple-600" },
-              { label: "Clicked", val: currentMetrics.clicked.val, change: currentMetrics.clicked.change, icon: MousePointerClick, bg: "bg-amber-50 text-amber-600" },
-              { label: "Failed / Bounced", val: currentMetrics.failed.val, change: currentMetrics.failed.change, icon: XCircle, bg: "bg-red-50 text-red-600" },
+              { label: "Total Campaigns", val: currentMetrics.totalCampaigns.val, change: currentMetrics.totalCampaigns.change, icon: Megaphone, bg: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" },
+              { label: "Sent", val: currentMetrics.sent.val, change: currentMetrics.sent.change, icon: Send, bg: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400" },
+              { label: "Delivered", val: currentMetrics.delivered.val, change: currentMetrics.delivered.change, icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" },
+              { label: "Opened", val: currentMetrics.opened.val, change: currentMetrics.opened.change, icon: Eye, bg: "bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400" },
+              { label: "Clicked", val: currentMetrics.clicked.val, change: currentMetrics.clicked.change, icon: MousePointerClick, bg: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400" },
+              { label: "Failed / Bounced", val: currentMetrics.failed.val, change: currentMetrics.failed.change, icon: XCircle, bg: "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400" },
             ].map((c) => {
               const Icon = c.icon;
               return (
                 <div
                   key={c.label}
-                  className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm"
+                  className="dash-card group rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-white/10 cursor-default"
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg}`}>
+                    <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg} transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2 shadow-xs`}>
                       <Icon size={18} />
                     </span>
-                    <span className="inline-flex items-center gap-0.5 text-xs font-bold text-emerald-600">
+                    <span className="inline-flex items-center gap-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 transition-transform duration-150 group-hover:translate-x-0.5">
                       <TrendingUp size={12} /> {c.change}
                     </span>
                   </div>
-                  <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3">{c.val}</strong>
+                  <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3 tracking-tight">{c.val}</strong>
                   <div className="flex items-center justify-between mt-0.5">
-                    <p className="text-xs font-semibold text-slate-500">{c.label}</p>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{c.label}</p>
                     {campaignChannelFilter !== "All" && (
                       <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded">
                         {campaignChannelFilter}
@@ -1084,17 +1109,17 @@ export function UserDashboard() {
           {/* Performance Analytics & Channel Performance Split */}
           <div className="grid gap-6 lg:grid-cols-[1.8fr_1fr]">
             {/* Analytics Chart */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Campaign Performance</h3>
-                  <p className="text-xs text-slate-500">Track key campaign metrics over time</p>
+                  <p className="text-xs text-slate-500 font-medium">Track key campaign metrics over time</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={campaignChannelFilter}
                     onChange={(e) => setCampaignChannelFilter(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                    className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors"
                   >
                     <option value="All">All Channels</option>
                     <option value="Email">Email</option>
@@ -1105,7 +1130,7 @@ export function UserDashboard() {
                   <select
                     value={campaignMetricFilter}
                     onChange={(e) => setCampaignMetricFilter(e.target.value)}
-                    className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                    className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors"
                   >
                     <option value="Sent">Sent</option>
                     <option value="Delivered">Delivered</option>
@@ -1113,13 +1138,15 @@ export function UserDashboard() {
                     <option value="Clicked">Clicked</option>
                   </select>
 
-                  <div className="flex items-center rounded-lg border border-slate-200 dark:border-white/10 p-0.5">
+                  <div className="flex items-center rounded-lg border border-slate-200 dark:border-white/10 p-0.5 bg-slate-50/50 dark:bg-white/5">
                     {(["Daily", "Weekly", "Monthly"] as const).map((g) => (
                       <button
                         key={g}
                         onClick={() => handleGroupByChange(g)}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
-                          campaignGroupBy === g ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-900"
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+                          campaignGroupBy === g
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                         }`}
                       >
                         {g}
@@ -1132,14 +1159,14 @@ export function UserDashboard() {
                     <button
                       onClick={handleSmartZoomIn}
                       title="Zoom In"
-                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 transition"
+                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 active:scale-90 transition-all duration-150 cursor-pointer"
                     >
                       <ZoomIn size={14} />
                     </button>
                     <button
                       onClick={handleSmartZoomOut}
                       title="Zoom Out"
-                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 transition"
+                      className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/10 hover:text-blue-600 active:scale-90 transition-all duration-150 cursor-pointer"
                     >
                       <ZoomOut size={14} />
                     </button>
@@ -1172,14 +1199,14 @@ export function UserDashboard() {
             </div>
 
             {/* Channel Performance Breakdown */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-1">Channel Breakdown</h3>
-                <p className="text-xs text-slate-500 mb-4">Volume dispatches per marketing channel</p>
+                <p className="text-xs text-slate-500 mb-4 font-medium">Volume dispatches per marketing channel</p>
 
                 <div className="space-y-4">
                   {channelBreakdownData.map((ch) => (
-                    <div key={ch.name} className="space-y-1.5">
+                    <div key={ch.name} className="space-y-1.5 group">
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
                           <PlatformBadge platform={ch.name} />
@@ -1187,7 +1214,7 @@ export function UserDashboard() {
                         <span className="text-slate-900 dark:text-white font-extrabold">{ch.count} ({ch.pct})</span>
                       </div>
                       <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-white/10 overflow-hidden">
-                        <div className={`h-full ${ch.color} rounded-full`} style={{ width: ch.pct }} />
+                        <div className={`h-full ${ch.color} rounded-full transition-all duration-300`} style={{ width: ch.pct }} />
                       </div>
                     </div>
                   ))}
@@ -1197,7 +1224,7 @@ export function UserDashboard() {
           </div>
 
           {/* Campaign Table ("Recent Campaigns") */}
-          <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Recent Campaigns</h3>
 
@@ -1209,14 +1236,14 @@ export function UserDashboard() {
                     placeholder="Search campaign name..."
                     value={campaignSearch}
                     onChange={(e) => setCampaignSearch(e.target.value)}
-                    className="w-48 sm:w-64 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-3 py-1.5 text-xs outline-none focus:border-blue-500"
+                    className="w-48 sm:w-64 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-3 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                   />
                 </div>
 
                 <select
                   value={campaignStatusFilter}
                   onChange={(e) => setCampaignStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors"
                 >
                   <option value="All">All Statuses</option>
                   <option value="Running">Running</option>
@@ -1249,7 +1276,7 @@ export function UserDashboard() {
                     <tr
                       key={row.id}
                       onClick={() => setSelectedCampaign(row)}
-                      className="hover:bg-slate-50/80 dark:hover:bg-white/5 cursor-pointer transition"
+                      className="hover:bg-blue-50/40 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150"
                     >
                       <td className="py-3.5 px-2 text-slate-400 font-bold">{i + 1}</td>
                       <td className="py-3.5 px-3 font-bold text-slate-900 dark:text-white">{row.name}</td>
@@ -1270,7 +1297,7 @@ export function UserDashboard() {
                             e.stopPropagation();
                             setSelectedCampaign(row);
                           }}
-                          className="p-1 text-slate-400 hover:text-blue-600"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <MoreVertical size={16} />
                         </button>
@@ -1288,63 +1315,75 @@ export function UserDashboard() {
       {/* TAB 3: AUTOMATIONS TAB CONTENT                                            */}
       {/* ========================================================================= */}
       {activeTab === "Automations" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="space-y-6"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Automation Dashboard</h2>
-              <p className="text-xs text-slate-500">Track performance, contact progression, and lead conversion journeys</p>
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Automation Dashboard</h2>
+              <p className="text-xs text-slate-500 font-medium">Track performance, contact progression, and lead conversion journeys</p>
             </div>
           </div>
 
           {/* Automation Overview 6 Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
-              { label: "Total Automations", val: "12", change: "+20%", icon: Workflow, bg: "bg-purple-50 text-purple-600" },
-              { label: "Active", val: "8", change: "+14%", icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600" },
-              { label: "Paused", val: "2", change: "-50%", icon: Clock, bg: "bg-amber-50 text-amber-600" },
-              { label: "Draft", val: "2", change: "+0%", icon: FileText, bg: "bg-slate-100 text-slate-600" },
-              { label: "Contacts in Flow", val: "4,825", change: "+18%", icon: Users, bg: "bg-blue-50 text-blue-600" },
-              { label: "Leads Generated", val: "1,284", change: "+32%", icon: Target, bg: "bg-emerald-50 text-emerald-600" },
+              { label: "Total Automations", val: "12", change: "+20%", icon: Workflow, bg: "bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400" },
+              { label: "Active", val: "8", change: "+14%", icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" },
+              { label: "Paused", val: "2", change: "-50%", icon: Clock, bg: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400" },
+              { label: "Draft", val: "2", change: "+0%", icon: FileText, bg: "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300" },
+              { label: "Contacts in Flow", val: "4,825", change: "+18%", icon: Users, bg: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" },
+              { label: "Leads Generated", val: "1,284", change: "+32%", icon: Target, bg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" },
             ].map((c) => (
-              <div key={c.label} className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm">
+              <div
+                key={c.label}
+                className="dash-card group rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-white/10 cursor-default"
+              >
                 <div className="flex items-center justify-between">
-                  <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg}`}>
+                  <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg} transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2 shadow-xs`}>
                     <c.icon size={18} />
                   </span>
-                  <span className="text-xs font-bold text-emerald-600">{c.change}</span>
+                  <span className={`inline-flex items-center gap-0.5 text-xs font-bold transition-transform duration-150 group-hover:translate-x-0.5 ${
+                    c.change.startsWith("+") ? "text-emerald-600 dark:text-emerald-400" : c.change.startsWith("-") ? "text-rose-600 dark:text-rose-400" : "text-slate-500"
+                  }`}>
+                    {c.change}
+                  </span>
                 </div>
-                <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3">{c.val}</strong>
-                <p className="text-xs font-semibold text-slate-500 mt-0.5">{c.label}</p>
+                <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3 tracking-tight">{c.val}</strong>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{c.label}</p>
               </div>
             ))}
           </div>
 
           {/* Journey Outcome Funnel Card */}
-          <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
             <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-1">Journey Outcome</h3>
-            <p className="text-xs text-slate-500 mb-6">See how contacts move through your automation journeys</p>
+            <p className="text-xs text-slate-500 mb-6 font-medium">See how contacts move through your automation journeys</p>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 relative">
               {[
-                { step: "Contacts Entered", count: "12,640", pct: "100%", icon: Users, color: "border-blue-200 bg-blue-50/40 dark:bg-blue-950/20" },
-                { step: "In Automation", count: "4,825", pct: "38.2% Active", icon: Workflow, color: "border-purple-200 bg-purple-50/40 dark:bg-purple-950/20" },
-                { step: "Completed / Exited", count: "8,420", pct: "66.6% Completed", icon: UserCheck, color: "border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20" },
-                { step: "Converted to Lead", count: "1,284", pct: "10.2% Conv. Rate", icon: Target, color: "border-amber-200 bg-amber-50/40 dark:bg-amber-950/20" },
-              ].map((st, idx) => {
+                { step: "Contacts Entered", count: "12,640", pct: "100%", icon: Users, color: "border-blue-200 dark:border-blue-900/40 bg-blue-50/40 dark:bg-blue-950/20" },
+                { step: "In Automation", count: "4,825", pct: "38.2% Active", icon: Workflow, color: "border-purple-200 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20" },
+                { step: "Completed / Exited", count: "8,420", pct: "66.6% Completed", icon: UserCheck, color: "border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20" },
+                { step: "Converted to Lead", count: "1,284", pct: "10.2% Conv. Rate", icon: Target, color: "border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20" },
+              ].map((st) => {
                 const Icon = st.icon;
                 return (
                   <div
                     key={st.step}
-                    className={`rounded-2xl border ${st.color} p-5 flex flex-col justify-between relative shadow-sm`}
+                    className={`dash-card group rounded-2xl border ${st.color} p-5 flex flex-col justify-between relative shadow-sm hover:shadow-md cursor-default`}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-white dark:bg-[#0c1222] shadow-sm text-slate-800 dark:text-white">
+                      <span className="grid h-10 w-10 place-items-center rounded-xl bg-white dark:bg-[#0c1222] shadow-xs text-slate-800 dark:text-white transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3">
                         <Icon size={20} />
                       </span>
-                      <span className="text-[11px] font-extrabold text-slate-500">{st.pct}</span>
+                      <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400">{st.pct}</span>
                     </div>
                     <div>
-                      <strong className="block text-2xl font-black text-slate-900 dark:text-white">{st.count}</strong>
+                      <strong className="block text-2xl font-black text-slate-900 dark:text-white tracking-tight">{st.count}</strong>
                       <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 block">{st.step}</span>
                     </div>
                   </div>
@@ -1354,7 +1393,7 @@ export function UserDashboard() {
           </div>
 
           {/* Automation Table */}
-          <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Automation Performance</h3>
 
@@ -1366,14 +1405,14 @@ export function UserDashboard() {
                     placeholder="Search automation..."
                     value={autoSearch}
                     onChange={(e) => setAutoSearch(e.target.value)}
-                    className="w-48 sm:w-64 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-3 py-1.5 text-xs outline-none focus:border-emerald-500"
+                    className="w-48 sm:w-64 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-3 py-1.5 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                   />
                 </div>
 
                 <select
                   value={autoTypeFilter}
                   onChange={(e) => setAutoTypeFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-emerald-500 transition-colors"
                 >
                   <option value="All">All Types</option>
                   <option value="Lead Generation">Lead Generation</option>
@@ -1383,7 +1422,7 @@ export function UserDashboard() {
                 <select
                   value={autoStatusFilter}
                   onChange={(e) => setAutoStatusFilter(e.target.value)}
-                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-emerald-500 transition-colors"
                 >
                   <option value="All">All Statuses</option>
                   <option value="Active">Active</option>
@@ -1414,7 +1453,7 @@ export function UserDashboard() {
                     <tr
                       key={row.id}
                       onClick={() => setSelectedAutomation(row)}
-                      className="hover:bg-slate-50/80 dark:hover:bg-white/5 cursor-pointer transition"
+                      className="hover:bg-emerald-50/30 dark:hover:bg-white/5 cursor-pointer transition-colors duration-150"
                     >
                       <td className="py-3.5 px-2 text-slate-400 font-bold">{i + 1}</td>
                       <td className="py-3.5 px-3 font-bold text-slate-900 dark:text-white">{row.name}</td>
@@ -1432,7 +1471,7 @@ export function UserDashboard() {
                             e.stopPropagation();
                             setSelectedAutomation(row);
                           }}
-                          className="p-1 text-slate-400 hover:text-emerald-600"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         >
                           <MoreVertical size={16} />
                         </button>
@@ -1450,50 +1489,62 @@ export function UserDashboard() {
       {/* TAB 4: CONTENT STUDIO TAB CONTENT                                         */}
       {/* ========================================================================= */}
       {activeTab === "Content Studio" && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          className="space-y-6"
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">Content Studio Dashboard</h2>
-              <p className="text-xs text-slate-500">Create, schedule and analyze your social media content with AI</p>
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Content Studio Dashboard</h2>
+              <p className="text-xs text-slate-500 font-medium">Create, schedule and analyze your social media content with AI</p>
             </div>
             <button
               onClick={() => setIsCreateContentOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
+              className="group flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-all duration-200 cursor-pointer"
             >
-              <Plus size={16} />
-              <span>+ Create Content</span>
+              <Plus size={16} className="transition-transform duration-200 group-hover:rotate-90 group-hover:scale-110" />
+              <span>Create Content</span>
             </button>
           </div>
 
           {/* Content Overview 6 Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
-              { label: "Total Posts", val: "126", change: "+12%", icon: Share2, bg: "bg-purple-50 text-purple-600" },
-              { label: "Published", val: "72", change: "+25%", icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600" },
-              { label: "Scheduled", val: "28", change: "+12%", icon: CalendarDays, bg: "bg-blue-50 text-blue-600" },
-              { label: "Drafts", val: "18", change: "-10%", icon: FileText, bg: "bg-amber-50 text-amber-600" },
-              { label: "Waiting Approval", val: "6", change: "+0%", icon: Clock, bg: "bg-sky-50 text-sky-600" },
-              { label: "Failed", val: "2", change: "-50%", icon: XCircle, bg: "bg-red-50 text-red-600" },
+              { label: "Total Posts", val: "126", change: "+12%", icon: Share2, bg: "bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400" },
+              { label: "Published", val: "72", change: "+25%", icon: CheckCircle2, bg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" },
+              { label: "Scheduled", val: "28", change: "+12%", icon: CalendarDays, bg: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400" },
+              { label: "Drafts", val: "18", change: "-10%", icon: FileText, bg: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400" },
+              { label: "Waiting Approval", val: "6", change: "+0%", icon: Clock, bg: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400" },
+              { label: "Failed", val: "2", change: "-50%", icon: XCircle, bg: "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400" },
             ].map((c) => (
-              <div key={c.label} className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm">
+              <div
+                key={c.label}
+                className="dash-card group rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-4 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-white/10 cursor-default"
+              >
                 <div className="flex items-center justify-between">
-                  <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg}`}>
+                  <span className={`grid h-10 w-10 place-items-center rounded-xl ${c.bg} transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2 shadow-xs`}>
                     <c.icon size={18} />
                   </span>
-                  <span className="text-xs font-bold text-emerald-600">{c.change}</span>
+                  <span className={`inline-flex items-center gap-0.5 text-xs font-bold transition-transform duration-150 group-hover:translate-x-0.5 ${
+                    c.change.startsWith("+") ? "text-emerald-600 dark:text-emerald-400" : c.change.startsWith("-") ? "text-rose-600 dark:text-rose-400" : "text-slate-500"
+                  }`}>
+                    {c.change}
+                  </span>
                 </div>
-                <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3">{c.val}</strong>
-                <p className="text-xs font-semibold text-slate-500 mt-0.5">{c.label}</p>
+                <strong className="block text-2xl font-black text-slate-900 dark:text-white mt-3 tracking-tight">{c.val}</strong>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{c.label}</p>
               </div>
             ))}
           </div>
 
           {/* AI Usage Cards (Independent of Global Date Filter) */}
           <div className="grid gap-6 md:grid-cols-2">
-            <div className="rounded-2xl border border-purple-100 dark:border-purple-900/40 bg-gradient-to-br from-purple-50/50 to-indigo-50/30 dark:from-purple-950/20 dark:to-indigo-950/10 p-6 shadow-sm">
+            <div className="dash-card group rounded-2xl border border-purple-100 dark:border-purple-900/40 bg-gradient-to-br from-purple-50/50 to-indigo-50/30 dark:from-purple-950/20 dark:to-indigo-950/10 p-6 shadow-sm hover:shadow-md hover:border-purple-200 dark:hover:border-purple-800/60 cursor-default">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-purple-600 text-white">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-purple-600 text-white shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3">
                     <Sparkles size={20} />
                   </span>
                   <div>
@@ -1506,19 +1557,19 @@ export function UserDashboard() {
               <div className="mt-4 space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-extrabold">
                   <span className="text-slate-700 dark:text-slate-300">32 / 50 Used</span>
-                  <span className="text-purple-600">64%</span>
+                  <span className="text-purple-600 dark:text-purple-400">64%</span>
                 </div>
                 <div className="h-3 w-full rounded-full bg-purple-100 dark:bg-purple-950/60 overflow-hidden">
-                  <div className="h-full bg-purple-600 rounded-full" style={{ width: "64%" }} />
+                  <div className="h-full bg-purple-600 rounded-full transition-all duration-300" style={{ width: "64%" }} />
                 </div>
               </div>
               <p className="text-[11px] text-slate-500 mt-3 font-semibold">Resets in 12 days (Aug 12, 2025)</p>
             </div>
 
-            <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/50 to-sky-50/30 dark:from-blue-950/20 dark:to-sky-950/10 p-6 shadow-sm">
+            <div className="dash-card group rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/50 to-sky-50/30 dark:from-blue-950/20 dark:to-sky-950/10 p-6 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800/60 cursor-default">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-white">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-white shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-3">
                     <Bot size={20} />
                   </span>
                   <div>
@@ -1531,10 +1582,10 @@ export function UserDashboard() {
               <div className="mt-4 space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-extrabold">
                   <span className="text-slate-700 dark:text-slate-300">7,250 / 10,000 Used</span>
-                  <span className="text-blue-600">72.5%</span>
+                  <span className="text-blue-600 dark:text-blue-400">72.5%</span>
                 </div>
                 <div className="h-3 w-full rounded-full bg-blue-100 dark:bg-blue-950/60 overflow-hidden">
-                  <div className="h-full bg-blue-600 rounded-full" style={{ width: "72.5%" }} />
+                  <div className="h-full bg-blue-600 rounded-full transition-all duration-300" style={{ width: "72.5%" }} />
                 </div>
               </div>
               <p className="text-[11px] text-slate-500 mt-3 font-semibold">Resets in 12 days (Aug 12, 2025)</p>
@@ -1544,31 +1595,33 @@ export function UserDashboard() {
           {/* Social Media Performance & Top Content */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Upcoming Posts Widget */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm">
               <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/5">
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Upcoming Posts</h3>
-                  <p className="text-xs text-slate-500">Scheduled social content across accounts</p>
+                  <p className="text-xs text-slate-500 font-medium">Scheduled social content across accounts</p>
                 </div>
                 <button
                   onClick={() => setIsCalendarOpen(true)}
-                  className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition"
+                  className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-800 active:scale-95 transition-all duration-150 cursor-pointer"
                 >
                   View Calendar
                 </button>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 space-y-2.5">
                 {filteredUpcomingPosts.map((post) => (
                   <div
                     key={post.id}
                     onClick={() => setSelectedPost(post)}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 hover:bg-purple-50/50 cursor-pointer transition"
+                    className="dash-row-interactive group flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-white/5 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-200/60 dark:hover:border-purple-800/40 hover:shadow-xs cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <img src={post.image} alt={post.title} className="h-10 w-10 rounded-lg object-cover" />
+                      <div className="overflow-hidden rounded-lg shrink-0">
+                        <img src={post.image} alt={post.title} className="h-10 w-10 rounded-lg object-cover transition-transform duration-200 group-hover:scale-105" />
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block">{post.title}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{post.title}</span>
                         <div className="flex items-center gap-2 mt-0.5">
                           <PlatformBadge platform={post.platform} />
                           <span className="text-[10px] text-slate-500">{post.scheduledTime}</span>
@@ -1582,30 +1635,32 @@ export function UserDashboard() {
             </div>
 
             {/* Top Performing Content Table */}
-            <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-white/5 bg-white dark:bg-[#0c1222] p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-3">
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Top Performing Content</h3>
                 <select
                   value={topContentSort}
                   onChange={(e) => setTopContentSort(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-white outline-none"
+                  className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors cursor-pointer"
                 >
                   <option value="Engagements">By Engagements</option>
                   <option value="Impressions">By Impressions</option>
                 </select>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {filteredTopContent.slice(0, 4).map((item) => (
                   <div
                     key={item.id}
                     onClick={() => setSelectedPost(item)}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 hover:bg-slate-100 cursor-pointer transition"
+                    className="dash-row-interactive group flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-white/5 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 hover:border-blue-200/60 dark:hover:border-blue-800/40 hover:shadow-xs cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <img src={item.image} alt={item.title} className="h-10 w-10 rounded-lg object-cover" />
+                      <div className="overflow-hidden rounded-lg shrink-0">
+                        <img src={item.image} alt={item.title} className="h-10 w-10 rounded-lg object-cover transition-transform duration-200 group-hover:scale-105" />
+                      </div>
                       <div>
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block">{item.title}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{item.title}</span>
                         <PlatformBadge platform={item.platform} />
                       </div>
                     </div>
@@ -1614,7 +1669,7 @@ export function UserDashboard() {
                       <span className="block text-xs font-black text-slate-900 dark:text-white">
                         {item.engagements.toLocaleString()} Eng.
                       </span>
-                      <span className="text-[10px] text-slate-500">{item.impressions.toLocaleString()} Imp.</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{item.impressions.toLocaleString()} Imp.</span>
                     </div>
                   </div>
                 ))}

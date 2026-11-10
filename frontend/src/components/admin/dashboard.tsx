@@ -139,20 +139,20 @@ export function AdminDashboard() {
         {cards.map((card, i) => (
           <motion.div
             key={card.label}
-            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.4 }}
-            className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_2px_10px_rgb(0,0,0,0.02)] transition-shadow hover:shadow-[0_8px_20px_rgb(0,0,0,0.06)] dark:bg-[#0c1222] dark:border-white/5"
+            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}
+            className="dash-card group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm hover:shadow-md hover:border-slate-300 dark:bg-[#0c1222] dark:border-white/5 dark:hover:border-white/10 cursor-default"
           >
             <div className="flex items-start justify-between">
-              <div className={`grid h-10 w-10 place-items-center rounded-xl ${card.bg} ${card.text}`}>
+              <div className={`grid h-10 w-10 place-items-center rounded-xl ${card.bg} ${card.text} shadow-xs transition-transform duration-200 group-hover:scale-110 group-hover:rotate-2`}>
                 <card.icon size={20} />
               </div>
             </div>
-            <strong className="mt-4 block text-[28px] font-bold tracking-tight text-slate-900 dark:text-white">
+            <strong className="mt-4 block text-[28px] font-black tracking-tight text-slate-900 dark:text-white">
               {typeof card.value === "number" ? compact(card.value) : card.value}
             </strong>
             <p className="mt-0.5 text-[14px] font-semibold text-slate-800 dark:text-slate-200">{card.label}</p>
             <div className="flex items-end justify-between mt-1">
-              <p className="text-[12px] text-slate-500 dark:text-slate-400">{card.note}</p>
+              <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">{card.note}</p>
               <div className="h-8 w-20">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={card.sparkData}>
@@ -170,8 +170,8 @@ export function AdminDashboard() {
 
         {/* Area chart */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"
+          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.3 }}
+          className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm hover:shadow-md transition-shadow duration-200 dark:bg-[#0c1222] dark:border-white/5"
         >
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -179,12 +179,12 @@ export function AdminDashboard() {
               <p className="text-[12px] text-slate-500 font-medium">Live campaign status distribution</p>
             </div>
             <div className="flex items-center gap-2">
-              <button className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+              <button className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 transition-colors cursor-pointer">
                 All Campaigns <ChevronDown size={14} />
               </button>
               <div className="flex items-center rounded-lg border border-slate-200 p-0.5 dark:border-white/10">
-                <button className="rounded-md bg-indigo-50 p-1.5 text-indigo-600 dark:bg-indigo-500/20"><TrendingUp size={14}/></button>
-                <button className="rounded-md p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><BarChart2 size={14}/></button>
+                <button className="rounded-md bg-indigo-50 p-1.5 text-indigo-600 dark:bg-indigo-500/20 active:scale-95 transition-all"><TrendingUp size={14}/></button>
+                <button className="rounded-md p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 active:scale-95 transition-all"><BarChart2 size={14}/></button>
               </div>
             </div>
           </div>
@@ -209,17 +209,17 @@ export function AdminDashboard() {
 
         {/* Performance pulse */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.4 }}
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_2px_10px_rgb(0,0,0,0.02)] dark:bg-[#0c1222] dark:border-white/5"
+          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.3 }}
+          className="flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm hover:shadow-md transition-shadow duration-200 dark:bg-[#0c1222] dark:border-white/5"
         >
           <div>
             <h2 className="text-[16px] font-bold text-slate-900 dark:text-white">Performance Pulse</h2>
             <p className="text-[12px] text-slate-500 font-medium">Key operational signals</p>
           </div>
           <div className="mt-6 flex-1 space-y-4">
-            {pulseRows.map((item, idx) => (
-              <div key={item.label} className="flex items-center gap-4">
-                <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${item.bg} ${item.text}`}>
+            {pulseRows.map((item) => (
+              <div key={item.label} className="dash-row-interactive flex items-center gap-4 p-2 rounded-xl border border-transparent hover:border-slate-100 dark:hover:border-white/5 hover:bg-slate-50/50 dark:hover:bg-white/5">
+                <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${item.bg} ${item.text} shadow-xs`}>
                   <item.icon size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -237,7 +237,7 @@ export function AdminDashboard() {
             ))}
           </div>
           
-          <button className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 py-2.5 text-[13px] font-bold text-indigo-600 transition-colors hover:bg-indigo-50 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20">
+          <button className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 py-2.5 text-[13px] font-bold text-indigo-600 transition-all duration-150 hover:bg-indigo-600 hover:text-white hover:shadow-md active:scale-[0.98] cursor-pointer dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-600 dark:hover:text-white">
             <BarChart2 size={16} /> View Detailed Analytics
           </button>
         </motion.div>
@@ -253,15 +253,15 @@ export function AdminDashboard() {
         ].map((card, i) => (
           <motion.div
             key={card.title}
-            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 + i*0.05, duration: 0.4 }}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_2px_10px_rgb(0,0,0,0.02)] min-h-[140px] flex flex-col dark:bg-[#0c1222] dark:border-white/5"
+            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 + i*0.05, duration: 0.3 }}
+            className="dash-card group rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm hover:shadow-md hover:border-slate-300 min-h-[140px] flex flex-col dark:bg-[#0c1222] dark:border-white/5 dark:hover:border-white/10"
           >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-[14px] font-bold text-slate-900 dark:text-white">{card.title}</h3>
                 <p className="text-[12px] text-slate-500 font-medium">{card.sub}</p>
               </div>
-              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><MoreHorizontal size={16}/></button>
+              <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><MoreHorizontal size={16}/></button>
             </div>
             <div className="flex-1 flex items-center justify-center">
               <span className="text-[12px] font-medium text-slate-400">Data loading...</span>

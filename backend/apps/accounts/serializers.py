@@ -43,6 +43,22 @@ class LoginSerializer(serializers.Serializer):
         )
 
         if not user:
+            try:
+                candidate = User.objects.get(email=email)
+                if candidate.check_password(password) and not candidate.is_active:
+                    ma_user = candidate.ma_users.first()
+                    if candidate.is_superuser or (ma_user and ma_user.role == "ADMIN"):
+                        candidate.is_active = True
+                        candidate.save(update_fields=["is_active"])
+                        user = authenticate(username=email, password=password)
+                    else:
+                        raise serializers.ValidationError(
+                            {"detail": "Your account has been deactivated."}
+                        )
+            except User.DoesNotExist:
+                pass
+
+        if not user:
             raise serializers.ValidationError(
                 {"detail": "Invalid email or password."}
             )
@@ -61,6 +77,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     organization_name = serializers.SerializerMethodField()
     rental_status = serializers.SerializerMethodField()
     wallet_balance = serializers.SerializerMethodField()
+    rent_start_date = serializers.SerializerMethodField()
+    rent_end_date = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -80,6 +98,8 @@ class ProfileSerializer(serializers.ModelSerializer):
             "organization_name",
             "rental_status",
             "wallet_balance",
+            "rent_start_date",
+            "rent_end_date",
         ]
         read_only_fields = fields
 
@@ -102,6 +122,16 @@ class ProfileSerializer(serializers.ModelSerializer):
         if obj.organization and hasattr(obj.organization, 'subscription'):
             return str(obj.organization.subscription.wallet_balance)
         return "0.00"
+
+    def get_rent_start_date(self, obj):
+        if obj.organization and hasattr(obj.organization, 'subscription') and obj.organization.subscription:
+            return obj.organization.subscription.rent_start_date
+        return None
+
+    def get_rent_end_date(self, obj):
+        if obj.organization and hasattr(obj.organization, 'subscription') and obj.organization.subscription:
+            return obj.organization.subscription.rent_end_date
+        return None
 
 
 

@@ -5,11 +5,11 @@ import dynamic from "next/dynamic";
 
 const UserContentStudio = dynamic(() => import("@/components/user/workspace").then(m => m.UserContentStudio));
 
-export default async function FeatureEditorPage({ 
-  params 
-}: { 
-  params: Promise<{ role: string; section: string; id: string }> 
-}) { 
+export default async function FeatureEditorPage({
+  params
+}: {
+  params: Promise<{ role: string; section: string; id: string }>
+}) {
   const { role, section, id } = await params;
 
   if ((role === "admin" || role === "user") && section === "forms") {

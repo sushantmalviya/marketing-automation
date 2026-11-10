@@ -7,17 +7,18 @@ import {
   Pencil, Plus, RefreshCw, Save, Search, Target, Trash2,
   UserRound, UsersRound, X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { apiClient, parseApiError } from "@/services/api-client";
+import { useSidebar } from "@/components/layout/portal-shell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Condition  = { id: string; field: string; operator: string; value: string; value_to?: string };
-type Group      = { id: string; operator: "AND" | "OR"; conditions: Condition[] };
+type Condition = { id: string; field: string; operator: string; value: string; value_to?: string };
+type Group = { id: string; operator: "AND" | "OR"; conditions: Condition[] };
 type Definition = { type?: string; description?: string; operator?: string; conditions?: Condition[]; groups_operator?: string; groups?: Group[]; static_ids?: number[]; is_group?: boolean; base_group_ids?: number[] };
-type Audience   = { id: number; name: string; customer_upload: number | null; customer_upload_name: string; definition: Definition; type: string; contacts_count: number; created_at: string; updated_at: string };
+type Audience = { id: number; name: string; customer_upload: number | null; customer_upload_name: string; definition: Definition; type: string; contacts_count: number; created_at: string; updated_at: string };
 type SegmentForm = { name: string; description: string; type: "DYNAMIC" | "STATIC"; groups_operator: "AND" | "OR"; groups: Group[]; base_group_ids: number[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -33,8 +34,8 @@ const operators: [string, string][] = [
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const newCondition = (): Condition => ({ id: uid(), field: "Name", operator: "contains", value: "" });
-const newGroup     = (): Group => ({ id: uid(), operator: "AND", conditions: [newCondition()] });
-const blankForm    = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()], base_group_ids: [] });
+const newGroup = (): Group => ({ id: uid(), operator: "AND", conditions: [newCondition()] });
+const blankForm = (): SegmentForm => ({ name: "", description: "", type: "DYNAMIC", groups_operator: "OR", groups: [newGroup()], base_group_ids: [] });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,13 +91,13 @@ export function AdminAudiences() {
     groups_operator: form.groups_operator,
     groups: (form.type === "DYNAMIC" || form.type === "STATIC")
       ? form.groups.map(g => ({
-          operator: g.operator,
-          conditions: g.conditions.map(c => ({ field: c.field, operator: c.operator, value: c.value, ...(c.value_to ? { value_to: c.value_to } : {}) })),
-        }))
+        operator: g.operator,
+        conditions: g.conditions.map(c => ({ field: c.field, operator: c.operator, value: c.value, ...(c.value_to ? { value_to: c.value_to } : {}) })),
+      }))
       : [],
   }), [form]);
 
-  
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (audiences.data ?? [])
@@ -156,7 +157,7 @@ export function AdminAudiences() {
     setViewing(null); setEditing(item.id); setPreviewCount(item.contacts_count);
     let base_group_ids: number[] = [];
     if (item.definition?.base_group_ids) {
-        base_group_ids = item.definition.base_group_ids;
+      base_group_ids = item.definition.base_group_ids;
     }
     setForm({
       name: item.name,
@@ -227,7 +228,7 @@ export function AdminAudiences() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/70 text-xs uppercase tracking-wide text-slate-600">
-                <tr><th className="px-6 py-5">Title</th><th>Type</th><th>Contacts</th><th>Created At</th><th className="text-center">Actions</th></tr>
+                <tr><th className="px-6 py-5">Title</th><th>Type</th><th>Contacts</th><th>Created At</th><th className="px-6 py-5 text-right">Actions</th></tr>
               </thead>
               <tbody>
                 {rows.map(item => (
@@ -236,8 +237,8 @@ export function AdminAudiences() {
                     <td><TypeBadge type={item.type} /></td>
                     <td className="font-medium text-slate-700">{item.contacts_count.toLocaleString()}</td>
                     <td className="text-slate-600">{formatDate(item.created_at)}</td>
-                    <td>
-                      <div className="flex justify-center gap-2">
+                    <td className="px-6 py-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <Action title="View" color="blue" onClick={() => setViewing(item)}><Eye size={17} /></Action>
                         {!["Imported contacts", "Form leads", "Meta leads"].includes(item.name) && (
                           <>
@@ -283,7 +284,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
   const count = previewCount ?? 0;
   const conditions = form.groups.flatMap(g => g.conditions);
 
-  const updateGroup     = (gid: string, patch: Partial<Group>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, ...patch } : g) });
+  const updateGroup = (gid: string, patch: Partial<Group>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, ...patch } : g) });
   const updateCondition = (gid: string, cid: string, patch: Partial<Condition>) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, conditions: g.conditions.map(c => c.id === cid ? { ...c, ...patch } : c) } : g) });
   const removeCondition = (gid: string, cid: string) => setForm({ ...form, groups: form.groups.map(g => g.id === gid ? { ...g, conditions: g.conditions.filter(c => c.id !== cid) } : g).filter(g => g.conditions.length) });
 
@@ -369,7 +370,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
               </div>
               <div className="absolute left-0 top-full z-10 mt-2 hidden w-full rounded-xl border border-slate-100 bg-white shadow-xl group-hover:block max-h-60 overflow-y-auto">
                 <div className="p-2 space-y-1">
-                  <button 
+                  <button
                     onClick={() => setForm({ ...form, base_group_ids: [] })}
                     className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${form.base_group_ids.length === 0 ? "bg-slate-100 font-semibold" : "hover:bg-slate-50"}`}
                   >
@@ -382,7 +383,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                       <button
                         key={group.id}
                         onClick={() => {
-                          const newIds = isSelected 
+                          const newIds = isSelected
                             ? form.base_group_ids.filter(id => id !== group.id)
                             : [...form.base_group_ids, group.id];
                           setForm({ ...form, base_group_ids: newIds });
@@ -455,7 +456,7 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                           <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={condition.operator} onChange={e => updateCondition(group.id, condition.id, { operator: e.target.value })}>
                             {/* Source field: only equality operators */}
                             {(condition.field === "Source"
-                              ? [["is", "is"], ["!=", "is not"]] as [string,string][]
+                              ? [["is", "is"], ["!=", "is not"]] as [string, string][]
                               : operators
                             ).map(([v, l]) => <option value={v} key={v}>{l}</option>)}
                           </select>
@@ -546,10 +547,10 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {previewContacts.map(c => {
                   const d = c.data;
-                  const name  = String(d.name ?? d.Name ?? d.full_name ?? "—");
+                  const name = String(d.name ?? d.Name ?? d.full_name ?? "—");
                   const email = String(d.email ?? d.Email ?? "");
                   const extra = Object.entries(d)
-                    .filter(([k]) => !["name","Name","email","Email","__col_order__","__source__"].includes(k))
+                    .filter(([k]) => !["name", "Name", "email", "Email", "__col_order__", "__source__"].includes(k))
                     .slice(0, 2)
                     .map(([k, v]) => `${k}: ${String(v)}`).join(" · ");
                   return (
@@ -561,10 +562,12 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
                   );
                 })}
               </div>
-              {count > previewContacts.length && (
+              {count > 0 && (
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <p className="text-xs text-slate-400">
-                    + {(count - previewContacts.length).toLocaleString()} more contacts
+                    {count > previewContacts.length
+                      ? `+ ${(count - previewContacts.length).toLocaleString()} more contacts`
+                      : `${count.toLocaleString()} matching ${count === 1 ? "contact" : "contacts"}`}
                   </p>
                   <button
                     onClick={onFetchFull}
@@ -581,10 +584,10 @@ function SegmentBuilder({ editing, form, setForm, allGroups, availableFields, pr
 
           {/* Meta */}
           <div className="space-y-3 p-5 text-sm">
-            <Meta icon={<RefreshCw size={15} />} label="Type"         value={title(form.type)} />
-            <Meta icon={<CalendarDays size={15} />} label="Updated"   value="Not saved yet" />
-            <Meta icon={<UserRound size={15} />} label="Created By"   value={[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Admin"} />
-            <Meta icon={<Target size={15} />} label="Used In"         value={editing ? "Existing campaigns" : "0 Campaigns"} />
+            <Meta icon={<RefreshCw size={15} />} label="Type" value={title(form.type)} />
+            <Meta icon={<CalendarDays size={15} />} label="Updated" value="Not saved yet" />
+            <Meta icon={<UserRound size={15} />} label="Created By" value={[user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "Admin"} />
+            <Meta icon={<Target size={15} />} label="Used In" value={editing ? "Existing campaigns" : "0 Campaigns"} />
           </div>
         </aside>
       </div>
@@ -640,15 +643,45 @@ function FullContactsModal({ contacts, total, conditions, onClose }: {
   conditions: Condition[];
   onClose: () => void;
 }) {
+  const { collapsed, sidebarWidth } = useSidebar();
   const [search, setSearch] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Derive columns from first contact
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Derive columns from contacts with __col_order__ preference and collecting all attributes
   const columns = useMemo(() => {
-    const first = contacts[0];
-    if (!first) return [];
-    const order = first.data.__col_order__ as string[] | undefined;
-    const keys = order ?? Object.keys(first.data);
-    return keys.filter(k => !k.startsWith("__"));
+    if (!contacts.length) return [];
+    const firstWithOrder = contacts.find(c => Array.isArray(c.data?.__col_order__));
+    if (firstWithOrder && Array.isArray(firstWithOrder.data.__col_order__)) {
+      const orderCols = (firstWithOrder.data.__col_order__ as string[]).filter(k => !k.startsWith("__"));
+      const keySet = new Set(orderCols);
+      for (const c of contacts) {
+        if (c?.data) {
+          Object.keys(c.data).forEach(k => {
+            if (!k.startsWith("__") && !keySet.has(k)) {
+              keySet.add(k);
+              orderCols.push(k);
+            }
+          });
+        }
+      }
+      return orderCols;
+    }
+    const keySet = new Set<string>();
+    for (const c of contacts) {
+      if (c?.data) {
+        Object.keys(c.data).forEach(k => {
+          if (!k.startsWith("__")) keySet.add(k);
+        });
+      }
+    }
+    return Array.from(keySet);
   }, [contacts]);
 
   const filtered = useMemo(() => {
@@ -661,90 +694,96 @@ function FullContactsModal({ contacts, total, conditions, onClose }: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col bg-white"
-      initial={{ opacity: 0, y: 24 }}
+      className="fixed top-0 bottom-0 right-0 left-0 md:left-[var(--sidebar-width,280px)] z-30 flex flex-col bg-white dark:bg-[#0c1222] transition-[left] duration-300 shadow-2xl overflow-hidden"
+      style={{
+        left: isMobile ? 0 : (sidebarWidth ?? (collapsed ? 76 : 280)),
+      }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 24 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
-        <div>
-          <h2 className="text-xl font-black text-slate-900">Full Contact List</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-white/10 dark:bg-[#0c1222]">
+        <div className="min-w-0 pr-4">
+          <h2 className="text-xl font-black text-slate-900 dark:text-white truncate">Full Contact List</h2>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400 line-clamp-1">
             {total.toLocaleString()} contacts match ·{" "}
             {conditions.map(c => `${c.field} ${operatorLabel(c.operator)} "${c.value}"`).join(", ")}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {/* Search within results */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
-              className="h-10 w-64 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-48 sm:w-64 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-4 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-blue-500"
               placeholder="Search within results…"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-700">
+          <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/40 px-3 py-1 text-sm font-bold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
             {filtered.length.toLocaleString()} shown
           </span>
-          <button className="icon-button" onClick={onClose}><X size={20} /></button>
+          <button className="icon-button" onClick={onClose} aria-label="Close contact preview"><X size={20} /></button>
         </div>
       </div>
 
       {/* Scrollable table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto overscroll-contain">
         {contacts.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-slate-400">No contacts found.</div>
+          <div className="flex h-full items-center justify-center text-slate-400 dark:text-slate-500">No contacts found.</div>
         ) : (
-          <table className="w-full text-left text-sm" style={{ minWidth: Math.max(800, columns.length * 180) }}>
-            <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-[.12em] text-slate-500">
-              <tr>
-                <th className="px-5 py-3 text-slate-400">#</th>
-                {columns.map(col => (
-                  <th key={col} className="px-4 py-3 whitespace-nowrap">
-                    {col.replace(/_/g, " ")}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c, idx) => (
-                <tr
-                  key={c.id}
-                  className="border-b border-slate-100 transition hover:bg-blue-50/40"
-                >
-                  <td className="px-5 py-3 text-xs text-slate-400">{idx + 1}</td>
-                  {columns.map(col => {
-                    const raw = c.data[col];
-                    const isTags = col.toLowerCase() === "tags";
-                    const tags = isTags
-                      ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
-                      : [];
-                    return (
-                      <td key={col} className="px-4 py-3 max-w-[220px]">
-                        {isTags ? (
-                          <div className="flex flex-wrap gap-1">
-                            {tags.map(t => <span key={t} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{t}</span>)}
-                          </div>
-                        ) : (
-                          <span className="block truncate text-slate-700" title={String(raw ?? "")}>
-                            {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
+          <div className="min-w-full inline-block align-middle">
+            <table className="w-full text-left text-sm" style={{ minWidth: Math.max(800, columns.length * 180) }}>
+              <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#0c1222] text-[11px] font-bold uppercase tracking-[.12em] text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-5 py-3 text-slate-400 dark:text-slate-500 w-12 sticky left-0 bg-slate-50 dark:bg-[#0c1222] z-20">#</th>
+                  {columns.map(col => (
+                    <th key={col} className="px-4 py-3 whitespace-nowrap">
+                      {col.replace(/_/g, " ")}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {filtered.map((c, idx) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-slate-100 dark:border-white/5 transition hover:bg-blue-50/40 dark:hover:bg-white/5"
+                  >
+                    <td className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-[#0c1222]">{idx + 1}</td>
+                    {columns.map(col => {
+                      const raw = c.data[col];
+                      const isTags = col.toLowerCase() === "tags";
+                      const tags = isTags
+                        ? (Array.isArray(raw) ? raw.map(String) : String(raw ?? "").split(",").map(t => t.trim()).filter(Boolean))
+                        : [];
+                      return (
+                        <td key={col} className="px-4 py-3 max-w-[220px]">
+                          {isTags ? (
+                            <div className="flex flex-wrap gap-1">
+                              {tags.map(t => <span key={t} className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-400">{t}</span>)}
+                            </div>
+                          ) : (
+                            <span className="block truncate text-slate-700 dark:text-slate-200" title={String(raw ?? "")}>
+                              {raw !== undefined && raw !== null && String(raw).trim() ? String(raw) : "—"}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 text-center text-xs text-slate-400">
+      <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 text-center text-xs text-slate-400 dark:border-white/10 dark:bg-[#0c1222] dark:text-slate-500">
         Showing {filtered.length.toLocaleString()} of {total.toLocaleString()} matched contacts
       </div>
     </motion.div>

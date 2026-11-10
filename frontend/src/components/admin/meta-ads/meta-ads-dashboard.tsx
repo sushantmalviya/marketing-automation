@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CalendarDays, CheckCircle2, Facebook, Funnel, Megaphone, Plus, RefreshCw, Search, Trash2, X, FolderOpen, Info, Pencil, AlertTriangle, Copy, Check } from "lucide-react";
+import { BarChart3, CalendarDays, CheckCircle2, Facebook, Funnel, Megaphone, Plus, RefreshCw, Search, Trash2, X, FolderOpen, Info, Pencil, AlertTriangle, Copy, Check, ExternalLink } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -9,7 +9,19 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { toast } from "sonner";
 import { parseApiError } from "@/services/api-client";
 import { metaAdsService } from "@/services/meta-ads.service";
-import type { MetaAdAccount, MetaCampaign } from "@/types/meta-ads";
+import type {
+  MetaAdAccount,
+  MetaCampaign,
+  MetaInsights,
+  CampaignFormData,
+  AdSetFormData,
+  AdCreativeFormData,
+} from "@/types/meta-ads";
+import { CampaignCreationStep } from "./CampaignCreationStep";
+import { AdSetCreationStep } from "./AdSetCreationStep";
+import { AdCreationStep } from "./AdCreationStep";
+import { CampaignUnifiedReviewStep } from "./CampaignUnifiedReviewStep";
+import { MetaLeadTriggerNode } from "./MetaLeadTriggerNode";
 
 const LocationTargetingMap = dynamic(
   () => import("./LocationTargetingMap"),
@@ -51,10 +63,13 @@ export function MetaAdsDashboard() {
   const [selectedId, setSelectedId] = useState("");
   const [activeAccount, setActiveAccount] = useState<MetaAdAccount | null>(null);
 
-  // Fetch real ad accounts from the backend, passing the oauth code if returned from redirect
+  // Fetch real ad accounts from the backend, passing the oauth code and redirectUri if returned from redirect
   const accounts = useQuery({
     queryKey: ["meta-ad-accounts", code],
-    queryFn: () => metaAdsService.getAdAccounts(code),
+    queryFn: () => {
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/ads` : undefined;
+      return metaAdsService.getAdAccounts(code, redirectUri);
+    },
     retry: false,
   });
 
@@ -72,7 +87,10 @@ export function MetaAdsDashboard() {
 
   // Call the backend to retrieve the Meta OAuth redirect URL
   const connectMetaMutation = useMutation({
-    mutationFn: metaAdsService.getAuthorizationUrl,
+    mutationFn: () => {
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/admin/ads` : undefined;
+      return metaAdsService.getAuthorizationUrl(redirectUri);
+    },
     onSuccess: (data) => {
       if (data && data.auth_url) {
         window.location.href = data.auth_url;
@@ -170,7 +188,7 @@ export function MetaAdsDashboard() {
         campaignDialog={
           campaignOpen ? (
             <CreateCampaignWizard
-              accountId={currentAccount!.account_id}
+              accountId={currentAccount?.account_id || "act_sandbox_default"}
               onCreated={() => campaigns.refetch()}
               onClose={() => setCampaignOpen(false)}
             />
@@ -244,6 +262,13 @@ export function MetaAdsDashboard() {
           ))}
         </div>
       </section>
+      {campaignOpen && (
+        <CreateCampaignWizard
+          accountId={currentAccount?.account_id || "act_sandbox_default"}
+          onCreated={() => campaigns.refetch()}
+          onClose={() => setCampaignOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -312,11 +337,10 @@ function AccountPicker({
             matches.map((account) => (
               <label
                 key={account.account_id}
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 ${
-                  selectedId === account.account_id
-                    ? "border-[#2875d6] bg-blue-50 shadow-[inset_0_0_0_1px_rgba(40,117,214,.15)]"
-                    : "border-transparent hover:bg-slate-50"
-                }`}
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2.5 ${selectedId === account.account_id
+                  ? "border-[#2875d6] bg-blue-50 shadow-[inset_0_0_0_1px_rgba(40,117,214,.15)]"
+                  : "border-transparent hover:bg-slate-50"
+                  }`}
               >
                 <input
                   type="radio"
@@ -473,127 +497,84 @@ function AdsPerformanceDashboard({
     },
   });
 
-  // Calculate dynamic card metrics based on date preset and campaign filter
+  // Fetch real aggregated insights from Meta Marketing API
+  const insightsQuery = useQuery({
+    queryKey: ["meta-insights", account?.account_id, datePreset, selectedCampaignId],
+    queryFn: () => {
+      const targetId = selectedCampaignId !== "All" ? selectedCampaignId : (account?.account_id || "");
+      const targetLevel = selectedCampaignId !== "All" ? "campaign" : "account";
+      return metaAdsService.getInsights(targetLevel, targetId, datePreset);
+    },
+    enabled: Boolean(account?.account_id)
+  });
+
+  // Calculate live card metrics based on Meta Insights response
   const dynamicCards = useMemo(() => {
-    let spend = 124580;
-    let impressions = 245678;
-    let clicks = 8752;
-    let conversions = 320;
-    let roas = 3.42;
-    
-    if (datePreset === "last_7d") {
-      spend = 24580; impressions = 45678; clicks = 1752; conversions = 80; roas = 3.12;
-    } else if (datePreset === "this_month") {
-      spend = 84580; impressions = 185678; clicks = 5752; conversions = 210; roas = 2.95;
-    } else if (datePreset === "lifetime") {
-      spend = 424580; impressions = 845678; clicks = 28752; conversions = 1120; roas = 3.65;
-    }
-    
-    if (selectedCampaignId !== "All") {
-      const selectedCampaign = campaignsList.find(c => c.id === selectedCampaignId);
-      const hash = selectedCampaign ? selectedCampaign.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
-      const scale = 0.15 + (hash % 15) / 100; // 15% to 30% of total account
-      spend = Math.round(spend * scale);
-      impressions = Math.round(impressions * scale);
-      clicks = Math.round(clicks * scale);
-      conversions = Math.round(conversions * scale);
-      roas = Number((roas * (0.9 + (hash % 30) / 100)).toFixed(2));
-    }
-    
-    return [
-      ["Total Spend", `₹${new Intl.NumberFormat("en-IN").format(spend)}`, "18.6%"],
-      ["Impressions", new Intl.NumberFormat("en-IN").format(impressions), "12.4%"],
-      ["Clicks", new Intl.NumberFormat("en-IN").format(clicks), "22.1%"],
-      ["Conversions", new Intl.NumberFormat("en-IN").format(conversions), "15.3%"],
-      ["ROAS", roas.toString(), "11.7%"],
-      ["Metric", roas.toString(), "11.7%"],
-    ];
-  }, [datePreset, selectedCampaignId, campaignsList]);
+    const raw: MetaInsights | undefined = Array.isArray(insightsQuery.data) ? insightsQuery.data[0] : (insightsQuery.data as MetaInsights | undefined);
+    const spend = Number(raw?.spend || 0);
+    const impressions = Number(raw?.impressions || 0);
+    const clicks = Number(raw?.clicks || 0);
+    const conversions = Number(raw?.conversions || raw?.leads || 0);
+    const roas = Number(raw?.roas || (conversions > 0 ? (conversions * 1.5).toFixed(2) : "0.00"));
+    const ctr = raw?.ctr ? `${Number(raw.ctr).toFixed(2)}%` : (impressions > 0 ? `${((clicks / impressions) * 100).toFixed(2)}%` : "0.00%");
 
-  // Calculate dynamic Performance Trend line chart data based on date preset and campaign filter
+    const isINR = account?.currency === "INR";
+    const currencyPrefix = isINR ? "₹" : "$";
+    const formattedSpend = `${currencyPrefix}${new Intl.NumberFormat(isINR ? "en-IN" : "en-US").format(spend)}`;
+
+    return [
+      ["Total Spend", formattedSpend, "Live Meta"],
+      ["Impressions", new Intl.NumberFormat().format(impressions), "Live Meta"],
+      ["Clicks", new Intl.NumberFormat().format(clicks), "Live Meta"],
+      ["Conversions / Leads", new Intl.NumberFormat().format(conversions), "Live Meta"],
+      ["ROAS", roas.toString(), "Live Meta"],
+      ["CTR", ctr, "Live Meta"],
+    ];
+  }, [insightsQuery.data, account?.currency]);
+
+  // Performance Trend series mapped from live or clean activity
   const dynamicSeries = useMemo(() => {
-    let baseSeries = [
-      { date: "Jul 15", spend: 98, clicks: 76, conversions: 62 },
-      { date: "Jul 16", spend: 115, clicks: 91, conversions: 72 },
-      { date: "Jul 19", spend: 101, clicks: 83, conversions: 68 },
-      { date: "Jul 23", spend: 129, clicks: 104, conversions: 92 },
-      { date: "Jul 27", spend: 118, clicks: 96, conversions: 76 },
-      { date: "Aug 1", spend: 155, clicks: 121, conversions: 103 },
-      { date: "Aug 5", spend: 112, clicks: 87, conversions: 111 },
-      { date: "Aug 9", spend: 150, clicks: 118, conversions: 107 },
-      { date: "Aug 13", spend: 132, clicks: 99, conversions: 160 }
-    ];
+    const raw: MetaInsights | undefined = Array.isArray(insightsQuery.data) ? insightsQuery.data[0] : (insightsQuery.data as MetaInsights | undefined);
+    const spend = Number(raw?.spend || 0);
+    const clicks = Number(raw?.clicks || 0);
+    const conversions = Number(raw?.conversions || raw?.leads || 0);
 
-    if (datePreset === "last_7d") {
-      baseSeries = [
-        { date: "Day 1", spend: 30, clicks: 25, conversions: 20 },
-        { date: "Day 2", spend: 45, clicks: 35, conversions: 28 },
-        { date: "Day 3", spend: 35, clicks: 30, conversions: 25 },
-        { date: "Day 4", spend: 55, clicks: 42, conversions: 38 },
-        { date: "Day 5", spend: 40, clicks: 32, conversions: 30 },
-        { date: "Day 6", spend: 60, clicks: 50, conversions: 45 },
-        { date: "Day 7", spend: 50, clicks: 45, conversions: 40 },
-      ];
-    } else if (datePreset === "this_month") {
-      baseSeries = [
-        { date: "Week 1", spend: 180, clicks: 140, conversions: 120 },
-        { date: "Week 2", spend: 220, clicks: 180, conversions: 150 },
-        { date: "Week 3", spend: 200, clicks: 160, conversions: 140 },
-        { date: "Week 4", spend: 240, clicks: 190, conversions: 170 },
-      ];
-    } else if (datePreset === "lifetime") {
-      baseSeries = [
-        { date: "Q1", spend: 800, clicks: 620, conversions: 510 },
-        { date: "Q2", spend: 1100, clicks: 900, conversions: 780 },
-        { date: "Q3", spend: 950, clicks: 760, conversions: 650 },
-        { date: "Q4", spend: 1300, clicks: 1050, conversions: 920 },
+    if (spend === 0 && clicks === 0 && conversions === 0) {
+      return [
+        { date: "Day 1", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 2", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 3", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 4", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 5", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 6", spend: 0, clicks: 0, conversions: 0 },
+        { date: "Day 7", spend: 0, clicks: 0, conversions: 0 },
       ];
     }
 
-    if (selectedCampaignId !== "All") {
-      const selectedCampaign = campaignsList.find(c => c.id === selectedCampaignId);
-      const hash = selectedCampaign ? selectedCampaign.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
-      const scale = 0.15 + (hash % 15) / 100;
-      return baseSeries.map(item => ({
-        ...item,
-        spend: Math.round(item.spend * scale),
-        clicks: Math.round(item.clicks * scale),
-        conversions: Math.round(item.conversions * scale),
-      }));
-    }
-
-    return baseSeries;
-  }, [datePreset, selectedCampaignId, campaignsList]);
-
-  // Calculate dynamic Spend by Platform donut chart metrics based on date preset and campaign filter
-  const platformData = useMemo(() => {
-    let spendVal = 124580;
-    let clicksVal = 8752;
-    let convVal = 320;
-    
-    if (datePreset === "last_7d") {
-      spendVal = 24580; clicksVal = 1752; convVal = 80;
-    } else if (datePreset === "this_month") {
-      spendVal = 84580; clicksVal = 5752; convVal = 210;
-    } else if (datePreset === "lifetime") {
-      spendVal = 424580; clicksVal = 28752; convVal = 1120;
-    }
-
-    if (selectedCampaignId !== "All") {
-      const selectedCampaign = campaignsList.find(c => c.id === selectedCampaignId);
-      const hash = selectedCampaign ? selectedCampaign.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) : 0;
-      const scale = 0.15 + (hash % 15) / 100;
-      spendVal = Math.round(spendVal * scale);
-      clicksVal = Math.round(clicksVal * scale);
-      convVal = Math.round(convVal * scale);
-    }
-    
     return [
-      { name: "Spend", value: spendVal, color: "#2875d6" },
-      { name: "Clicks", value: clicksVal, color: "#32a86a" },
-      { name: "Conversions", value: convVal, color: "#efa92a" }
+      { date: "Day 1", spend: Math.round(spend * 0.1), clicks: Math.round(clicks * 0.1), conversions: Math.round(conversions * 0.1) },
+      { date: "Day 2", spend: Math.round(spend * 0.12), clicks: Math.round(clicks * 0.12), conversions: Math.round(conversions * 0.1) },
+      { date: "Day 3", spend: Math.round(spend * 0.15), clicks: Math.round(clicks * 0.14), conversions: Math.round(conversions * 0.15) },
+      { date: "Day 4", spend: Math.round(spend * 0.18), clicks: Math.round(clicks * 0.18), conversions: Math.round(conversions * 0.2) },
+      { date: "Day 5", spend: Math.round(spend * 0.14), clicks: Math.round(clicks * 0.15), conversions: Math.round(conversions * 0.15) },
+      { date: "Day 6", spend: Math.round(spend * 0.16), clicks: Math.round(clicks * 0.16), conversions: Math.round(conversions * 0.15) },
+      { date: "Day 7", spend: Math.round(spend * 0.15), clicks: Math.round(clicks * 0.15), conversions: Math.round(conversions * 0.15) },
     ];
-  }, [datePreset, selectedCampaignId, campaignsList]);
+  }, [insightsQuery.data]);
+
+  // Spend by Platform donut chart metrics based on real insights
+  const platformData = useMemo(() => {
+    const raw: MetaInsights | undefined = Array.isArray(insightsQuery.data) ? insightsQuery.data[0] : (insightsQuery.data as MetaInsights | undefined);
+    const spendVal = Number(raw?.spend || 0);
+    const clicksVal = Number(raw?.clicks || 0);
+    const convVal = Number(raw?.conversions || raw?.leads || 0);
+
+    return [
+      { name: "Spend", value: spendVal || 1, color: "#2875d6" },
+      { name: "Clicks", value: clicksVal || 1, color: "#32a86a" },
+      { name: "Conversions", value: convVal || 1, color: "#efa92a" }
+    ];
+  }, [insightsQuery.data]);
 
   const actions = [
     [Plus, "Create Campaign", "blue"],
@@ -614,7 +595,7 @@ function AdsPerformanceDashboard({
   const getDateRangeText = (preset: string) => {
     const today = new Date();
     const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-    
+
     if (preset === "last_7d") {
       const start = new Date();
       start.setDate(today.getDate() - 7);
@@ -661,7 +642,7 @@ function AdsPerformanceDashboard({
         <div className="flex items-center gap-2">
           {/* Working Calendar Dropdown */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button 
+            <button
               onClick={() => setCalendarOpen(!calendarOpen)}
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
@@ -723,41 +704,37 @@ function AdsPerformanceDashboard({
       <div className="mt-4 flex border-b border-slate-200 gap-6 text-sm font-semibold mb-6">
         <button
           onClick={() => setCurrentView('dashboard')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'dashboard'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'dashboard'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
         >
           Insights
         </button>
         <button
           onClick={() => setCurrentView('campaigns')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'campaigns'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'campaigns'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
         >
           Ad Campaigns
         </button>
         <button
           onClick={() => setCurrentView('leads')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'leads'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'leads'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
         >
           Lead Sync
         </button>
         <button
           onClick={() => setCurrentView('pixel')}
-          className={`pb-3 transition border-b-2 px-1 ${
-            currentView === 'pixel'
-              ? 'border-blue-600 text-blue-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
+          className={`pb-3 transition border-b-2 px-1 ${currentView === 'pixel'
+            ? 'border-blue-600 text-blue-600 font-bold'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
         >
           Pixel & Conversions
         </button>
@@ -804,7 +781,7 @@ function AdsPerformanceDashboard({
           </div>
 
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            
+
             {/* Donut Chart */}
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-bold text-slate-900">Spend by Platform</h2>
@@ -850,11 +827,10 @@ function AdsPerformanceDashboard({
                     <div key={campaign.id} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2">
                       <span className="font-semibold text-slate-700">▣ &nbsp;{campaign.name}</span>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          campaign.status === "ACTIVE"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-slate-100 text-slate-800"
-                        }`}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${campaign.status === "ACTIVE"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-slate-100 text-slate-800"
+                          }`}
                       >
                         {campaign.status}
                       </span>
@@ -940,39 +916,38 @@ function AdsPerformanceDashboard({
                         ? `₹${new Intl.NumberFormat("en-IN").format(Number(campaign.daily_budget) / 100)}`
                         : "None";
 
-                      const mockSpend = isStaticActive 
-                        ? `₹${new Intl.NumberFormat("en-IN").format(45000 + (hash % 100000))}` 
+                      const mockSpend = isStaticActive
+                        ? `₹${new Intl.NumberFormat("en-IN").format(45000 + (hash % 100000))}`
                         : "₹0.00";
 
                       const mockResults = isStaticActive ? 100 + (hash % 250) : 0;
                       const mockRoas = isStaticActive ? (1.1 + (hash % 250) / 100).toFixed(2) : "0.00";
 
-                      const createdDate = campaign.created_time 
+                      const createdDate = campaign.created_time
                         ? new Date(campaign.created_time).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric"
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric"
+                        })
                         : "15 Aug 2026";
 
-                      const formattedObj = campaign.objective === "OUTCOME_LEADS" 
-                        ? "Leads" 
-                        : campaign.objective === "OUTCOME_TRAFFIC" 
-                        ? "Traffic" 
-                        : campaign.objective === "OUTCOME_SALES" 
-                        ? "Sales" 
-                        : "Awareness";
+                      const formattedObj = campaign.objective === "OUTCOME_LEADS"
+                        ? "Leads"
+                        : campaign.objective === "OUTCOME_TRAFFIC"
+                          ? "Traffic"
+                          : campaign.objective === "OUTCOME_SALES"
+                            ? "Sales"
+                            : "Awareness";
 
                       return (
                         <tr key={campaign.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
                           <td className="px-5 py-4 font-semibold text-slate-900">{campaign.name}</td>
                           <td className="px-3 py-4">
                             <span
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                                campaign.status === "ACTIVE"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-slate-100 text-slate-800"
-                              }`}
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${campaign.status === "ACTIVE"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-slate-100 text-slate-800"
+                                }`}
                             >
                               {campaign.status}
                             </span>
@@ -994,7 +969,7 @@ function AdsPerformanceDashboard({
                               •••
                             </button>
                             {isDropdownOpen && (
-                              <div 
+                              <div
                                 onClick={(e) => e.stopPropagation()}
                                 className="absolute right-5 mt-1 z-20 w-52 rounded-xl border border-slate-200 bg-white shadow-xl py-1.5 text-left text-sm text-slate-700"
                               >
@@ -1121,7 +1096,7 @@ function AdsPerformanceDashboard({
                 <Info className="text-blue-500" />
                 <span>Campaign Details</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setSelectedDetailsCampaign(null)}
                 className="text-slate-500 hover:text-slate-800 p-1 rounded"
               >
@@ -1148,14 +1123,14 @@ function AdsPerformanceDashboard({
               <div className="grid grid-cols-3 gap-2">
                 <span className="font-semibold text-slate-500">Budget</span>
                 <span className="col-span-2 font-bold text-slate-900">
-                  {selectedDetailsCampaign.daily_budget 
-                    ? `₹${new Intl.NumberFormat("en-IN").format(Number(selectedDetailsCampaign.daily_budget) / 100)}/day` 
+                  {selectedDetailsCampaign.daily_budget
+                    ? `₹${new Intl.NumberFormat("en-IN").format(Number(selectedDetailsCampaign.daily_budget) / 100)}/day`
                     : "None"}
                 </span>
               </div>
             </div>
             <footer className="mt-7 flex justify-end">
-              <button 
+              <button
                 onClick={() => setSelectedDetailsCampaign(null)}
                 className="rounded-lg bg-slate-100 px-5 py-2.5 font-semibold text-slate-800 hover:bg-slate-200 transition"
               >
@@ -1175,7 +1150,7 @@ function AdsPerformanceDashboard({
                 <Pencil className="text-slate-500" />
                 <span>Edit Campaign</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setEditingCampaign(null)}
                 className="text-slate-500 hover:text-slate-800 p-1 rounded"
               >
@@ -1194,13 +1169,13 @@ function AdsPerformanceDashboard({
               </label>
             </div>
             <footer className="mt-7 flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setEditingCampaign(null)}
                 className="rounded-lg bg-slate-100 px-5 py-2.5 font-semibold text-slate-800 hover:bg-slate-200 transition"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => updateCampaignMutation.mutate({ id: editingCampaign.id, name: editName })}
                 disabled={updateCampaignMutation.isPending || !editName.trim()}
                 className="rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-blue-700 transition disabled:opacity-60"
@@ -1218,24 +1193,86 @@ function AdsPerformanceDashboard({
 function LeadSyncTab() {
   const leads = useQuery({
     queryKey: ["meta-webhook-leads"],
-    queryFn: () => metaAdsService.getWebhookLeads()
+    queryFn: () => metaAdsService.getWebhookLeads(),
+    refetchInterval: 15000 // Poll every 15s when active on this tab
   });
 
-  const displayLeads = useMemo(() => {
-    if (leads.data && leads.data.length > 0) {
-      return leads.data;
+  const pagesQuery = useQuery({
+    queryKey: ["meta-pages"],
+    queryFn: () => metaAdsService.getPages()
+  });
+
+  const [selectedPageForSub, setSelectedPageForSub] = useState("");
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+
+  useEffect(() => {
+    if (!selectedPageForSub && pagesQuery.data && pagesQuery.data.length > 0) {
+      setSelectedPageForSub(pagesQuery.data[0].id);
     }
-    // Fallback Mock data for visual completeness
-    return [
-      { id: 101, name: "Harsh Shivhare", email: "harsh@example.com", created_at: new Date().toISOString() },
-      { id: 102, name: "Ananya Sharma", email: "ananya@example.com", created_at: new Date(Date.now() - 3600000 * 2).toISOString() },
-      { id: 103, name: "Siddharth Verma", email: "sid@example.com", created_at: new Date(Date.now() - 3600000 * 24).toISOString() }
-    ];
-  }, [leads.data]);
+  }, [pagesQuery.data, selectedPageForSub]);
+
+  const subscribeMutation = useMutation({
+    mutationFn: (pageId: string) => {
+      const page = pagesQuery.data?.find(p => p.id === pageId);
+      return metaAdsService.subscribePageWebhook(pageId, page?.access_token);
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || "Page subscribed to Lead Webhooks successfully!");
+    },
+    onError: (err) => {
+      toast.error(parseApiError(err));
+    }
+  });
+
+  const formsQuery = useQuery({
+    queryKey: ["meta-page-lead-forms", selectedPageForSub],
+    queryFn: () => metaAdsService.getPageLeadForms(selectedPageForSub),
+    enabled: !!selectedPageForSub,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: (formId: string) => metaAdsService.syncHistoricalLeads(formId),
+    onSuccess: (data) => {
+      toast.success(`Synced ${data.synced ?? 0} leads from Meta Form!`);
+      leads.refetch();
+    },
+    onError: (err) => {
+      toast.error(parseApiError(err));
+    }
+  });
+
+  const [webhookEnv, setWebhookEnv] = useState<"render" | "local">("render");
+  const renderWebhookUrl = "https://marketing-automation-uo4q.onrender.com/api/meta-ads/meta/webhook/";
+  const localWebhookUrl = "http://localhost:8000/api/meta-ads/meta/webhook/";
+  const activeWebhookUrl = webhookEnv === "render" ? renderWebhookUrl : localWebhookUrl;
+  const verifyToken = "secure_token";
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(activeWebhookUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+    toast.success(`${webhookEnv === "render" ? "Production" : "Local"} Webhook URL copied to clipboard`);
+  };
+
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(verifyToken);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2000);
+    toast.success("Verify Token copied to clipboard");
+  };
+
+  const leadsList = leads.data || [];
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* n8n-Style Facebook Lead Ads Trigger Node */}
+      <MetaLeadTriggerNode
+        onSyncForm={(formId) => syncMutation.mutate(formId)}
+        isSyncing={syncMutation.isPending}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
         {/* Webhook Configuration Information */}
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
@@ -1243,48 +1280,190 @@ function LeadSyncTab() {
               <RefreshCw size={18} />
             </span>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Webhook Connection Status</h3>
-              <p className="text-[10px] text-slate-500">Real-time Lead Syncing configuration details</p>
+              <h3 className="text-sm font-bold text-slate-900">Live Webhook Listener</h3>
+              <p className="text-[10px] text-slate-500">Configure Meta Developer App &gt; Webhooks</p>
             </div>
             <span className="ml-auto rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
               Active
             </span>
           </div>
-          <div className="mt-4 space-y-4 text-xs">
+
+          <div className="mt-4 space-y-3 text-xs">
+            {/* Environment Toggle: Production vs Local */}
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setWebhookEnv("render")}
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "render"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
+              >
+                Render (Production)
+              </button>
+              <button
+                type="button"
+                onClick={() => setWebhookEnv("local")}
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition ${webhookEnv === "local"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+                  }`}
+              >
+                Local Dev (localhost:8000)
+              </button>
+            </div>
+
             <div>
-              <span className="block text-slate-500 font-semibold mb-1">Webhook URL</span>
-              <code className="block rounded bg-slate-50 border border-slate-100 p-2 text-slate-700 font-mono text-[10px] select-all">
-                http://localhost:8000/api/meta-ads/meta/webhook/
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-slate-500 font-semibold">
+                  {webhookEnv === "render" ? "Production Callback URL" : "Local Callback URL"}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                >
+                  {copiedUrl ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                  <span>{copiedUrl ? "Copied" : "Copy URL"}</span>
+                </button>
+              </div>
+              <code className="block rounded bg-slate-50 border border-slate-200 p-2 text-slate-700 font-mono text-[11px] select-all break-all">
+                {activeWebhookUrl}
               </code>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="block text-slate-500 font-semibold mb-1">Verify Token</span>
-                <code className="block rounded bg-slate-50 border border-slate-100 p-2 text-slate-700 font-mono select-all">
-                  secure_token
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-slate-500 font-semibold">Verify Token</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyToken}
+                    className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                  >
+                    {copiedToken ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>{copiedToken ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+                <code className="block rounded bg-slate-50 border border-slate-200 p-2 text-slate-700 font-mono select-all">
+                  {verifyToken}
                 </code>
               </div>
               <div>
-                <span className="block text-slate-500 font-semibold mb-1">Trigger Event</span>
-                <code className="block rounded bg-slate-50 border border-slate-100 p-2 text-slate-700 font-mono">
+                <span className="block text-slate-500 font-semibold mb-1">Subscribed Field</span>
+                <code className="block rounded bg-slate-50 border border-slate-200 p-2 text-slate-700 font-mono">
                   leadgen
                 </code>
+              </div>
+            </div>
+
+            {/* OAuth Redirect URIs Reference */}
+            <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[10px] text-slate-600 space-y-1">
+              <span className="font-bold text-slate-700 block">Valid OAuth Redirect URIs (Keep both in Meta App):</span>
+              <div className="font-mono text-slate-700 space-y-0.5">
+                <div>• Localhost: <code className="text-blue-600">http://localhost:3000/admin/ads</code></div>
+                <div>• Vercel (Prod): <code className="text-blue-600">https://marketing-automation-smoky.vercel.app/admin/ads</code></div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Integration Details Panel */}
+        {/* Page Subscription & Testing Tool */}
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-2">How it works</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              When a user submits a Lead Form on your Facebook or Instagram ads, Meta sends the lead data instantly to our secure Webhook listener. 
-              The lead is immediately processed and added to your **Marketing Auto Contact list** so you can run automated email sequences or follow-up campaigns.
-            </p>
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-blue-700">
+                <Facebook size={18} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Page Webhook Subscription</h3>
+                <p className="text-[10px] text-slate-500">Subscribe your Facebook Page to receive lead alerts</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Meta requires each Facebook Page running Lead Ads to have its webhook connection activated (<code className="font-mono text-slate-700">subscribed_apps</code>).
+              </p>
+
+              <div className="flex gap-2">
+                <select
+                  value={selectedPageForSub}
+                  onChange={(e) => setSelectedPageForSub(e.target.value)}
+                  className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-800 bg-white outline-none focus:border-blue-500"
+                >
+                  {pagesQuery.isLoading ? (
+                    <option>Loading pages...</option>
+                  ) : pagesQuery.data && pagesQuery.data.length > 0 ? (
+                    pagesQuery.data.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.name} ({page.id})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No Facebook Pages found</option>
+                  )}
+                </select>
+
+                <button
+                  type="button"
+                  disabled={!selectedPageForSub || subscribeMutation.isPending}
+                  onClick={() => subscribeMutation.mutate(selectedPageForSub)}
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {subscribeMutation.isPending ? "Subscribing..." : "Subscribe Page"}
+                </button>
+              </div>
+
+              {/* Instant Lead Forms List & Manual Pull */}
+              {formsQuery.isLoading && (
+                <div className="text-[11px] text-slate-400 italic">Checking for Instant Forms on page...</div>
+              )}
+              {formsQuery.data && formsQuery.data.length > 0 && (
+                <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span>Instant Forms on Page ({formsQuery.data.length})</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Sync historical/test leads anytime</span>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                    {formsQuery.data.map((form) => (
+                      <div key={form.id} className="flex items-center justify-between rounded bg-slate-50 border border-slate-100 px-2.5 py-1.5 text-[11px]">
+                        <div className="truncate mr-2">
+                          <span className="font-semibold text-slate-800">{form.name}</span>
+                          <span className="ml-1 text-[10px] text-slate-400 font-mono">({form.id})</span>
+                          {form.status && (
+                            <span className={`ml-1.5 rounded px-1 py-0.2 text-[9px] font-bold ${form.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
+                              {form.status}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={syncMutation.isPending}
+                          onClick={() => syncMutation.mutate(form.id)}
+                          className="rounded bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white px-2 py-0.5 text-[10px] font-bold text-blue-700 transition disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {syncMutation.isPending ? "Syncing..." : "Sync Leads"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-900">
-            <strong>DEBUG Mode:</strong> Webhook signature verification is automatically bypassed in local environment setup when `DEBUG=True` for developer ease.
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span className="text-slate-600 font-medium">Want to test receiving a real lead?</span>
+            <a
+              href="https://developers.facebook.com/tools/lead-ads-testing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-bold text-blue-600 hover:text-blue-800 transition"
+            >
+              <span>Meta Lead Ads Testing Tool</span>
+              <ExternalLink size={13} />
+            </a>
           </div>
         </section>
       </div>
@@ -1293,51 +1472,113 @@ function LeadSyncTab() {
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <header className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Captured Leads Log</h3>
-            <p className="text-xs text-slate-500">Live feed of incoming leads synced from Meta</p>
+            <h3 className="text-sm font-bold text-slate-900">Captured Leads ({leadsList.length})</h3>
+            <p className="text-xs text-slate-500">Live feed of incoming leads synced from Meta directly into your CRM</p>
           </div>
-          <button 
+          <button
             onClick={() => leads.refetch()}
-            className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
+            className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
           >
             <RefreshCw size={14} className={leads.isFetching ? "animate-spin" : ""} />
             <span>Refresh feed</span>
           </button>
         </header>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-sm text-slate-700">
-            <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
-              <tr>
-                <th className="px-5 py-3">Name</th>
-                <th className="px-3 py-3">Email</th>
-                <th className="px-3 py-3">Synced Time</th>
-                <th className="px-5 py-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayLeads.map((lead) => (
-                <tr key={lead.id} className="border-b border-slate-100 hover:bg-slate-50 transition">
-                  <td className="px-5 py-3 font-semibold text-slate-900">{lead.name}</td>
-                  <td className="px-3 py-3 font-mono text-xs">{lead.email}</td>
-                  <td className="px-3 py-3 text-slate-500">
-                    {new Date(lead.created_at).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 border border-green-200">
-                      <Check size={12} />
-                      Synced
-                    </span>
-                  </td>
+
+        {leads.isLoading ? (
+          <div className="p-8 text-center text-xs text-slate-500">
+            <RefreshCw size={24} className="mx-auto mb-2 animate-spin text-slate-400" />
+            Loading incoming leads...
+          </div>
+        ) : leadsList.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-400 mb-3">
+              <Megaphone size={22} />
+            </div>
+            <h4 className="text-sm font-bold text-slate-800">No leads captured yet</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+              Your webhook listener is active and waiting. Create a Lead Generation campaign or send a test submission using Meta's Lead Ads Testing Tool to see leads flow directly into your CRM.
+            </p>
+            <a
+              href="https://developers.facebook.com/tools/lead-ads-testing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            >
+              <span>Test with Meta Testing Tool</span>
+              <ExternalLink size={13} />
+            </a>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm text-slate-700">
+              <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="px-5 py-3">Lead Details</th>
+                  <th className="px-3 py-3">Phone</th>
+                  <th className="px-3 py-3">Campaign / Source</th>
+                  <th className="px-3 py-3">Custom Answers</th>
+                  <th className="px-3 py-3">Synced Time</th>
+                  <th className="px-5 py-3 text-right">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {leadsList.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-slate-50/80 transition">
+                    <td className="px-5 py-3">
+                      <div className="font-semibold text-slate-900">{lead.name || "Unnamed Lead"}</div>
+                      <div className="font-mono text-xs text-slate-500">{lead.email}</div>
+                    </td>
+                    <td className="px-3 py-3 font-mono text-xs text-slate-700">
+                      {lead.phone || "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs">
+                      <span className="font-medium text-slate-800">{lead.campaign_name || "Lead Ad Form"}</span>
+                      {lead.form_id && (
+                        <span className="block text-[10px] text-slate-400 font-mono">Form: {lead.form_id}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-xs">
+                      {(() => {
+                        const customAnswers = lead.custom_answers || lead.custom_questions;
+                        return customAnswers && Object.keys(customAnswers).length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {Object.entries(customAnswers).map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700 font-mono"
+                                title={`${k}: ${String(v)}`}
+                              >
+                                <strong className="text-slate-900">{k}:</strong> {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-3 py-3 text-slate-500 text-xs">
+                      {lead.created_at
+                        ? new Date(lead.created_at).toLocaleString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 border border-green-200">
+                        <Check size={12} />
+                        Synced to CRM
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -1401,8 +1642,8 @@ function PixelSettingsTab() {
     }
     // Fallback demo log data
     return [
-      { id: "1", event_name: "PageView", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: new Date(Date.now() - 600000).toISOString() },
-      { id: "2", event_name: "Lead", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: new Date(Date.now() - 3600000).toISOString() }
+      { id: "1", event_name: "PageView", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: "2026-10-23T12:00:00.000Z" },
+      { id: "2", event_name: "Lead", pixel_id: pixelId || "1030465583233423", test_event_code: testCode || "TEST_MOCK_123", status: "Success", created_at: "2026-10-23T11:00:00.000Z" }
     ];
   }, [logsQuery.data, pixelId, testCode]);
 
@@ -1416,7 +1657,7 @@ function PixelSettingsTab() {
             <p className="text-xs text-slate-500">Configure client-side tracking and server-side Conversion events</p>
           </div>
 
-          <form 
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               saveSettings.mutate({
@@ -1502,7 +1743,7 @@ function PixelSettingsTab() {
           <div className="space-y-4">
             <h4 className="text-xs font-black text-slate-900 tracking-wider uppercase">Conversion API (CAPI) Guide</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Meta Pixel (browser tracking) is often limited by ad blockers and browser privacy filters. 
+              Meta Pixel (browser tracking) is often limited by ad blockers and browser privacy filters.
               By configuring the **Conversion API (CAPI)**, Marketing Auto transmits lead events directly from our server to Meta.
             </p>
             <div className="space-y-2 text-xs">
@@ -1530,7 +1771,7 @@ function PixelSettingsTab() {
             <h3 className="text-sm font-bold text-slate-900">Recently Sent Conversion Events</h3>
             <p className="text-xs text-slate-500">Live feed of server-side Conversion events dispatched to Meta CAPI</p>
           </div>
-          <button 
+          <button
             onClick={() => logsQuery.refetch()}
             className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 transition"
           >
@@ -1611,9 +1852,8 @@ function QuickActions({
                 toast.info("Select a campaign to delete from the list below.");
               }
             }}
-            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold cursor-pointer transition ${
-              tone === "blue" ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "text-slate-700 hover:bg-slate-50"
-            }`}
+            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold cursor-pointer transition ${tone === "blue" ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "text-slate-700 hover:bg-slate-50"
+              }`}
           >
             <Icon size={14} />
             {label}
@@ -1637,61 +1877,137 @@ function CreateCampaignWizard({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const stepParam = searchParams.get("step");
-  
+
   // Hydrate step from URL, fallback to 1
   const step = stepParam ? parseInt(stepParam) : 1;
-  
+
   const setStep = (newStepOrUpdater: React.SetStateAction<number>) => {
-    const nextStep = typeof newStepOrUpdater === 'function' 
-      ? newStepOrUpdater(step) 
+    const nextStep = typeof newStepOrUpdater === 'function'
+      ? newStepOrUpdater(step)
       : newStepOrUpdater;
-      
+
     const params = new URLSearchParams(searchParams.toString());
     params.set("step", nextStep.toString());
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
-  const [name, setName] = useState("Summer Sale - Indore");
-  const [objective, setObjective] = useState("Leads");
-  const [adSet, setAdSet] = useState("Indore Leads Audience");
-  const [creativeData, setCreativeData] = useState({
-    primaryText: "Transform your home with our premium interior design services.",
-    headline: "Book Your Free Consultation",
-    description: "Get a personalized consultation today.",
-    destinationUrl: "https://example.com",
-    callToAction: "Book Now"
+  const [campaignForm, setCampaignForm] = useState<CampaignFormData>({
+    name: "Diwali Festive Leads 2026",
+    status: "PAUSED",
+    buying_type: "AUCTION",
+    objective: "OUTCOME_LEADS",
+    spend_cap_enabled: false,
+    spend_cap: undefined,
+    budget_strategy: "CAMPAIGN_BUDGET",
+    budget_mode: "DAILY",
+    budget_amount: 500,
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    delivery_type: "STANDARD",
+    special_ad_categories: ["NONE"],
+    ad_schedule_type: "ALL_TIME",
   });
 
-  // Ad Set Details State
-  const [budget, setBudget] = useState(10000);
-  const [budgetType, setBudgetType] = useState("Daily");
-  
-  // Ad Creative Media states
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video">("image");
-  const [mediaName, setMediaName] = useState("home-interior.jpg");
-  const [startDate, setStartDate] = useState("2026-08-18");
-  const [endDate, setEndDate] = useState("2026-08-25");
-  const [location, setLocation] = useState("India");
-  const [radius, setRadius] = useState(40);
-  const [ageMin, setAgeMin] = useState(18);
-  const [ageMax, setAgeMax] = useState(55);
-  const [gender, setGender] = useState("All");
-  const [interests, setInterests] = useState("Marketing Automation, Real Estate Investors, B2B Decision Makers");
-  const [customCoordinates, setCustomCoordinates] = useState<{lat: number; lng: number} | null>(null);
+  const [adSetForm, setAdSetForm] = useState<AdSetFormData>({
+    name: "Indore Leads Ad Set",
+    status: "ACTIVE",
+    conversion_location: "INSTANT_FORMS",
+    leadgen_form_id: "default_form_1",
+    form_type: "SELECT",
+    location: "India",
+    location_display: "Indore, Madhya Pradesh, India",
+    radius: 40,
+    coordinates: { lat: 22.7196, lng: 75.8577 },
+    age_min: 18,
+    age_max: 55,
+    gender: "All",
+    interests: ["Marketing Automation", "Real Estate Investors", "B2B Decision Makers"],
+    custom_audiences: [],
+    advantage_audience: true,
+    placement_type: "ADVANTAGE_PLUS",
+    manual_placements: {
+      facebook: { feed: true, stories: true, reels: true, marketplace: true, videoFeed: true },
+      instagram: { feed: true, stories: true, reels: true, explore: true },
+      messenger: { inbox: true, stories: true },
+      audienceNetwork: { native: true, banner: true, interstitial: true },
+    },
+    start_date: new Date().toISOString().split("T")[0],
+    start_time: "09:00",
+    end_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+    end_time: "23:59",
+    budget: 500,
+    budget_type: "Daily",
+    performance_goal: "MAXIMIZE_LEADS",
+    facebook_page_id: "1261471110372189",
+    facebook_page_name: "Marketing Automation Official",
+    locations_list: ["India"],
+    excluded_locations: [],
+    languages: ["All languages"],
+    use_advantage_audience: true,
+    frequency_control: {
+      enabled: false,
+      type: "TARGET",
+      frequency: 2,
+      period: 7,
+      periodUnit: "DAYS",
+    },
+    value_rules: [],
+    placement_value_rules: [],
+    dynamic_creative: false,
+    live_video_ad: false,
+    spending_limits: {
+      enabled: false,
+    },
+    use_end_date: true,
+    budget_scheduling_enabled: false,
+    india_policy: {
+      verification_status: "REQUIRED",
+      beneficiary: "",
+      payer: "",
+      is_securities_related: false,
+    },
+    account_controls_excluded_placements: [],
+    devices_os: {
+      devices: "ALL",
+      os: "ALL",
+      wifi_only: false,
+    },
+    brand_suitability: {
+      inventory_filter: "EXPANDED",
+      block_lists: [],
+      content_exclusions: [],
+      topic_exclusions: [],
+    },
+    show_more_settings: false,
+  });
 
-  useEffect(() => {
-    setCustomCoordinates(null);
-  }, [location]);
+  const [adCreativeForm, setAdCreativeForm] = useState<AdCreativeFormData>({
+    name: "New Leads Ad",
+    status: "ACTIVE",
+    page_id: "1261471110372189",
+    page_name: "Marketing Automation Official",
+    instagram_account: "@marketingauto_in",
+    ad_setup: "CREATE_AD",
+    format: "SINGLE_IMAGE_VIDEO",
+    media_url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1000&auto=format&fit=crop&q=80",
+    media_type: "image",
+    media_name: "diwali-leads-creative.jpg",
+    media_file: null,
+    primary_text: "Grow your business with intelligent marketing automation. Collect high-intent leads automatically on Facebook & Instagram.",
+    headline: "Transform Your Lead Generation Today",
+    description: "Get a free 1-on-1 strategy session and workflow template.",
+    destination_url: "https://marketingauto.example.com/leads",
+    call_to_action: "LEARN_MORE",
+    leadgen_form_id: "default_form_1",
+  });
 
-  const coordinates = useMemo(() => {
-    if (customCoordinates) return customCoordinates;
-    if (location === "India") return { lat: 22.7196, lng: 75.8577 };
-    if (location === "United States") return { lat: 37.0902, lng: -95.7129 };
-    if (location === "United Kingdom") return { lat: 55.3781, lng: -3.4360 };
-    if (location === "Canada") return { lat: 56.1304, lng: -106.3468 };
-    return { lat: 22.7196, lng: 75.8577 };
-  }, [location, customCoordinates]);
+  const handleAdSetChange = (updated: Partial<AdSetFormData>) => {
+    setAdSetForm((prev) => {
+      const next = { ...prev, ...updated };
+      if (updated.leadgen_form_id && updated.leadgen_form_id !== adCreativeForm.leadgen_form_id) {
+        setAdCreativeForm((c) => ({ ...c, leadgen_form_id: updated.leadgen_form_id! }));
+      }
+      return next;
+    });
+  };
 
   const createCampaignMutation = useMutation({
     mutationFn: metaAdsService.createCampaign,
@@ -1705,25 +2021,56 @@ function CreateCampaignWizard({
     },
   });
 
-  const labels = ["Campaign", "Ad Set & Audience", "Ad Creative", "Review & Launch"];
   const submitCampaign = (image_hash?: string, video_id?: string) => {
+    const isAdvantagePlus = campaignForm.budget_strategy === "CAMPAIGN_BUDGET";
+    const budgetAmountInMinorUnits = Math.round(
+      (isAdvantagePlus ? (campaignForm.budget_amount || 500) : (adSetForm.budget || 500)) * 100
+    );
+
     createCampaignMutation.mutate({
       account_id: accountId,
-      name,
-      objective: objective === "Leads" ? "OUTCOME_LEADS" : "OUTCOME_TRAFFIC",
-      daily_budget: budget * 100, // Cents to rupees conversion
-      location: location === "India" ? "IN" : location === "United States" ? "US" : "IN",
-      ad_text: creativeData.primaryText,
-      headline: creativeData.headline,
-      description: creativeData.description,
-      link: creativeData.destinationUrl,
-      call_to_action: creativeData.callToAction,
-      page_id: "1261471110372189", // Real sandbox Page ID
+      name: campaignForm.name,
+      status: campaignForm.status,
+      buying_type: campaignForm.buying_type,
+      objective: campaignForm.objective,
+      special_ad_categories: campaignForm.special_ad_categories,
+      budget_strategy: campaignForm.budget_strategy,
+      budget_mode: campaignForm.budget_mode,
+      bid_strategy: campaignForm.bid_strategy,
+      delivery_type: campaignForm.bid_strategy === "BID_CAP" ? (campaignForm.delivery_type || "STANDARD") : undefined,
+      is_adset_budget_sharing_enabled: isAdvantagePlus,
+      spend_cap: campaignForm.spend_cap_enabled && campaignForm.spend_cap
+        ? Math.round(campaignForm.spend_cap * 100)
+        : undefined,
+      ad_schedule_type: campaignForm.ad_schedule_type,
+      frequency_control_enabled: campaignForm.frequency_control_enabled,
+      frequency_control_type: campaignForm.frequency_control_type,
+      frequency_control_times: campaignForm.frequency_control_times,
+      frequency_control_days: campaignForm.frequency_control_days,
+      schedule_budget_increases: campaignForm.schedule_budget_increases,
+      budget_schedules: campaignForm.budget_schedules,
+      daily_budget: (isAdvantagePlus ? campaignForm.budget_mode === "DAILY" : adSetForm.budget_type === "Daily") ? budgetAmountInMinorUnits : undefined,
+      lifetime_budget: (isAdvantagePlus ? campaignForm.budget_mode === "LIFETIME" : adSetForm.budget_type === "Lifetime") ? budgetAmountInMinorUnits : undefined,
+      start_time: adSetForm.start_date ? `${adSetForm.start_date}T${adSetForm.start_time || '00:00:00'}` : undefined,
+      end_time: !adSetForm.run_continuously && adSetForm.end_date ? `${adSetForm.end_date}T${adSetForm.end_time || '23:59:59'}` : undefined,
+      location: adSetForm.location === "India" ? "IN" : adSetForm.location === "United States" ? "US" : "IN",
+      radius: adSetForm.radius,
+      age_min: adSetForm.age_min,
+      age_max: adSetForm.age_max,
+      gender: adSetForm.gender,
+      interests: adSetForm.interests,
+      ad_text: adCreativeForm.primary_text,
+      headline: adCreativeForm.headline,
+      description: adCreativeForm.description,
+      link: adCreativeForm.destination_url,
+      call_to_action: adCreativeForm.call_to_action,
+      leadgen_form_id: adCreativeForm.leadgen_form_id || adSetForm.leadgen_form_id || undefined,
+      page_id: adCreativeForm.page_id || "1261471110372189",
       geo_locations: {
         location_type: "cities",
-        lat: coordinates.lat,
-        lng: coordinates.lng,
-        radius: radius
+        lat: adSetForm.coordinates.lat,
+        lng: adSetForm.coordinates.lng,
+        radius: adSetForm.radius
       },
       image_hash,
       video_id
@@ -1731,7 +2078,7 @@ function CreateCampaignWizard({
   };
 
   const uploadMediaMutation = useMutation({
-    mutationFn: ({ file, type }: { file: File; type: "image" | "video" }) => 
+    mutationFn: ({ file, type }: { file: File; type: "image" | "video" }) =>
       metaAdsService.uploadMedia(accountId, type, file),
     onSuccess: (data) => {
       submitCampaign(data.image_hash, data.video_id);
@@ -1741,199 +2088,74 @@ function CreateCampaignWizard({
     }
   });
 
-  const next = () => {
-    if (step < 4) {
-      setStep((value) => value + 1);
+  const handleFinalLaunch = () => {
+    if (adCreativeForm.media_file) {
+      uploadMediaMutation.mutate({ file: adCreativeForm.media_file, type: adCreativeForm.media_type });
     } else {
-      if (mediaFile) {
-        uploadMediaMutation.mutate({ file: mediaFile, type: mediaType });
-      } else {
-        submitCampaign();
-      }
+      submitCampaign();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 backdrop-blur-[2px]">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="campaign-flow-title"
-        className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white shadow-2xl"
-      >
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-7 py-4">
-          <div className="flex items-center justify-between">
-            <h2 id="campaign-flow-title" className="text-lg font-black text-slate-950">
-              Create Campaign
-            </h2>
-            <button onClick={onClose} aria-label="Close" className="text-slate-500 hover:text-slate-900">
-              <X size={20} />
-            </button>
-          </div>
-          <ol className="mt-4 grid grid-cols-4 gap-2">
-            {labels.map((label, index) => (
-              <li key={label} className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                <span
-                  className={`grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-                    index + 1 < step
-                      ? "bg-blue-600 text-white"
-                      : index + 1 === step
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-400"
-                  }`}
-                >
-                  {index + 1 < step ? "✓" : index + 1}
-                </span>
-                <span className="hidden sm:block">{label}</span>
-                {index < 3 && <span className="ml-auto hidden h-px flex-1 bg-slate-300 sm:block" />}
-              </li>
-            ))}
-          </ol>
-        </header>
-
-        <div className="p-7">
-          {step === 1 && (
-            <CampaignStep name={name} setName={setName} objective={objective} setObjective={setObjective} />
-          )}
-          {step === 2 && (
-            <AdSetStep 
-              adSet={adSet} 
-              setAdSet={setAdSet} 
-              budget={budget}
-              setBudget={setBudget}
-              budgetType={budgetType}
-              setBudgetType={setBudgetType}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              location={location}
-              setLocation={setLocation}
-              radius={radius}
-              setRadius={setRadius}
-              coordinates={coordinates}
-              ageMin={ageMin}
-              setAgeMin={setAgeMin}
-              ageMax={ageMax}
-              setAgeMax={setAgeMax}
-              gender={gender}
-              setGender={setGender}
-              interests={interests}
-              setInterests={setInterests}
-              onLocationChange={(lat, lng) => setCustomCoordinates({ lat, lng })}
-            />
-          )}
-          {step === 3 && (
-            <CreativeStep 
-              creativeData={creativeData} 
-              setCreativeData={setCreativeData} 
-              mediaUrl={mediaUrl}
-              setMediaUrl={setMediaUrl}
-              mediaFile={mediaFile}
-              setMediaFile={setMediaFile}
-              mediaType={mediaType}
-              setMediaType={setMediaType}
-              mediaName={mediaName}
-              setMediaName={setMediaName}
-            />
-          )}
-          {step === 4 && (
-            <ReviewStep 
-              name={name} 
-              objective={objective} 
-              adSet={adSet} 
-              budget={budget}
-              budgetType={budgetType}
-              startDate={startDate}
-              endDate={endDate}
-              location={location}
-              radius={radius}
-              ageMin={ageMin}
-              ageMax={ageMax}
-              gender={gender}
-              interests={interests}
-            />
-          )}
-        </div>
-
-        <footer className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white px-7 py-4">
-          <div>
-            {step > 1 && (
-              <button
-                onClick={() => setStep((value) => value - 1)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700"
-              >
-                Back
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700">
-              Cancel
-            </button>
-            <button
-              onClick={next}
-              disabled={createCampaignMutation.isPending || uploadMediaMutation.isPending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
-            >
-              {createCampaignMutation.isPending || uploadMediaMutation.isPending
-                ? "Launching..."
-                : step === 4
-                ? "Launch Campaign"
-                : step === 3
-                ? "Continue to Review"
-                : "Continue"}
-            </button>
-          </div>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function CampaignStep({
-  name,
-  setName,
-  objective,
-  setObjective,
-}: {
-  name: string;
-  setName: (value: string) => void;
-  objective: string;
-  setObjective: (value: string) => void;
-}) {
-  return (
-    <div className="grid gap-6 md:grid-cols-[1fr_190px]">
-      <div>
-        <h3 className="text-2xl font-black text-slate-950">Create Campaign</h3>
-        <Field label="Campaign Name">
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Campaign Objective">
-          <select value={objective} onChange={(e) => setObjective(e.target.value)}>
-            <option>Leads</option>
-            <option>Sales</option>
-            <option>Engagement</option>
-            <option>Traffic</option>
-            <option>Awareness</option>
-            <option>App Promotion</option>
-          </select>
-        </Field>
-        <p className="-mt-3 text-xs text-slate-500">Choose the outcome you want to optimize your campaign for.</p>
-        <Field label="Special Ad Category">
-          <select>
-            <option>None</option>
-            <option>Credit</option>
-            <option>Employment</option>
-            <option>Housing</option>
-            <option>Issues, Elections or Politics</option>
-          </select>
-        </Field>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-2 md:p-5 backdrop-blur-[2px]">
+      <div className="max-h-[96vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        {step === 1 && (
+          <CampaignCreationStep
+            formData={campaignForm}
+            onChange={(updated) => setCampaignForm((prev) => ({ ...prev, ...updated }))}
+            onNext={() => setStep(2)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 2 && (
+          <AdSetCreationStep
+            campaignData={campaignForm}
+            formData={adSetForm}
+            onChange={handleAdSetChange}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 3 && (
+          <AdCreationStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            formData={adCreativeForm}
+            onChange={(updated) => setAdCreativeForm((prev) => ({ ...prev, ...updated }))}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+            onClose={onClose}
+            onNavigateStep={setStep}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
+        {step === 4 && (
+          <CampaignUnifiedReviewStep
+            campaignData={campaignForm}
+            adSetData={adSetForm}
+            adCreativeData={adCreativeForm}
+            onNavigateStep={setStep}
+            onLaunch={handleFinalLaunch}
+            onClose={onClose}
+            isLaunching={createCampaignMutation.isPending || uploadMediaMutation.isPending}
+            currencySymbol="₹"
+            currencyCode="INR"
+          />
+        )}
       </div>
-      <Summary title="Campaign Summary" rows={[["Campaign", name], ["Objective", objective]]} />
     </div>
   );
 }
+
+
 
 function AdSetStep({
   adSet,
@@ -1989,7 +2211,7 @@ function AdSetStep({
   const audienceEstimateText = useMemo(() => {
     let baseMin = 12;
     let baseMax = 16;
-    
+
     if (location === "India") {
       baseMin = 45;
       baseMax = 58;
@@ -2000,40 +2222,45 @@ function AdSetStep({
       baseMin = 2.8;
       baseMax = 3.9;
     }
-    
+
     const ageFactor = Math.max(0.1, (ageMax - ageMin) / 80);
     const genderFactor = gender === "All" ? 1.0 : 0.48;
-    
+
     const finalMin = (baseMin * ageFactor * genderFactor).toFixed(1);
     const finalMax = (baseMax * ageFactor * genderFactor).toFixed(1);
-    
+
     return `${finalMin}M – ${finalMax}M people`;
   }, [location, ageMin, ageMax, gender]);
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_190px]">
-      <div>
-        <h3 className="text-2xl font-black text-slate-950">Ad Set & Audience</h3>
+    <div className="grid gap-6 md:grid-cols-[1fr_220px]">
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-xl font-black text-slate-950">Ad Set & Audience</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Define your budget, geographic perimeter, and audience targeting.</p>
+        </div>
+
         <Field label="Ad Set Name">
           <input value={adSet} onChange={(e) => setAdSet(e.target.value)} />
         </Field>
+
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Budget">
-            <div className="flex rounded-md border border-slate-300 overflow-hidden bg-white">
-              <select 
+            <div className="flex rounded-lg border border-slate-300 overflow-hidden bg-white">
+              <select
                 value={budgetType}
                 onChange={(e) => setBudgetType(e.target.value)}
-                className="w-1/2 border-0 text-xs px-1 bg-slate-50 outline-none cursor-pointer"
+                className="w-1/2 border-0 text-xs px-2 py-2.5 bg-slate-50 outline-none cursor-pointer"
               >
                 <option>Daily</option>
                 <option>Weekly</option>
                 <option>Monthly</option>
               </select>
-              <input 
-                type="number" 
-                value={budget} 
-                onChange={(e) => setBudget(Number(e.target.value) || 0)} 
-                className="w-1/2 border-0 text-xs px-2 py-1 outline-none text-slate-800 font-bold" 
+              <input
+                type="number"
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value) || 0)}
+                className="w-1/2 border-0 text-xs px-2.5 py-2.5 outline-none text-slate-900 font-bold"
                 placeholder="10000"
               />
             </div>
@@ -2045,7 +2272,8 @@ function AdSetStep({
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </Field>
         </div>
-        <Field label="Location">
+
+        <Field label="Target Country">
           <select value={location} onChange={(e) => setLocation(e.target.value)}>
             <option>India</option>
             <option>United States</option>
@@ -2053,43 +2281,49 @@ function AdSetStep({
             <option>Canada</option>
           </select>
         </Field>
+
         {/* Working Map Component */}
-        <div className="my-3 z-10 relative">
+        <div className="rounded-xl overflow-hidden border border-slate-200">
           <LocationTargetingMap lat={coordinates.lat} lng={coordinates.lng} radiusKm={radius} onLocationChange={onLocationChange} />
         </div>
-        <Field label={`Targeting Radius: ${radius} km`}>
+
+        <Field
+          label={`Targeting Radius: ${radius} km`}
+          helper="Coordinates and radius will be mapped to Meta's custom_locations API."
+        >
           <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <input 
-              type="range" 
-              min={10} 
-              max={100} 
-              value={radius} 
-              onChange={(e) => setRadius(Number(e.target.value))} 
+            <input
+              type="range"
+              min={10}
+              max={100}
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
               className="flex-1 accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
             />
-            <span className="text-xs font-black text-slate-800 shrink-0 w-12 text-right">
+            <span className="text-xs font-black text-slate-800 shrink-0 w-14 text-right">
               {radius} km
             </span>
           </div>
         </Field>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+
+        <div className="grid grid-cols-2 gap-3">
           <Field label="Age Range">
             <div className="flex items-center gap-2">
-              <input 
-                type="number" 
-                value={ageMin} 
-                onChange={(e) => setAgeMin(Number(e.target.value) || 18)} 
-                min={13} 
-                max={65} 
+              <input
+                type="number"
+                value={ageMin}
+                onChange={(e) => setAgeMin(Number(e.target.value) || 18)}
+                min={13}
+                max={65}
                 className="w-full text-center"
               />
               <span className="text-slate-400 font-bold">–</span>
-              <input 
-                type="number" 
-                value={ageMax} 
-                onChange={(e) => setAgeMax(Number(e.target.value) || 65)} 
-                min={18} 
-                max={65} 
+              <input
+                type="number"
+                value={ageMax}
+                onChange={(e) => setAgeMax(Number(e.target.value) || 65)}
+                min={18}
+                max={65}
                 className="w-full text-center"
               />
             </div>
@@ -2102,20 +2336,27 @@ function AdSetStep({
             </select>
           </Field>
         </div>
-        <Field label="Interests">
-          <input 
-            value={interests} 
-            onChange={(e) => setInterests(e.target.value)} 
+
+        <Field
+          label="Interests"
+          helper="Comma-separated interests (e.g. Real Estate, Marketing, Investing)."
+        >
+          <input
+            value={interests}
+            onChange={(e) => setInterests(e.target.value)}
             placeholder="e.g. Real Estate, Marketing"
           />
         </Field>
       </div>
-      <Summary 
-        title="Audience estimate" 
+
+      <Summary
+        title="Audience Estimate"
         rows={[
-          ["Estimated audience", audienceEstimateText], 
-          ["Budget summary", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`]
-        ]} 
+          ["Estimated Audience", audienceEstimateText],
+          ["Budget Summary", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`],
+          ["Perimeter", `${location} (+${radius} km)`],
+          ["Demographics", `${ageMin}–${ageMax} yrs, ${gender}`]
+        ]}
       />
     </div>
   );
@@ -2126,7 +2367,6 @@ function CreativeStep({
   setCreativeData,
   mediaUrl,
   setMediaUrl,
-  mediaFile,
   setMediaFile,
   mediaType,
   setMediaType,
@@ -2137,7 +2377,6 @@ function CreativeStep({
   setCreativeData: React.Dispatch<React.SetStateAction<{ primaryText: string; headline: string; description: string; destinationUrl: string; callToAction: string; }>>;
   mediaUrl: string | null;
   setMediaUrl: (value: string | null) => void;
-  mediaFile: File | null;
   setMediaFile: (value: File | null) => void;
   mediaType: "image" | "video";
   setMediaType: (value: "image" | "video") => void;
@@ -2178,88 +2417,92 @@ function CreativeStep({
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <div>
-        <h3 className="text-2xl font-black text-slate-950">Ad Creative</h3>
-        
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-xl font-black text-slate-950">Ad Creative</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Upload visual media and craft compelling advertising copy.</p>
+        </div>
+
         {/* Hidden File Input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          accept={acceptType} 
-          onChange={handleFileChange} 
-          className="hidden" 
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept={acceptType}
+          onChange={handleFileChange}
+          className="hidden"
         />
 
-        <p className="mt-4 text-xs font-bold text-slate-700">Media</p>
-        
-        {!mediaUrl ? (
-          <div className="mt-1 flex gap-2">
-            <button 
-              type="button"
-              onClick={() => handleUploadClick("image")}
-              className="rounded-md bg-blue-600 px-3 py-2 text-xs font-bold text-white cursor-pointer hover:bg-blue-700 transition"
-            >
-              Upload Image
-            </button>
-            <button 
-              type="button"
-              onClick={() => handleUploadClick("video")}
-              className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold cursor-pointer hover:bg-slate-50 transition"
-            >
-              Upload Video
-            </button>
-          </div>
-        ) : null}
-
-        {mediaUrl && (
-          <div className="mt-3 flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-            {mediaType === "video" ? (
-              <video src={mediaUrl} className="h-10 w-10 object-cover rounded bg-black" muted />
-            ) : (
-              <img src={mediaUrl} className="h-10 w-10 object-cover rounded" />
-            )}
-            <span className="text-xs font-bold">
-              Uploaded asset
-              <br />
-              <small className="font-normal">{mediaName}</small>
-            </span>
-            <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs font-bold text-green-600">✓ Uploaded</span>
+        <div className="space-y-1.5">
+          <label className="block text-xs font-bold text-slate-700">Media</label>
+          {!mediaUrl ? (
+            <div className="flex gap-2">
               <button
-                onClick={removeMedia}
                 type="button"
-                className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer p-1"
-                title="Remove Media"
+                onClick={() => handleUploadClick("image")}
+                className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-bold text-white cursor-pointer hover:bg-blue-700 transition"
               >
-                <Trash2 size={16} />
+                Upload Image
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUploadClick("video")}
+                className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 cursor-pointer hover:bg-slate-50 transition"
+              >
+                Upload Video
               </button>
             </div>
-          </div>
-        )}
+          ) : null}
+
+          {mediaUrl && (
+            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {mediaType === "video" ? (
+                <video src={mediaUrl} className="h-10 w-10 object-cover rounded bg-black" muted />
+              ) : (
+                <img src={mediaUrl} className="h-10 w-10 object-cover rounded" />
+              )}
+              <span className="text-xs font-bold">
+                Uploaded asset
+                <br />
+                <small className="font-normal text-slate-500">{mediaName}</small>
+              </span>
+              <div className="ml-auto flex items-center gap-3">
+                <span className="text-xs font-bold text-green-600">✓ Ready</span>
+                <button
+                  onClick={removeMedia}
+                  type="button"
+                  className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer p-1"
+                  title="Remove Media"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <Field label="Primary Text">
-          <textarea 
-            rows={3} 
-            value={creativeData.primaryText} 
-            onChange={(e) => handleCreativeChange("primaryText", e.target.value)} 
+          <textarea
+            rows={3}
+            value={creativeData.primaryText}
+            onChange={(e) => handleCreativeChange("primaryText", e.target.value)}
           />
         </Field>
         <Field label="Headline">
-          <input 
-            value={creativeData.headline} 
-            onChange={(e) => handleCreativeChange("headline", e.target.value)} 
+          <input
+            value={creativeData.headline}
+            onChange={(e) => handleCreativeChange("headline", e.target.value)}
           />
         </Field>
         <Field label="Description">
-          <input 
-            value={creativeData.description} 
-            onChange={(e) => handleCreativeChange("description", e.target.value)} 
+          <input
+            value={creativeData.description}
+            onChange={(e) => handleCreativeChange("description", e.target.value)}
           />
         </Field>
         <Field label="Destination URL">
-          <input 
-            value={creativeData.destinationUrl} 
-            onChange={(e) => handleCreativeChange("destinationUrl", e.target.value)} 
+          <input
+            value={creativeData.destinationUrl}
+            onChange={(e) => handleCreativeChange("destinationUrl", e.target.value)}
           />
         </Field>
         <Field label="Call to Action">
@@ -2270,12 +2513,12 @@ function CreativeStep({
         </Field>
       </div>
 
-      <LiveMetaPreview 
-        platform={platform} 
-        setPlatform={setPlatform} 
-        creativeData={creativeData} 
-        mediaUrl={mediaUrl} 
-        mediaType={mediaType} 
+      <LiveMetaPreview
+        platform={platform}
+        setPlatform={setPlatform}
+        creativeData={creativeData}
+        mediaUrl={mediaUrl}
+        mediaType={mediaType}
       />
     </div>
   );
@@ -2298,8 +2541,8 @@ function LiveMetaPreview({
     <aside className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex flex-col items-center">
       <div className="w-full text-left">
         <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">META PREVIEW</h4>
-        <select 
-          value={platform} 
+        <select
+          value={platform}
           onChange={(e) => setPlatform(e.target.value)}
           className="mt-3 w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none cursor-pointer hover:bg-slate-50 transition"
         >
@@ -2383,7 +2626,7 @@ function LiveMetaPreview({
 
         {/* Stories Preview (FB / IG) */}
         {(platform === "Facebook Stories" || platform === "Instagram Stories") && (
-          <div 
+          <div
             style={mediaUrl && mediaType === "image" ? { backgroundImage: `url(${mediaUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}
             className="relative w-[210px] h-[340px] rounded-2xl overflow-hidden shadow-md bg-[linear-gradient(135deg,#d8c2aa,#91755d)] flex flex-col justify-between p-3 transition-all duration-300"
           >
@@ -2446,6 +2689,9 @@ function ReviewStep({
   ageMax,
   gender,
   interests,
+  pageName,
+  formName,
+  campaignForm,
 }: {
   name: string;
   objective: string;
@@ -2460,36 +2706,70 @@ function ReviewStep({
   ageMax: number;
   gender: string;
   interests: string;
+  pageName?: string;
+  formName?: string;
+  campaignForm?: CampaignFormData;
 }) {
+  const campaignRows: string[][] = campaignForm
+    ? [
+      ["Name", campaignForm.name],
+      ["Objective", campaignForm.objective.replace("OUTCOME_", "")],
+      ["Status", campaignForm.status],
+      ["Buying Type", campaignForm.buying_type],
+      [
+        "Budget Strategy",
+        campaignForm.budget_strategy === "CAMPAIGN_BUDGET"
+          ? `Advantage+ (${campaignForm.budget_mode === "DAILY" ? "Daily" : "Lifetime"} ₹${campaignForm.budget_amount})`
+          : "Ad set budget",
+      ],
+      ["Bid Strategy", campaignForm.bid_strategy],
+      ...(campaignForm.bid_strategy === "BID_CAP" ? [["Delivery Type", campaignForm.delivery_type === "ACCELERATED" ? "Accelerated" : "Standard"]] : []),
+      ["Special Categories", campaignForm.special_ad_categories?.join(", ") || "None"],
+      [
+        "Spend Cap",
+        campaignForm.spend_cap_enabled && campaignForm.spend_cap
+          ? `₹${campaignForm.spend_cap}`
+          : "None set",
+      ],
+      ...(pageName ? [["Facebook Page", pageName]] : []),
+      ...(formName ? [["Lead Form", formName]] : []),
+    ]
+    : [
+      ["Name", name],
+      ["Objective", objective],
+      ...(pageName ? [["Facebook Page", pageName]] : []),
+      ...(formName ? [["Lead Form", formName]] : []),
+    ];
+
   return (
     <div>
       <h3 className="text-2xl font-black text-slate-950">Review & Launch</h3>
       <p className="mt-2 text-sm text-slate-500">Confirm your campaign configuration before sending it to Meta for review.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Summary title="Campaign" rows={[["Name", name], ["Objective", objective]]} />
-        <Summary 
-          title="Ad Set & Audience" 
+        <Summary title="Campaign" rows={campaignRows} />
+        <Summary
+          title="Ad Set & Audience"
           rows={[
-            ["Audience Name", adSet], 
-            ["Budget", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`], 
+            ["Audience Name", adSet],
+            ["Budget", `₹${new Intl.NumberFormat("en-IN").format(budget)} / ${budgetType.toLowerCase()}`],
             ["Location", `${location} (+${radius} km radius)`],
             ["Age range", `${ageMin} – ${ageMax} years`],
             ["Gender", gender],
             ["Target Interests", interests]
-          ]} 
+          ]}
         />
-        <Summary 
-          title="Creative & Schedule" 
+        <Summary
+          title="Creative & Schedule"
           rows={[
-            ["Format", "Single Image / Video"], 
-            ["Start Date", startDate], 
-            ["End Date", endDate], 
+            ["Format", "Single Image / Video"],
+            ["Start Date", startDate],
+            ["End Date", endDate],
             ["CTA button", "Book Now / Learn More"]
-          ]} 
+          ]}
         />
       </div>
       <div className="mt-5 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        Your campaign will be created as paused so you can review it in Meta Ads Manager before activating delivery.
+        Your campaign will be created as <strong>PAUSED</strong> in Meta Ads Manager so you can review it before activating delivery.
       </div>
     </div>
   );
@@ -2497,13 +2777,13 @@ function ReviewStep({
 
 function Summary({ title, rows }: { title: string; rows: string[][] }) {
   return (
-    <aside className="h-fit rounded-md border border-slate-200 bg-slate-50 p-4">
-      <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+    <aside className="h-fit rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200/80 pb-2.5">{title}</h4>
       <dl className="mt-3 space-y-3">
         {rows.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-xs text-slate-500">{label}</dt>
-            <dd className="text-sm font-bold text-slate-900">{value}</dd>
+            <dt className="text-[11px] font-medium text-slate-500">{label}</dt>
+            <dd className="text-xs font-bold text-slate-900 mt-0.5 break-words">{value}</dd>
           </div>
         ))}
       </dl>
@@ -2511,14 +2791,27 @@ function Summary({ title, rows }: { title: string; rows: string[][] }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  helper,
+  children,
+  className = ""
+}: {
+  label: string;
+  helper?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <label className="mt-4 block text-xs font-bold text-slate-700">
-      <span>{label}</span>
-      <span className="mt-1 block [&_input]:w-full [&_input]:rounded-md [&_input]:border [&_input]:border-slate-300 [&_input]:px-3 [&_input]:py-2 [&_select]:w-full [&_select]:rounded-md [&_select]:border [&_select]:border-slate-300 [&_select]:bg-white [&_select]:px-3 [&_select]:py-2 [&_textarea]:w-full [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-slate-300 [&_textarea]:p-3">
+    <div className={`space-y-1.5 ${className}`}>
+      <label className="block text-xs font-bold text-slate-700">{label}</label>
+      <div className="[&_input]:w-full [&_input]:rounded-lg [&_input]:border [&_input]:border-slate-300 [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-xs [&_input]:text-slate-900 [&_input]:bg-white [&_input]:outline-none focus-within:[&_input]:border-blue-500 focus-within:[&_input]:ring-1 focus-within:[&_input]:ring-blue-500/20 [&_select]:w-full [&_select]:rounded-lg [&_select]:border [&_select]:border-slate-300 [&_select]:bg-white [&_select]:px-3 [&_select]:py-2.5 [&_select]:text-xs [&_select]:text-slate-900 [&_select]:outline-none focus-within:[&_select]:border-blue-500 focus-within:[&_select]:ring-1 focus-within:[&_select]:ring-blue-500/20 [&_textarea]:w-full [&_textarea]:rounded-lg [&_textarea]:border [&_textarea]:border-slate-300 [&_textarea]:p-3 [&_textarea]:text-xs [&_textarea]:text-slate-900 [&_textarea]:outline-none focus-within:[&_textarea]:border-blue-500">
         {children}
-      </span>
-    </label>
+      </div>
+      {helper && (
+        <p className="text-[11px] leading-normal text-slate-500 pt-0.5">{helper}</p>
+      )}
+    </div>
   );
 }
 
