@@ -14,6 +14,11 @@ import {
   Eye,
   Sparkles,
   Edit3,
+  ShieldCheck,
+  RefreshCw,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { apiClient, parseApiError } from "@/services/api-client";
@@ -34,6 +39,15 @@ interface Template {
   subject?: string;
   body: string;
   status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  provider_data?: {
+    waba_id?: string;
+    meta_template_id?: string;
+    meta_template_name?: string;
+    meta_status?: string;
+    meta_rejection_reason?: string;
+    submitted_at?: string;
+    [key: string]: any;
+  };
   created_at: string;
 }
 
@@ -112,6 +126,37 @@ export function TemplatesManager() {
       toast.success("Template deleted");
       queryClient.invalidateQueries({ queryKey: ["templates-list"] });
       setDeleteTarget(null);
+    },
+    onError: (err) => {
+      toast.error(parseApiError(err));
+    },
+  });
+
+  const submitToMeta = useMutation({
+    mutationFn: async (id: number) => {
+      return (await apiClient.post(`/api/templates/${id}/submit-to-provider/`, {}, { timeout: 60000 })).data;
+    },
+    onSuccess: (data: any) => {
+      toast.success(data?.message || `Submitted to Meta! Status: ${data?.meta_status || "PENDING"}`);
+      queryClient.invalidateQueries({ queryKey: ["templates-list"] });
+    },
+    onError: (err: any) => {
+      if (err?.response?.data?.is_ambiguous || err?.response?.status === 504) {
+        toast.warning("Submission timed out waiting for Meta. The template may have been created; please use 'Check Meta Status' in a moment.");
+      } else {
+        toast.error(parseApiError(err));
+      }
+      queryClient.invalidateQueries({ queryKey: ["templates-list"] });
+    },
+  });
+
+  const syncMetaStatus = useMutation({
+    mutationFn: async (id: number) => {
+      return (await apiClient.post(`/api/templates/${id}/sync-provider-status/`)).data;
+    },
+    onSuccess: (data: any) => {
+      toast.success(data?.message || `Meta Status: ${data?.meta_status || "UPDATED"}`);
+      queryClient.invalidateQueries({ queryKey: ["templates-list"] });
     },
     onError: (err) => {
       toast.error(parseApiError(err));
@@ -268,6 +313,27 @@ export function TemplatesManager() {
                             {smsData.category}
                           </span>
                         )}
+                        {isTplWhatsApp && (
+                          <div className="flex items-center gap-1">
+                            {tpl.provider_data?.meta_status === "APPROVED" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200" title="Approved by Meta">
+                                <CheckCircle size={10} className="text-emerald-600" /> Meta Approved
+                              </span>
+                            ) : tpl.provider_data?.meta_status === "PENDING" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200" title="Pending Meta Review">
+                                <Clock size={10} className="text-amber-600 animate-pulse" /> Pending Meta
+                              </span>
+                            ) : tpl.provider_data?.meta_status === "REJECTED" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200" title={tpl.provider_data?.meta_rejection_reason || "Rejected by Meta"}>
+                                <AlertTriangle size={10} className="text-red-600" /> Meta Rejected
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                Unsubmitted
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <Badge
                           className={
                             isTplWhatsApp
@@ -330,6 +396,38 @@ export function TemplatesManager() {
                       {formatDate(tpl.created_at)}
                     </span>
                     <div className="flex gap-1.5">
+                      {/* Submit for Meta Approval (WhatsApp) */}
+                      {isTplWhatsApp && (!tpl.provider_data?.meta_template_id || tpl.provider_data?.meta_status === "REJECTED") && (
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            submitToMeta.mutate(tpl.id);
+                          }}
+                          disabled={submitToMeta.isPending}
+                          title="Submit to Meta for official WhatsApp approval"
+                          aria-label="Submit for Meta Approval"
+                        >
+                          <ShieldCheck size={16} />
+                        </button>
+                      )}
+                      {/* Sync Status from Meta (WhatsApp) */}
+                      {isTplWhatsApp && tpl.provider_data?.meta_template_id && (
+                        <button
+                          type="button"
+                          className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            syncMetaStatus.mutate(tpl.id);
+                          }}
+                          disabled={syncMetaStatus.isPending}
+                          title="Sync approval status from Meta"
+                          aria-label="Sync Meta Status"
+                        >
+                          <RefreshCw size={15} className={syncMetaStatus.isPending ? "animate-spin text-blue-600" : ""} />
+                        </button>
+                      )}
                       {/* Preview Action - Available for Email, WhatsApp, and SMS */}
                       {(isTplEmail || isTplWhatsApp || isTplSMS) && (
                         <button

@@ -64,6 +64,7 @@ class TemplateSerializer(serializers.ModelSerializer):
             "body",
 
             "status",
+            "provider_data",
 
             "created_by",
             "created_by_name",
@@ -71,6 +72,27 @@ class TemplateSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        raw_provider_data = ret.get("provider_data")
+        if isinstance(raw_provider_data, dict):
+            # Whitelist only safe non-sensitive keys to prevent credential or token leakage
+            safe_keys = {
+                "waba_id",
+                "meta_template_id",
+                "meta_template_name",
+                "meta_status",
+                "meta_category",
+                "meta_rejection_reason",
+                "submitted_at",
+                "header_handle",
+            }
+            ret["provider_data"] = {
+                k: v for k, v in raw_provider_data.items()
+                if k in safe_keys
+            }
+        return ret
 
 
 class CampaignTemplateAssignSerializer(serializers.ModelSerializer):

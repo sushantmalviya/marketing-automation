@@ -253,16 +253,68 @@ export function TemplateBuilderView({
 
   const [verifying, setVerifying] = useState(false);
 
-  const handleSendForVerification = () => {
+  const handleSendForVerification = async () => {
     if (!name.trim()) {
       toast.error("Please enter a template name before sending for verification");
       return;
     }
+    if (!isWhatsApp) {
+      toast.error("Meta verification is only available for WhatsApp templates");
+      return;
+    }
+    if (!whatsappData.body?.trim()) {
+      toast.error("Please enter WhatsApp message body content");
+      return;
+    }
+
     setVerifying(true);
-    setTimeout(() => {
+    try {
+      let targetId = initialData?.id;
+
+      // 1. If unsaved or dirty, save the template first
+      const finalSubject = serializeWhatsAppMetadata(whatsappData);
+      const finalBody = compileWhatsAppMessage(whatsappData);
+      const payload = {
+        name: name.trim(),
+        channel: Number(selectedChannelId),
+        subject: finalSubject,
+        body: finalBody,
+        status: "ACTIVE",
+      };
+
+      if (targetId) {
+        await apiClient.patch(`/api/templates/${targetId}/`, payload);
+      } else {
+        const createRes = await apiClient.post<TemplateData>("/api/templates/create/", payload);
+        targetId = createRes.data?.id;
+      }
+
+      if (!targetId) {
+        throw new Error("Unable to resolve template ID for submission.");
+      }
+
+      // 2. Submit to Meta for approval (allow up to 60s for media download + resumable upload + Meta approval)
+      const res = await apiClient.post<{ message: string; meta_status?: string; provider_data?: any }>(
+        `/api/templates/${targetId}/submit-to-provider/`,
+        {},
+        { timeout: 60000 }
+      );
+
+      const metaStatus = res.data?.meta_status || res.data?.provider_data?.meta_status || "PENDING";
+      toast.success(`Template submitted to Meta! Status: ${metaStatus}`);
+      setIsDirty(false);
+      onSuccess();
+    } catch (err: any) {
+      if (err?.response?.data?.is_ambiguous || err?.response?.status === 504) {
+        toast.warning("Submission timed out waiting for Meta. The template may have been created; please check status in the templates list.");
+        setIsDirty(false);
+        onSuccess();
+      } else {
+        toast.error(parseApiError(err));
+      }
+    } finally {
       setVerifying(false);
-      toast.success("Template submitted for verification! (Simulated request - backend permission pending)");
-    }, 600);
+    }
   };
 
   return (
@@ -325,17 +377,19 @@ export function TemplateBuilderView({
               </button>
             )}
 
-            {/* Send for Verification Button */}
-            <button
-              type="button"
-              onClick={handleSendForVerification}
-              disabled={verifying || saving}
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition shadow-xs disabled:opacity-50"
-              title="Submit template for verification / approval"
-            >
-              <ShieldCheck size={15} className="text-emerald-600" />
-              <span>{verifying ? "Sending..." : "Send for Verification"}</span>
-            </button>
+            {/* Submit for Meta Approval (WhatsApp) */}
+            {isWhatsApp && (
+              <button
+                type="button"
+                onClick={handleSendForVerification}
+                disabled={verifying || saving}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition shadow-xs disabled:opacity-50"
+                title="Submit template to Meta for official WhatsApp approval"
+              >
+                <ShieldCheck size={15} className="text-emerald-600" />
+                <span>{verifying ? "Submitting to Meta..." : "Submit for Meta Approval"}</span>
+              </button>
+            )}
 
             {/* Save Button */}
             <button

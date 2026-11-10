@@ -5,6 +5,7 @@ from apps.campaigns.views import (
     TemplateListAPIView,
     TemplateUpdateAPIView,
     TemplateSubmitAPIView,
+    TemplateSyncStatusAPIView,
     TemplateDeleteAPIView
 )
 
@@ -30,6 +31,21 @@ urlpatterns = [
         "<int:template_id>/submit-to-provider/",
         TemplateSubmitAPIView.as_view(),
         name="template-submit",
+    ),
+    path(
+        "<int:template_id>/submit/",
+        TemplateSubmitAPIView.as_view(),
+        name="template-submit-alias",
+    ),
+    path(
+        "<int:template_id>/sync-provider-status/",
+        TemplateSyncStatusAPIView.as_view(),
+        name="template-sync-status",
+    ),
+    path(
+        "<int:template_id>/sync-status/",
+        TemplateSyncStatusAPIView.as_view(),
+        name="template-sync-status-alias",
     ),
     path(
         "<int:template_id>/delete/",

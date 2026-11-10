@@ -667,3 +667,85 @@ class WhatsAppEmbeddedSignupTests(TestCase):
         self.assertEqual(hist_event.status, "RECEIVED")
         self.assertEqual(hist_event.metadata["source"], "history_sync")
 
+    @patch("requests.Session.post")
+    def test_mayur_outbound_payload_and_reengagement_failure_handling(self, mock_post):
+        """
+        Focused diagnostic test verifying:
+        1. Local payload construction for recipient '7806030359' and message 'Hi Mayur'.
+        2. Mocked provider behavior returning a wamid and creating CommunicationEvent (SENT).
+        3. Webhook handling of Meta error 131047 (re-engagement window expired) transitioning event to FAILED.
+        """
+        conn = WhatsAppConnection.objects.create(
+            organization=self.user,
+            phone_number_id="1401374839717756",
+        )
+        conn.set_access_token("EAA_MOCK_TEST_TOKEN")
+        conn.save()
+
+        mock_response = MagicMock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "messaging_product": "whatsapp",
+            "contacts": [{"input": "917806030359", "wa_id": "917806030359"}],
+            "messages": [{"id": "wamid.TEST_MAYUR_OUTBOUND_123"}],
+        }
+        mock_post.return_value = mock_response
+
+        # Stage 1 & 2: Local payload construction & mock send
+        msg_id = send_whatsapp(
+            to="7806030359",
+            message="Hi Mayur",
+            organization=self.user,
+            connection=conn,
+        )
+
+        self.assertEqual(msg_id, "wamid.TEST_MAYUR_OUTBOUND_123")
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_kwargs["json"]["to"], "917806030359")
+        self.assertEqual(call_kwargs["json"]["text"]["body"], "Hi Mayur")
+
+        event = CommunicationEvent.objects.filter(provider_message_id="wamid.TEST_MAYUR_OUTBOUND_123").first()
+        self.assertIsNotNone(event)
+        self.assertEqual(event.status, "SENT")
+
+        # Stage 3 & 4: Webhook delivery failure simulation (Error 131047)
+        webhook_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [{
+                "changes": [{
+                    "value": {
+                        "messaging_product": "whatsapp",
+                        "statuses": [{
+                            "id": "wamid.TEST_MAYUR_OUTBOUND_123",
+                            "status": "failed",
+                            "timestamp": "1792997815",
+                            "errors": [{
+                                "code": 131047,
+                                "title": "Re-engagement message",
+                                "message": "Re-engagement message",
+                                "error_data": {
+                                    "details": "Message failed to send because more than 24 hours have passed since the customer last replied to this number."
+                                }
+                            }]
+                        }],
+                    },
+                    "field": "messages",
+                }],
+            }],
+        }
+        raw = json.dumps(webhook_payload).encode("utf-8")
+        sig = hmac.new(b"test-meta-app-secret", msg=raw, digestmod=hashlib.sha256).hexdigest()
+        res = self.client.post(
+            "/api/communications/webhooks/whatsapp/",
+            data=raw,
+            content_type="application/json",
+            HTTP_X_HUB_SIGNATURE_256=f"sha256={sig}",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        event.refresh_from_db()
+        self.assertEqual(event.status, "FAILED")
+        self.assertEqual(event.metadata["errors"][0]["code"], 131047)
+
+

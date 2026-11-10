@@ -1,4 +1,6 @@
+import json
 from datetime import timedelta
+from unittest.mock import patch, MagicMock
 
 from django.urls import reverse
 from django.utils import timezone
@@ -6,7 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import MAUser, User
-from apps.campaigns.models import Audience, Campaign, CustomerRecord, CustomerUpload
+from apps.campaigns.models import Audience, Campaign, CustomerRecord, CustomerUpload, Template, Channel
 
 
 class AdminCampaignWorkspaceTests(APITestCase):
@@ -388,4 +390,751 @@ class TemplateSanitizerTests(APITestCase):
         template = "<p>Hi {{ name }}, your order <b>#{{ order_id }}</b> is ready.</p>"
         context = {"name": "Carlos", "order_id": "1001"}
         rendered = TemplateRenderer.render_for_channel(template, context, channel="WHATSAPP")
-        self.assertEqual(rendered, "Hi Carlos, your order *#1001* is ready.")
+        self.assertEqual(rendered, "Hi Carlos, your order *#1001* is ready.")
+
+
+class WhatsAppTemplateSubmissionTests(APITestCase):
+    def setUp(self):
+        from apps.communications.models import WhatsAppConnection, SenderIdentity
+        from apps.accounts.models import MAUser
+
+        self.user_a = User.objects.create_user(
+            username="tenant_a",
+            email="tenant_a@example.com",
+            password="Password123!",
+        )
+        self.ma_user_a = MAUser.objects.create(user=self.user_a, role="USER")
+
+        self.user_b = User.objects.create_user(
+            username="tenant_b",
+            email="tenant_b@example.com",
+            password="Password123!",
+        )
+        self.ma_user_b = MAUser.objects.create(user=self.user_b, role="USER")
+
+        self.channel_wa, _ = Channel.objects.get_or_create(code="WHATSAPP", defaults={"name": "WhatsApp"})
+        self.channel_email, _ = Channel.objects.get_or_create(code="EMAIL", defaults={"name": "Email"})
+
+        # Connections & WABA identities
+        self.conn_a = WhatsAppConnection.objects.create(
+            organization=self.user_a,
+            phone_number_id="1401374839717756",
+            is_active=True,
+        )
+        self.conn_a.set_access_token("EAA_TENANT_A_TOKEN")
+        self.conn_a.save()
+
+        self.identity_a = SenderIdentity.objects.create(
+            user=self.user_a,
+            provider="WHATSAPP_CLOUD",
+            phone_number_id="1401374839717756",
+            waba_id="1538835448015786",
+            status="CONNECTED",
+        )
+
+        self.conn_b = WhatsAppConnection.objects.create(
+            organization=self.user_b,
+            phone_number_id="2401374839717756",
+            is_active=True,
+        )
+        self.conn_b.set_access_token("EAA_TENANT_B_TOKEN")
+        self.conn_b.save()
+
+        self.identity_b = SenderIdentity.objects.create(
+            user=self.user_b,
+            provider="WHATSAPP_CLOUD",
+            phone_number_id="2401374839717756",
+            waba_id="2538835448015786",
+            status="CONNECTED",
+        )
+
+        self.client.force_authenticate(user=self.user_a)
+
+    @patch("requests.post")
+    def test_successful_whatsapp_template_submission(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "meta_tpl_987654321",
+            "status": "PENDING",
+            "category": "MARKETING",
+        }
+        mock_post.return_value = mock_resp
+
+        metadata = {
+            "version": 1,
+            "channel": "WHATSAPP",
+            "category": "MARKETING",
+            "language": "en_US",
+            "header": {"type": "TEXT", "text": "Special Announcement"},
+            "body": "Hi {{first_name}}, get {{discount}} off today!",
+            "footer": "Reply STOP to unsubscribe",
+            "buttons": [
+                {"type": "URL", "text": "Claim Offer", "url": "https://example.com/deal"},
+                {"type": "PHONE_NUMBER", "text": "Call Support", "phoneNumber": "+15551234567"},
+            ],
+        }
+
+        template = Template.objects.create(
+            name="Holiday Mega Sale",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Compiled body text",
+            created_by=self.user_a,
+        )
+
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["meta_status"], "PENDING")
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_template_id"], "meta_tpl_987654321")
+        self.assertEqual(template.provider_data["meta_status"], "PENDING")
+        self.assertEqual(template.provider_data["meta_template_name"], "holiday_mega_sale")
+
+        # Verify call arguments to Meta
+        call_args, call_kwargs = mock_post.call_args
+        self.assertIn("1538835448015786/message_templates", call_args[0])
+        self.assertEqual(call_kwargs["headers"]["Authorization"], "Bearer EAA_TENANT_A_TOKEN")
+        sent_json = call_kwargs["json"]
+        self.assertEqual(sent_json["name"], "holiday_mega_sale")
+        self.assertEqual(sent_json["category"], "MARKETING")
+        self.assertEqual(sent_json["language"], "en_US")
+
+        # Check components
+        types = [c["type"] for c in sent_json["components"]]
+        self.assertIn("HEADER", types)
+        self.assertIn("BODY", types)
+        self.assertIn("FOOTER", types)
+        self.assertIn("BUTTONS", types)
+
+        body_comp = next(c for c in sent_json["components"] if c["type"] == "BODY")
+        self.assertEqual(body_comp["text"], "Hi {{1}}, get {{2}} off today!")
+        self.assertEqual(body_comp["example"]["body_text"], [["Sample_first_name", "Sample_discount"]])
+
+    def test_non_whatsapp_template_submission_rejected(self):
+        template = Template.objects.create(
+            name="Email Newsletter",
+            channel=self.channel_email,
+            subject="Monthly Digest",
+            body="<p>Email content</p>",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Only WhatsApp templates can be submitted", response.data["detail"])
+
+    def test_empty_body_template_submission_rejected(self):
+        template = Template.objects.create(
+            name="Empty Template",
+            channel=self.channel_wa,
+            subject="",
+            body="",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("body cannot be empty", response.data["detail"])
+
+    @patch("requests.post")
+    def test_meta_api_rejection_error_handling(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 400
+        mock_resp.json.return_value = {
+            "error": {
+                "message": "(#100) Invalid template name format",
+                "type": "OAuthException",
+                "code": 100,
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        template = Template.objects.create(
+            name="Valid Name",
+            channel=self.channel_wa,
+            body="Hello world message",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "META_TEMPLATE_REJECTED")
+        self.assertIn("Meta template submission rejected", response.data["detail"])
+
+    @patch("requests.post")
+    def test_meta_error_subcode_2388043_diagnostic_preservation(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 400
+        mock_resp.json.return_value = {
+            "error": {
+                "message": "Invalid parameter",
+                "type": "OAuthException",
+                "code": 100,
+                "error_subcode": 2388043,
+                "error_user_title": "Missing Sample Media",
+                "error_user_msg": "Header handle is required for image header format.",
+                "error_data": {"details": "example.header_handle is mandatory."},
+                "fbtrace_id": "FBT_TEST_12345",
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        template = Template.objects.create(
+            name="Diag Test",
+            channel=self.channel_wa,
+            body="Hello world message",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "META_TEMPLATE_REJECTED")
+        self.assertEqual(response.data["meta_subcode"], 2388043)
+        self.assertEqual(response.data["meta_user_title"], "Missing Sample Media")
+        self.assertEqual(response.data["meta_user_msg"], "Header handle is required for image header format.")
+        self.assertEqual(response.data["meta_details"], "example.header_handle is mandatory.")
+        self.assertEqual(response.data["fbtrace_id"], "FBT_TEST_12345")
+
+    @patch("requests.post")
+    def test_subcode_2388040_parameter_placement_rejection_details(self, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 400
+        mock_resp.json.return_value = {
+            "error": {
+                "message": "Invalid parameter",
+                "type": "OAuthException",
+                "code": 100,
+                "error_subcode": 2388040,
+                "error_user_title": "Invalid Parameter Placement",
+                "error_user_msg": "Parameters cannot be placed at the end of the text. Please add text after {{2}}.",
+                "error_data": {"details": "Parameter {{2}} is trailing."},
+                "fbtrace_id": "FBT_PARAM_999",
+            }
+        }
+        mock_post.return_value = mock_resp
+
+        template = Template.objects.create(
+            name="Param Placement Test",
+            channel=self.channel_wa,
+            body="Hello {{first_name}}, please find your order {{order_id}}",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "META_TEMPLATE_REJECTED")
+        self.assertEqual(response.data["meta_subcode"], 2388040)
+        self.assertIn("Parameters cannot be placed at the end", response.data["meta_user_msg"])
+
+    @patch("requests.get")
+    @patch("requests.post")
+    def test_it360_payload_structure_and_image_header_handle(self, mock_post, mock_get):
+        from django.conf import settings
+        setattr(settings, "META_APP_ID", "968408089357113")
+
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.status_code = 200
+        precheck_resp.json.return_value = {"data": []}
+
+        mock_dl = MagicMock()
+        mock_dl.ok = True
+        mock_dl.status_code = 200
+        mock_dl.content = b"FAKE_PNG_BINARY_CONTENT"
+        mock_dl.headers = {"Content-Type": "image/png"}
+
+        mock_get.side_effect = [precheck_resp, mock_dl]
+
+        session_resp = MagicMock()
+        session_resp.ok = True
+        session_resp.status_code = 200
+        session_resp.json.return_value = {"id": "upload:SESSION_XYZ_123"}
+
+        transfer_resp = MagicMock()
+        transfer_resp.ok = True
+        transfer_resp.status_code = 200
+        transfer_resp.json.return_value = {"h": "4::aW1hZ2UvanBlZw==:HANDLE_987"}
+
+        tpl_resp = MagicMock()
+        tpl_resp.ok = True
+        tpl_resp.status_code = 200
+        tpl_resp.json.return_value = {
+            "id": "meta_tpl_it360_id",
+            "status": "PENDING",
+            "category": "MARKETING",
+        }
+
+        mock_post.side_effect = [session_resp, transfer_resp, tpl_resp]
+
+        it360_metadata = {
+            "category": "MARKETING",
+            "language": "en_US",
+            "header": {
+                "type": "IMAGE",
+                "mediaUrl": "https://res.cloudinary.com/vxmvqh8s/image/upload/v1/media/assets/80b5be9b841c4f3591d66130e992381e_vyzuev",
+                "mediaName": "ChatGPT Image.png",
+            },
+            "body": "Hi {{first_name}} 👋\n\nLooking to grow your business?\n\nBook a demo {{first_name}}.",
+            "buttons": [
+                {"type": "URL", "text": "Visit Website", "url": "https://www.itsoftlab360.com/home"},
+                {"type": "PHONE_NUMBER", "text": "Call Us", "phoneNumber": "+91 9109911058"},
+            ],
+        }
+
+        template = Template.objects.create(
+            name="IT-360",
+            channel=self.channel_wa,
+            subject=json.dumps(it360_metadata),
+            body=it360_metadata["body"],
+            created_by=self.user_a,
+        )
+
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_template_id"], "meta_tpl_it360_id")
+        self.assertEqual(template.provider_data["header_handle"], "4::aW1hZ2UvanBlZw==:HANDLE_987")
+
+        # Verify template submission payload
+        tpl_call_args, tpl_call_kwargs = mock_post.call_args_list[2]
+        payload = tpl_call_kwargs["json"]
+
+        # Check name normalization
+        self.assertEqual(payload["name"], "it_360")
+
+        # Check Header component has example.header_handle
+        header_comp = next(c for c in payload["components"] if c["type"] == "HEADER")
+        self.assertEqual(header_comp["format"], "IMAGE")
+        self.assertEqual(header_comp["example"]["header_handle"], ["4::aW1hZ2UvanBlZw==:HANDLE_987"])
+
+        # Check Body sequential variables: duplicate {{first_name}} replaced by {{1}} and {{2}}
+        body_comp = next(c for c in payload["components"] if c["type"] == "BODY")
+        self.assertIn("Hi {{1}} 👋", body_comp["text"])
+        self.assertIn("demo {{2}}.", body_comp["text"])
+        self.assertEqual(body_comp["example"]["body_text"], [["Sample_first_name", "Sample_first_name_2"]])
+
+        # Check Button phone number whitespace stripping
+        btn_comp = next(c for c in payload["components"] if c["type"] == "BUTTONS")
+        phone_btn = next(b for b in btn_comp["buttons"] if b["type"] == "PHONE_NUMBER")
+        self.assertEqual(phone_btn["phone_number"], "+919109911058")
+
+    @patch("requests.get")
+    def test_image_download_timeout_handling(self, mock_get):
+        import requests
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+        mock_get.side_effect = [precheck_resp, requests.Timeout("Media download timed out")]
+
+        metadata = {
+            "header": {
+                "type": "IMAGE",
+                "mediaUrl": "https://example.com/slow-image.png",
+            },
+            "body": "Image template body",
+        }
+        template = Template.objects.create(
+            name="Slow Media",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Image template body",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data["error_code"], "MEDIA_DOWNLOAD_ERROR")
+        self.assertIn("Timeout downloading media", response.data["detail"])
+
+    @patch("requests.get")
+    def test_image_download_non_2xx_response(self, mock_get):
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+
+        err_dl = MagicMock()
+        err_dl.ok = False
+        err_dl.status_code = 404
+        err_dl.content = b""
+        mock_get.side_effect = [precheck_resp, err_dl]
+
+        metadata = {
+            "header": {
+                "type": "IMAGE",
+                "mediaUrl": "https://example.com/missing.png",
+            },
+            "body": "Template with missing image",
+        }
+        template = Template.objects.create(
+            name="Missing Image",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Template with missing image",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "MEDIA_DOWNLOAD_ERROR")
+        self.assertIn("HTTP 404", response.data["detail"])
+
+    @patch("requests.get")
+    def test_invalid_image_content_type(self, mock_get):
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+
+        html_dl = MagicMock()
+        html_dl.ok = True
+        html_dl.status_code = 200
+        html_dl.content = b"<html>Not an image</html>"
+        html_dl.headers = {"Content-Type": "text/html; charset=utf-8"}
+        mock_get.side_effect = [precheck_resp, html_dl]
+
+        metadata = {
+            "header": {
+                "type": "IMAGE",
+                "mediaUrl": "https://example.com/not-image",
+                "mediaName": "file.html",
+            },
+            "body": "Template with html header",
+        }
+        template = Template.objects.create(
+            name="HTML Header",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Template with html header",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "MEDIA_DOWNLOAD_ERROR")
+        self.assertIn("Unsupported media Content-Type", response.data["detail"])
+
+    @patch("requests.get")
+    def test_oversized_image_handling(self, mock_get):
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+
+        big_dl = MagicMock()
+        big_dl.ok = True
+        big_dl.status_code = 200
+        big_dl.content = b"x" * 100
+        big_dl.headers = {"Content-Type": "image/png", "Content-Length": "20000000"}  # 20MB
+        mock_get.side_effect = [precheck_resp, big_dl]
+
+        metadata = {
+            "header": {
+                "type": "IMAGE",
+                "mediaUrl": "https://example.com/oversized.png",
+            },
+            "body": "Template with big image",
+        }
+        template = Template.objects.create(
+            name="Big Image",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Template with big image",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], "MEDIA_DOWNLOAD_ERROR")
+        self.assertIn("exceeds limit (16MB)", response.data["detail"])
+
+    @patch("requests.get")
+    @patch("requests.post")
+    def test_meta_upload_session_failure(self, mock_post, mock_get):
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+
+        mock_dl = MagicMock()
+        mock_dl.ok = True
+        mock_dl.status_code = 200
+        mock_dl.content = b"PNG_CONTENT"
+        mock_dl.headers = {"Content-Type": "image/png"}
+        mock_get.side_effect = [precheck_resp, mock_dl]
+
+        session_err = MagicMock()
+        session_err.ok = False
+        session_err.status_code = 500
+        session_err.text = "Internal Meta Upload Service Error"
+        mock_post.return_value = session_err
+
+        metadata = {
+            "header": {"type": "IMAGE", "mediaUrl": "https://example.com/img.png"},
+            "body": "Template body",
+        }
+        template = Template.objects.create(
+            name="Session Fail",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Template body",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data["error_code"], "META_UPLOAD_ERROR")
+        self.assertIn("session initiation failed", response.data["detail"])
+
+    @patch("requests.get")
+    @patch("requests.post")
+    def test_binary_upload_timeout(self, mock_post, mock_get):
+        import requests
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+
+        mock_dl = MagicMock()
+        mock_dl.ok = True
+        mock_dl.status_code = 200
+        mock_dl.content = b"PNG_CONTENT"
+        mock_dl.headers = {"Content-Type": "image/png"}
+        mock_get.side_effect = [precheck_resp, mock_dl]
+
+        session_ok = MagicMock()
+        session_ok.ok = True
+        session_ok.status_code = 200
+        session_ok.json.return_value = {"id": "upload:SESSION_1"}
+
+        mock_post.side_effect = [session_ok, requests.Timeout("Binary stream timed out")]
+
+        metadata = {
+            "header": {"type": "IMAGE", "mediaUrl": "https://example.com/img.png"},
+            "body": "Template body",
+        }
+        template = Template.objects.create(
+            name="Binary Timeout",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Template body",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(response.data["error_code"], "META_TIMEOUT")
+        self.assertIn("Timeout transferring file", response.data["detail"])
+
+    @patch("requests.get")
+    @patch("requests.post")
+    def test_meta_template_creation_timeout_is_ambiguous(self, mock_post, mock_get):
+        import requests
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {"data": []}
+        mock_get.return_value = precheck_resp
+
+        # Mock template POST timing out
+        mock_post.side_effect = requests.Timeout("Meta Graph API response timed out after 15s")
+
+        template = Template.objects.create(
+            name="Ambiguous Template",
+            channel=self.channel_wa,
+            body="Template that times out during creation",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(response.data["error_code"], "META_TIMEOUT")
+        self.assertTrue(response.data["is_ambiguous"])
+        self.assertIn("Timeout waiting for Meta", response.data["detail"])
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_status"], "SUBMISSION_AMBIGUOUS")
+
+    @patch("requests.get")
+    @patch("requests.post")
+    def test_idempotent_submission_adopts_existing_meta_template(self, mock_post, mock_get):
+        # Pre-check discovers that Meta already has a template named "it_360"
+        precheck_resp = MagicMock()
+        precheck_resp.ok = True
+        precheck_resp.json.return_value = {
+            "data": [
+                {
+                    "name": "it_360",
+                    "status": "APPROVED",
+                    "category": "MARKETING",
+                    "id": "1844777456951988",
+                    "language": "en_US",
+                }
+            ]
+        }
+        mock_get.return_value = precheck_resp
+
+        template = Template.objects.create(
+            name="IT-360",
+            channel=self.channel_wa,
+            body="Existing template content",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+
+        # POST should NOT have been called to duplicate template creation
+        mock_post.assert_not_called()
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_template_id"], "1844777456951988")
+        self.assertEqual(template.provider_data["meta_status"], "APPROVED")
+
+    def test_missing_header_handle_validation_error(self):
+        # Template with IMAGE header but no mediaUrl and no header_handle
+        metadata = {
+            "category": "MARKETING",
+            "language": "en_US",
+            "header": {
+                "type": "IMAGE",
+            },
+            "body": "Body without image URL",
+        }
+        template = Template.objects.create(
+            name="No Image URL",
+            channel=self.channel_wa,
+            subject=json.dumps(metadata),
+            body="Body without image URL",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sample media handle", response.data["detail"])
+
+    def test_serializer_provider_data_credential_redaction(self):
+        from apps.campaigns.serializers.template import TemplateSerializer
+
+        template = Template.objects.create(
+            name="Safe Serializer Test",
+            channel=self.channel_wa,
+            body="Safe test body",
+            provider_data={
+                "waba_id": "1538835448015786",
+                "meta_template_id": "tpl_123",
+                "meta_template_name": "safe_tpl",
+                "meta_status": "APPROVED",
+                "meta_category": "MARKETING",
+                "header_handle": "handle_abc",
+                # Sensitive fields that MUST NOT leak
+                "access_token": "SUPER_SECRET_ACCESS_TOKEN",
+                "client_secret": "TOP_SECRET_APP_SECRET",
+                "internal_raw_creds": {"key": "val"},
+            },
+            created_by=self.user_a,
+        )
+        serializer = TemplateSerializer(template)
+        data = serializer.data
+        provider_data = data["provider_data"]
+
+        # Whitelisted keys must be present
+        self.assertEqual(provider_data["waba_id"], "1538835448015786")
+        self.assertEqual(provider_data["meta_template_id"], "tpl_123")
+        self.assertEqual(provider_data["header_handle"], "handle_abc")
+
+        # Sensitive keys must be redacted
+        self.assertNotIn("access_token", provider_data)
+        self.assertNotIn("client_secret", provider_data)
+        self.assertNotIn("internal_raw_creds", provider_data)
+
+    def test_tenant_isolation_template_submission(self):
+        # Template belongs to tenant B
+        template_b = Template.objects.create(
+            name="Tenant B Promo",
+            channel=self.channel_wa,
+            body="Hello from Tenant B",
+            created_by=self.user_b,
+        )
+        # Tenant A attempts to submit Tenant B's template
+        url = f"/api/templates/{template_b.id}/submit-to-provider/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 404)
+
+    @patch("requests.get")
+    def test_sync_template_status_from_meta(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "meta_tpl_987654321",
+            "status": "APPROVED",
+        }
+        mock_get.return_value = mock_resp
+
+        template = Template.objects.create(
+            name="Approved Promo",
+            channel=self.channel_wa,
+            body="Special discount",
+            provider_data={
+                "meta_template_id": "meta_tpl_987654321",
+                "meta_status": "PENDING",
+            },
+            created_by=self.user_a,
+        )
+
+        url = f"/api/templates/{template.id}/sync-provider-status/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["meta_status"], "APPROVED")
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_status"], "APPROVED")
+
+    @patch("requests.get")
+    def test_sync_template_rejection_reason(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "meta_tpl_987654321",
+            "status": "REJECTED",
+            "rejected_reason": "PROMOTIONAL_CONTENT",
+        }
+        mock_get.return_value = mock_resp
+
+        template = Template.objects.create(
+            name="Rejected Promo",
+            channel=self.channel_wa,
+            body="Buy now",
+            provider_data={
+                "meta_template_id": "meta_tpl_987654321",
+                "meta_status": "PENDING",
+            },
+            created_by=self.user_a,
+        )
+
+        url = f"/api/templates/{template.id}/sync-provider-status/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["meta_status"], "REJECTED")
+
+        template.refresh_from_db()
+        self.assertEqual(template.provider_data["meta_status"], "REJECTED")
+        self.assertEqual(template.provider_data["meta_rejection_reason"], "PROMOTIONAL_CONTENT")
+
+    def test_sync_unsubmitted_template_fails(self):
+        template = Template.objects.create(
+            name="Unsubmitted Promo",
+            channel=self.channel_wa,
+            body="Just a draft",
+            created_by=self.user_a,
+        )
+        url = f"/api/templates/{template.id}/sync-provider-status/"
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("has not been submitted to Meta yet", response.data["detail"])
+

@@ -22,6 +22,7 @@ from .template import (
     CampaignTemplateAssignAPIView,
     TemplateUpdateAPIView,
     TemplateSubmitAPIView,
+    TemplateSyncStatusAPIView,
     TemplateDeleteAPIView,
 )
 from .preview import CampaignPreviewAPIView
