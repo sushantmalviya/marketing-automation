@@ -23,6 +23,8 @@ class WhatsAppConnectionSerializer(serializers.ModelSerializer):
             "id",
             "organization",
             "phone_number_id",
+            "waba_id",
+            "environment",
             "access_token",
             "is_active",
             "created_at",

@@ -46,27 +46,48 @@ class MetaNetworkError(WhatsAppServiceError):
         self.is_ambiguous = is_ambiguous
 
 
-def get_whatsapp_connection(organization=None, connection=None):
+def get_whatsapp_connection(organization=None, connection=None, environment=None):
     """
-    Resolves the WhatsAppConnection for an organization or returns the explicit connection.
+    Resolves the WhatsAppConnection for an organization or user context.
+    Enforces multi-tenant isolation by restricting lookups to the tenant's users.
+    Supports environment filtering ('development' vs 'production').
     """
     if connection:
         return connection
 
     if organization:
-        conn = WhatsAppConnection.objects.filter(
-            organization=organization,
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        from apps.accounts.models import Organization
+
+        managed_ids = []
+        if isinstance(organization, Organization):
+            managed_ids = list(User.objects.filter(organization=organization).values_list("id", flat=True))
+        elif hasattr(organization, "organization_id") and organization.organization_id:
+            managed_ids = list(User.objects.filter(organization_id=organization.organization_id).values_list("id", flat=True))
+            if organization.id not in managed_ids:
+                managed_ids.append(organization.id)
+        elif hasattr(organization, "id"):
+            managed_ids = [organization.id]
+
+        qs = WhatsAppConnection.objects.filter(
+            organization_id__in=managed_ids,
             is_active=True,
-        ).order_by("-created_at").first()
+        )
+        if environment:
+            qs = qs.filter(environment=environment)
+
+        conn = qs.order_by("-updated_at", "-created_at").first()
         if conn:
             return conn
+        # Strict tenant isolation: do not leak another tenant's connection
+        return None
 
-    # Fallback to any active connection if no organization provided
-    conn = WhatsAppConnection.objects.filter(
-        is_active=True,
-    ).order_by("-created_at").first()
-
-    return conn
+    # Unscoped fallback (only when no tenant/organization context was specified)
+    qs = WhatsAppConnection.objects.filter(is_active=True)
+    if environment:
+        qs = qs.filter(environment=environment)
+    return qs.order_by("-created_at").first()
 
 
 def get_whatsapp_identity(user=None, identity_id=None):
@@ -121,13 +142,13 @@ def get_whatsapp_credentials(identity):
     }
 
 
-def get_whatsapp_provider(organization=None, connection=None, user=None, identity_id=None):
+def get_whatsapp_provider(organization=None, connection=None, user=None, identity_id=None, environment=None):
     """
     Returns an initialized MetaWhatsAppProvider instance for the organization, user, or explicit connection.
     Supports both WhatsAppConnection and SenderIdentity.
     """
     org = organization or user
-    whatsapp_conn = get_whatsapp_connection(organization=org, connection=connection)
+    whatsapp_conn = get_whatsapp_connection(organization=org, connection=connection, environment=environment)
 
     if whatsapp_conn:
         raw_token = whatsapp_conn.get_access_token()
@@ -153,7 +174,7 @@ def get_whatsapp_provider(organization=None, connection=None, user=None, identit
     raise ValueError("No active WhatsApp connection configured.")
 
 
-def send_whatsapp(to, message, config=None, execution=None, campaign=None, organization=None, connection=None):
+def send_whatsapp(to, message, config=None, execution=None, campaign=None, organization=None, connection=None, environment=None):
     """
     Sends an outbound WhatsApp message via Meta Cloud API using the organization's connection.
     """
@@ -166,7 +187,7 @@ def send_whatsapp(to, message, config=None, execution=None, campaign=None, organ
         elif execution and hasattr(execution, "automation") and hasattr(execution.automation, "owner") and execution.automation.owner:
             organization = execution.automation.owner
 
-    whatsapp_conn = get_whatsapp_connection(organization=organization, connection=connection)
+    whatsapp_conn = get_whatsapp_connection(organization=organization, connection=connection, environment=environment)
     if not whatsapp_conn:
         identity = get_whatsapp_identity(user=organization)
         if identity:
@@ -620,7 +641,7 @@ def submit_whatsapp_template(
         for btn in buttons_data[:10]:
             btn_type = (btn.get("type") or "QUICK_REPLY").upper()
             btn_text = (btn.get("text") or "Click Here")[:25]
-            if btn_type == "URL" and btn.get("url"):
+            if (btn_type == "URL" or btn_type == "BOOK_DEMO") and btn.get("url"):
                 meta_buttons.append({
                     "type": "URL",
                     "text": btn_text,
@@ -636,7 +657,7 @@ def submit_whatsapp_template(
                     "text": btn_text,
                     "phone_number": cleaned_phone,
                 })
-            elif btn_type in ["QUICK_REPLY", "COUPON_CODE", "BOOK_DEMO"]:
+            elif btn_type in ["QUICK_REPLY", "COUPON_CODE"]:
                 meta_buttons.append({
                     "type": "QUICK_REPLY",
                     "text": btn_text,

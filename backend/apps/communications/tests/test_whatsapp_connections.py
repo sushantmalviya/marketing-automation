@@ -667,6 +667,7 @@ class WhatsAppEmbeddedSignupTests(TestCase):
         self.assertEqual(hist_event.status, "RECEIVED")
         self.assertEqual(hist_event.metadata["source"], "history_sync")
 
+    @override_settings(META_APP_SECRET="test-meta-app-secret")
     @patch("requests.Session.post")
     def test_mayur_outbound_payload_and_reengagement_failure_handling(self, mock_post):
         """

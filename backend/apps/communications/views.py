@@ -506,3 +506,121 @@ class SESWebhookView(APIView):
 
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
+
+class WhatsAppTestMessageView(APIView):
+    """
+    Organization-scoped test message endpoint for WhatsApp Cloud API development connections.
+    Enforces tenant boundaries, development recipient restrictions, and dispatches Meta's
+    pre-approved hello_world template using the existing MetaWhatsAppProvider/send_whatsapp service.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        recipient = (request.data.get("recipient") or "").strip()
+        if not recipient:
+            return Response(
+                {"detail": "Recipient phone number is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 1. Clean recipient format
+        clean_to = str(recipient).strip().replace(" ", "").replace("-", "")
+        if clean_to.startswith("+"):
+            clean_to = clean_to[1:]
+        if len(clean_to) == 10 and clean_to[0] in "6789":
+            clean_to = "91" + clean_to
+
+        # 2. Retrieve development WhatsApp connection scoped to user's active organization
+        from apps.common.ownership import get_managed_user_ids
+        managed_ids = get_managed_user_ids(user)
+        if user.id not in managed_ids:
+            managed_ids.append(user.id)
+
+        conn = WhatsAppConnection.objects.filter(
+            organization_id__in=managed_ids,
+            environment="development",
+            is_active=True,
+        ).order_by("-updated_at").first()
+
+        if not conn:
+            return Response(
+                {"detail": "No active WhatsApp development connection found for your organization."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 3. Guardrail: Enforce test recipient restrictions in development environment
+        allowed_recipient = getattr(settings, "WHATSAPP_TEST_RECIPIENT", "917806030359").lstrip("+").replace(" ", "")
+        if clean_to != allowed_recipient:
+            return Response(
+                {
+                    "detail": f"Recipient '{recipient}' is not authorized. Development connections are restricted to authorized test recipient (+{allowed_recipient})."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 4. Prepare hello_world template payload
+        template_name = request.data.get("template_name", "hello_world")
+        template_lang = request.data.get("template_lang", "en_US")
+        metadata = {
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": template_lang},
+            },
+        }
+
+        # 5. Dispatch message using existing provider service
+        from apps.communications.services.whatsapp import get_whatsapp_provider
+        try:
+            provider = get_whatsapp_provider(connection=conn)
+            resp = provider.send(
+                to=clean_to,
+                message="",  # Template message body handled by Meta
+                metadata=metadata,
+            )
+            msg_id = getattr(resp, "id", "")
+
+            # 6. Record CommunicationEvent for tracking
+            event = CommunicationEvent.objects.create(
+                whatsapp_connection=conn,
+                channel="WHATSAPP",
+                event_name="WHATSAPP_TEST_SENT",
+                recipient=clean_to,
+                status="SENT",
+                provider_message_id=msg_id,
+                metadata={
+                    "environment": "development",
+                    "template": template_name,
+                    "language": template_lang,
+                    "phone_number_id": conn.phone_number_id,
+                    "initiated_by_user": user.email,
+                    "organization_id": str(getattr(user, "organization_id", "")),
+                },
+            )
+
+            # 7. Return sanitized response (never expose tokens or authorization headers)
+            return Response(
+                {
+                    "status": "success",
+                    "message": "WhatsApp test template message dispatched successfully to Meta.",
+                    "message_id": msg_id,
+                    "event_id": str(event.id),
+                    "recipient": f"+{clean_to}",
+                    "environment": "development",
+                    "template": template_name,
+                    "phone_number_id": conn.phone_number_id,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as exc:
+            logger.error(f"WhatsApp test send failed: {exc}", exc_info=True)
+            return Response(
+                {
+                    "detail": f"Meta WhatsApp Cloud API error: {str(exc)}",
+                    "environment": "development",
+                    "phone_number_id": conn.phone_number_id,
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+

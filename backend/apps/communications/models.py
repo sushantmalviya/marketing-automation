@@ -24,6 +24,23 @@ class WhatsAppConnection(models.Model):
         db_index=True,
         help_text="Meta WhatsApp Phone Number ID",
     )
+    waba_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Meta WhatsApp Business Account ID (WABA)",
+    )
+    environment = models.CharField(
+        max_length=20,
+        choices=[
+            ("development", "Development"),
+            ("production", "Production"),
+        ],
+        default="production",
+        db_index=True,
+        help_text="Connection environment (development or production)",
+    )
     encrypted_access_token = models.TextField(
         help_text="Encrypted Meta WhatsApp Access Token",
     )

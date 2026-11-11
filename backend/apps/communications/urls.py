@@ -5,6 +5,7 @@ from apps.communications.views import (
     CommunicationEventListView,
     WhatsAppConnectionViewSet,
     WhatsAppWebhookView,
+    WhatsAppTestMessageView,
     SESWebhookView,
 )
 
@@ -27,6 +28,11 @@ from apps.communications.views_sender import (
 
 urlpatterns = [
     path("", include(router.urls)),
+    path(
+        "whatsapp/test-message/",
+        WhatsAppTestMessageView.as_view(),
+        name="whatsapp-test-message",
+    ),
     path(
         "whatsapp/config/",
         WhatsAppPublicConfigView.as_view(),

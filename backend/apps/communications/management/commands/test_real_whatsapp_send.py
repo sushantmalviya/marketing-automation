@@ -21,8 +21,20 @@ class Command(BaseCommand):
         parser.add_argument(
             "--org",
             type=str,
-            default="adarsh@gmail.com",
-            help="Organization User Email or ID (defaults to adarsh@gmail.com)",
+            default="himanshu@gmail.com",
+            help="Organization User Email or ID (defaults to himanshu@gmail.com)",
+        )
+        parser.add_argument(
+            "--environment",
+            type=str,
+            default=None,
+            help="Filter connection by environment ('development' or 'production')",
+        )
+        parser.add_argument(
+            "--template",
+            type=str,
+            default=None,
+            help="Use pre-approved template name (e.g. 'hello_world') instead of freeform text",
         )
         parser.add_argument(
             "--recipient",
@@ -73,12 +85,20 @@ class Command(BaseCommand):
                 user = User.objects.filter(email__istartswith=prefix).first()
 
             if user:
-                conn = WhatsAppConnection.objects.filter(organization=user, is_active=True).first()
+                qs = WhatsAppConnection.objects.filter(organization=user, is_active=True)
+                env_arg = options.get("environment")
+                if env_arg:
+                    qs = qs.filter(environment=env_arg)
+                conn = qs.order_by("-updated_at").first()
             else:
                 raise CommandError(f"User/Organization '{org_arg}' not found.")
 
         if not conn:
-            conn = WhatsAppConnection.objects.filter(is_active=True).order_by("-created_at").first()
+            qs = WhatsAppConnection.objects.filter(is_active=True)
+            env_arg = options.get("environment")
+            if env_arg:
+                qs = qs.filter(environment=env_arg)
+            conn = qs.order_by("-updated_at", "-created_at").first()
 
         if not conn:
             raise CommandError("No active WhatsAppConnection found.")
@@ -183,10 +203,22 @@ class Command(BaseCommand):
         error_detail = None
 
         try:
+            config = {}
+            template_arg = options.get("template")
+            if template_arg:
+                config["metadata"] = {
+                    "type": "template",
+                    "template": {
+                        "name": template_arg,
+                        "language": {"code": "en_US"},
+                    },
+                }
+
             # send_whatsapp creates the CommunicationEvent record and calls MetaWhatsAppProvider
             msg_id = send_whatsapp(
                 to=recipient,
                 message=message_body,
+                config=config,
                 organization=conn.organization,
                 connection=conn,
             )
