@@ -25,25 +25,34 @@ def publish_social_post_task(self, platform_record_id: str, user_id: str):
 
     log = None
     try:
-        # Resolve the tenant owner
+        # Resolve the organization social connection (fallback to user profile only if org is None)
         from django.contrib.auth import get_user_model
-        from apps.common.ownership import get_tenant_owner_profile
+        from apps.common.ownership import get_tenant_owner_profile, get_user_organization
         User = get_user_model()
         user = User.objects.filter(id=user_id).first()
         if not user:
             raise ValueError(f"User {user_id} not found")
-            
-        tenant_owner = get_tenant_owner_profile(user)
-        if not tenant_owner:
-            raise ValueError(f"No tenant owner found for user {user_id}")
 
-        connection = SocialConnection.objects.filter(
-            user=tenant_owner, 
-            platform=platform_record.platform
-        ).first()
+        org = get_user_organization(user)
+        if org is not None:
+            connection = SocialConnection.objects.filter(
+                organization=org,
+                platform=platform_record.platform,
+            ).first()
+        else:
+            tenant_owner = get_tenant_owner_profile(user)
+            if not tenant_owner:
+                raise ValueError(f"No tenant owner found for user {user_id}")
+            connection = SocialConnection.objects.filter(
+                organization__isnull=True,
+                user=tenant_owner,
+                platform=platform_record.platform,
+            ).first()
 
         if not connection:
-            raise ValueError(f"No SocialConnection found for tenant owner {tenant_owner.id} and platform {platform_record.platform}")
+            raise ValueError(
+                f"No SocialConnection found for organization {org.id if org else user_id} and platform {platform_record.platform}"
+            )
 
         # Create initial PublishLog
         log = PublishLog.objects.create(

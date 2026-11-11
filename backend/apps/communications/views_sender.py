@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.ownership import get_user_organization, scope_queryset_by_org
 from apps.communications.models import DomainAuthentication, SenderIdentity, WhatsAppConnection
 from apps.communications.providers.sender_abstraction import (
     SMTPEmailSender,
@@ -33,14 +34,34 @@ from apps.integrations.utils.crypto import encrypt_token
 logger = logging.getLogger(__name__)
 
 
+def _org_scope_filter(user, user_field="user"):
+    org = get_user_organization(user)
+    if org is not None:
+        return org, {"organization": org}
+    return None, {"organization__isnull": True, user_field: user}
+
+
+def _upsert_scoped(model, scope_filter, lookup_kwargs, defaults, extra_filter=None):
+    qs = model.objects.filter(**scope_filter, **lookup_kwargs)
+    if extra_filter:
+        qs = qs.filter(**extra_filter)
+    existing = qs.first()
+    if existing:
+        for key, value in defaults.items():
+            setattr(existing, key, value)
+        existing.save()
+        return existing, False
+    create_kwargs = {**lookup_kwargs, **defaults}
+    return model.objects.create(**create_kwargs), True
+
+
 def validate_user_domain_verified(user, email):
     if not email or "@" not in email:
         return None, "Invalid email address format."
     domain = email.split("@")[-1].strip().lower()
-    domain_auth = DomainAuthentication.objects.filter(
-        user=user,
-        domain__iexact=domain,
-        status="VERIFIED"
+    domain_auth = scope_queryset_by_org(
+        DomainAuthentication.objects.filter(domain__iexact=domain, status="VERIFIED"),
+        user,
     ).first()
     if not domain_auth:
         return None, f"Domain '{domain}' is not verified. Please verify ownership of '{domain}' via DNS before connecting '{email}'."
@@ -51,7 +72,7 @@ class DomainAuthenticationListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        domains = DomainAuthentication.objects.filter(user=request.user)
+        domains = scope_queryset_by_org(DomainAuthentication.objects.all(), request.user)
         serializer = DomainAuthenticationSerializer(domains, many=True)
         return Response(serializer.data)
 
@@ -60,23 +81,22 @@ class DomainAuthenticationListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         domain_name = serializer.validated_data["domain"]
 
-        # Prevent hijacking domains verified by another user
-        existing_other = DomainAuthentication.objects.filter(
-            domain__iexact=domain_name, status="VERIFIED"
-        ).exclude(user=request.user).first()
+        org, scope_filter = _org_scope_filter(request.user)
+
+        # Return existing domain if already registered in this organization
+        existing_domain = DomainAuthentication.objects.filter(
+            domain__iexact=domain_name, **scope_filter
+        ).first()
+        if existing_domain:
+            return Response(DomainAuthenticationSerializer(existing_domain).data, status=status.HTTP_200_OK)
+
+        # Prevent hijacking domains registered/verified by another organization
+        existing_other = DomainAuthentication.objects.filter(domain__iexact=domain_name).first()
         if existing_other:
             return Response(
                 {"detail": f"Domain '{domain_name}' is already verified by another account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # Check existing domain for this user
-        existing_domain = DomainAuthentication.objects.filter(
-            user=request.user, domain__iexact=domain_name
-        ).first()
-
-        if existing_domain:
-            return Response(DomainAuthenticationSerializer(existing_domain).data, status=status.HTTP_200_OK)
 
         # Register domain with AWS SES
         ses_service = AWSSESService()
@@ -89,6 +109,7 @@ class DomainAuthenticationListCreateView(APIView):
         mail_from_domain = ses_res.get("mail_from_domain", f"bounces.{domain_name}")
 
         domain_auth = DomainAuthentication.objects.create(
+            organization=org,
             user=request.user,
             domain=domain_name,
             verification_token=token_suffix,
@@ -108,7 +129,7 @@ class DomainAuthenticationVerifyView(APIView):
 
     def post(self, request, pk):
         try:
-            domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+            domain_auth = scope_queryset_by_org(DomainAuthentication.objects.all(), request.user).get(pk=pk)
         except DomainAuthentication.DoesNotExist:
             return Response({"detail": "Domain authentication record not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -161,7 +182,7 @@ class DomainAuthenticationDetailView(APIView):
 
     def delete(self, request, pk):
         try:
-            domain_auth = DomainAuthentication.objects.get(pk=pk, user=request.user)
+            domain_auth = scope_queryset_by_org(DomainAuthentication.objects.all(), request.user).get(pk=pk)
             SenderIdentity.objects.filter(domain_auth=domain_auth).update(domain_auth=None)
             AWSSESService().delete_domain_identity(domain_auth.domain)
             domain_auth.delete()
@@ -174,7 +195,7 @@ class SenderIdentityListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        identities = SenderIdentity.objects.filter(user=request.user)
+        identities = scope_queryset_by_org(SenderIdentity.objects.all(), request.user)
         serializer = SenderIdentitySerializer(identities, many=True)
         return Response(serializer.data)
 
@@ -184,7 +205,17 @@ class SenderIdentityDetailView(APIView):
 
     def delete(self, request, pk):
         try:
-            identity = SenderIdentity.objects.get(pk=pk, user=request.user)
+            identity = scope_queryset_by_org(SenderIdentity.objects.all(), request.user).get(pk=pk)
+            if identity.provider == "WHATSAPP_CLOUD":
+                if identity.organization_id:
+                    qs = WhatsAppConnection.objects.filter(organization_id=identity.organization_id)
+                elif identity.user_id:
+                    qs = WhatsAppConnection.objects.filter(organization__isnull=True, connected_by_id=identity.user_id)
+                else:
+                    qs = WhatsAppConnection.objects.none()
+                if identity.phone_number_id:
+                    qs = qs.filter(phone_number_id=identity.phone_number_id)
+                qs.update(is_active=False)
             identity.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except SenderIdentity.DoesNotExist:
@@ -256,11 +287,15 @@ class ConnectSMTPView(APIView):
         if not ok:
             return Response({"success": False, "message": f"SMTP Test Failed: {msg}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update existing or create new
-        identity, _ = SenderIdentity.objects.update_or_create(
-            user=request.user,
-            email=data["email"],
-            defaults={
+        # Update existing or create new scoped to organization
+        org, scope_filter = _org_scope_filter(request.user)
+        identity, _ = _upsert_scoped(
+            SenderIdentity,
+            scope_filter,
+            {"email": data["email"]},
+            {
+                "organization": org,
+                "user": request.user,
                 "domain_auth": domain_auth,
                 "display_name": data.get("display_name", ""),
                 "provider": data["provider"],
@@ -268,7 +303,8 @@ class ConnectSMTPView(APIView):
                 "status": "CONNECTED",
                 "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
-            }
+            },
+            extra_filter={"provider__in": ["AWS_SES", "CUSTOM_SMTP"]},
         )
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
@@ -288,17 +324,22 @@ class ConnectSESView(APIView):
         if not domain_auth:
             return Response({"detail": error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        identity, _ = SenderIdentity.objects.update_or_create(
-            user=request.user,
-            email=data["email"],
-            defaults={
+        org, scope_filter = _org_scope_filter(request.user)
+        identity, _ = _upsert_scoped(
+            SenderIdentity,
+            scope_filter,
+            {"email": data["email"]},
+            {
+                "organization": org,
+                "user": request.user,
                 "domain_auth": domain_auth,
                 "display_name": data.get("display_name", ""),
                 "provider": "AWS_SES",
                 "connection_type": "AWS_SES",
                 "status": "CONNECTED",
                 "last_verified_at": timezone.now(),
-            }
+            },
+            extra_filter={"provider__in": ["AWS_SES", "CUSTOM_SMTP"]},
         )
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 
@@ -309,7 +350,7 @@ class SendTestEmailView(APIView):
 
     def post(self, request, pk):
         try:
-            identity = SenderIdentity.objects.get(pk=pk, user=request.user)
+            identity = scope_queryset_by_org(SenderIdentity.objects.all(), request.user).get(pk=pk)
         except SenderIdentity.DoesNotExist:
             return Response({"detail": "Sender identity not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -443,14 +484,21 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
             "is_coexistence": is_coexistence,
         }
 
-        # 4. Save/Update SenderIdentity scoped to request.user (strict multi-tenant isolation)
-        identity, _ = SenderIdentity.objects.update_or_create(
-            user=request.user,
-            phone_number_id=phone_number_id,
-            defaults={
+        # 4. Save/Update SenderIdentity scoped to organization (single active WhatsApp number per org)
+        org, ident_scope = _org_scope_filter(request.user, user_field="user")
+        SenderIdentity.objects.filter(
+            provider="WHATSAPP_CLOUD", **ident_scope
+        ).exclude(phone_number_id=phone_number_id).delete()
+
+        identity, _ = _upsert_scoped(
+            SenderIdentity,
+            ident_scope,
+            {"phone_number_id": phone_number_id, "provider": "WHATSAPP_CLOUD"},
+            {
+                "organization": org,
+                "user": request.user,
                 "email": display_phone,
                 "display_name": verified_name or f"WhatsApp ({display_phone})",
-                "provider": "WHATSAPP_CLOUD",
                 "connection_type": "OAUTH",
                 "status": "CONNECTED",
                 "waba_id": waba_id,
@@ -460,18 +508,22 @@ class WhatsAppEmbeddedSignupCallbackView(APIView):
                 "account_review_status": account_review_status,
                 "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
-            }
+            },
         )
 
-        # 5. Dual Persistence: Also create/update WhatsAppConnection for organization
-        # to ensure existing campaign sending, automation actions, and event logs work seamlessly
-        WhatsAppConnection.objects.update_or_create(
-            organization=request.user,
-            phone_number_id=phone_number_id,
-            defaults={
+        # 5. Dual Persistence: Keep single active WhatsAppConnection per organization
+        _, conn_scope = _org_scope_filter(request.user, user_field="connected_by")
+        WhatsAppConnection.objects.filter(**conn_scope).exclude(phone_number_id=phone_number_id).update(is_active=False)
+        _upsert_scoped(
+            WhatsAppConnection,
+            conn_scope,
+            {"phone_number_id": phone_number_id},
+            {
+                "organization": org,
+                "connected_by": request.user,
                 "encrypted_access_token": encrypted_token_val,
                 "is_active": True,
-            }
+            },
         )
 
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
@@ -490,17 +542,27 @@ class ConnectSMSView(APIView):
             "auth_token": encrypt_token(data["auth_token"]),
         }
 
-        identity, _ = SenderIdentity.objects.update_or_create(
-            user=request.user,
-            email=data["phone_number"], # Store sender number or ID in identifier field
-            defaults={
+        org, ident_scope = _org_scope_filter(request.user, user_field="user")
+        # Only one active SMS sender ID per organization at a time
+        SenderIdentity.objects.filter(
+            provider__in=["TWILIO_SMS", "CUSTOM_SMS"], **ident_scope
+        ).exclude(email=data["phone_number"]).delete()
+
+        identity, _ = _upsert_scoped(
+            SenderIdentity,
+            ident_scope,
+            {"email": data["phone_number"]},
+            {
+                "organization": org,
+                "user": request.user,
                 "display_name": data.get("display_name") or f"SMS Sender ({data['phone_number']})",
                 "provider": data["provider"],
                 "connection_type": "API_KEY",
                 "status": "CONNECTED",
                 "encrypted_credentials": credentials,
                 "last_verified_at": timezone.now(),
-            }
+            },
+            extra_filter={"provider__in": ["TWILIO_SMS", "CUSTOM_SMS"]},
         )
         return Response(SenderIdentitySerializer(identity).data, status=status.HTTP_201_CREATED)
 

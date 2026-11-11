@@ -330,21 +330,21 @@ class ListUsersView(generics.ListAPIView):
 
 class BrandIdentityView(APIView):
     """
-    GET  /api/accounts/brand-identity/  — fetch current brand identity settings
-    PUT  /api/accounts/brand-identity/  — update brand identity settings
+    GET  /api/auth/brand-identity/  — fetch current brand identity settings
+    PUT  /api/auth/brand-identity/  — update brand identity settings
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from apps.content_studio.models import BrandVoice
         from apps.content_studio.serializers import BrandVoiceSerializer
-        brand_voice, _ = BrandVoice.objects.get_or_create()
+        from apps.content_studio.views import _get_or_create_brand_voice_for_user
+        brand_voice = _get_or_create_brand_voice_for_user(request.user)
         return Response(BrandVoiceSerializer(brand_voice).data)
 
     def put(self, request):
-        from apps.content_studio.models import BrandVoice
         from apps.content_studio.serializers import BrandVoiceSerializer
-        brand_voice, _ = BrandVoice.objects.get_or_create()
+        from apps.content_studio.views import _get_or_create_brand_voice_for_user
+        brand_voice = _get_or_create_brand_voice_for_user(request.user)
         serializer = BrandVoiceSerializer(brand_voice, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()

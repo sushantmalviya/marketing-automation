@@ -40,7 +40,11 @@ class Command(BaseCommand):
 
         conn = WhatsAppConnection.objects.filter(
             id="dfd38617-d3d5-45a9-b6c6-f0d415b37878",
-            organization=user,
+            organization=user.organization,
+            is_active=True,
+        ).first() or WhatsAppConnection.objects.filter(
+            id="dfd38617-d3d5-45a9-b6c6-f0d415b37878",
+            connected_by=user,
             is_active=True,
         ).first()
 

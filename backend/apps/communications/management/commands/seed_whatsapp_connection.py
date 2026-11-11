@@ -46,9 +46,10 @@ class Command(BaseCommand):
 
         # 1. Organization & Phone Resolution
         if existing_by_id:
-            user = existing_by_id.organization
+            user = existing_by_id.connected_by
+            org_label = existing_by_id.organization or user
             phone_number_id = existing_by_id.phone_number_id
-            self.stdout.write(self.style.SUCCESS(f"\nTarget Organization: {user.email} (ID: {user.id})"))
+            self.stdout.write(self.style.SUCCESS(f"\nTarget Organization: {org_label}"))
             self.stdout.write(self.style.SUCCESS(f"Target Phone Number ID: {phone_number_id}"))
         else:
             org_input = options.get("org")
@@ -103,11 +104,11 @@ class Command(BaseCommand):
         auto_yes = options.get("yes", False)
         if existing_by_id:
             conn = existing_by_id
-            user = conn.organization
+            user = conn.connected_by
             phone_number_id = conn.phone_number_id
             self.stdout.write(
                 self.style.WARNING(
-                    f"\nTargeting existing connection (UUID: {conn.id}, Org: {user.email} [ID: {user.id}], Phone: {conn.phone_number_id})."
+                    f"\nTargeting existing connection (UUID: {conn.id}, Org: {conn.organization or user}, Phone: {conn.phone_number_id})."
                 )
             )
             if not auto_yes:
@@ -117,16 +118,18 @@ class Command(BaseCommand):
                     return
             conn.is_active = True
         else:
+            org = getattr(user, "organization", None)
+            conn_filter = {"organization": org} if org is not None else {"organization__isnull": True, "connected_by": user}
             existing_conn = WhatsAppConnection.objects.filter(
-                organization=user,
                 phone_number_id=phone_number_id,
+                **conn_filter,
             ).first()
 
             if existing_conn:
                 self.stdout.write(
                     self.style.WARNING(
                         f"\nAn existing connection for Phone Number ID '{phone_number_id}' "
-                        f"under '{user.email}' already exists (UUID: {existing_conn.id}, Active: {existing_conn.is_active})."
+                        f"under '{org or user.email}' already exists (UUID: {existing_conn.id}, Active: {existing_conn.is_active})."
                     )
                 )
                 if not auto_yes:
@@ -138,7 +141,8 @@ class Command(BaseCommand):
                 conn.is_active = True
             else:
                 conn = WhatsAppConnection(
-                    organization=user,
+                    organization=org,
+                    connected_by=user,
                     phone_number_id=phone_number_id,
                     is_active=True,
                 )
@@ -184,7 +188,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("WhatsApp connection seeded successfully."))
         self.stdout.write("")
-        self.stdout.write(f"Organization: {user.email} (ID: {user.id})")
+        self.stdout.write(f"Organization: {conn.organization or (user.email if user else 'Unknown')}")
         self.stdout.write(f"Phone Number ID: {conn.phone_number_id}")
         self.stdout.write(f"Connection ID: {conn.id}")
         self.stdout.write(f"Active: {conn.is_active}")

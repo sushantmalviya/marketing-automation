@@ -25,6 +25,37 @@ def is_super_admin(user):
     profile = get_admin_profile(user)
     return profile is not None and profile.role == "ADMIN"
 
+def is_platform_superuser(user):
+    """Returns True only for platform-wide superusers not bound to a specific organization."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    return bool(getattr(user, "is_superuser", False) and not getattr(user, "organization_id", None))
+
+def get_user_organization(user):
+    """Resolve the Organization instance for an authenticated user (or via their MAUser profile)."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    org = getattr(user, "organization", None)
+    if org is not None:
+        return org
+    profile = get_admin_profile(user)
+    return getattr(profile, "organization", None) if profile else None
+
+def scope_queryset_by_org(queryset, user, user_field="user", org_field="organization"):
+    """
+    Strictly isolate a queryset to the user's organization.
+    Falls back to user-ownership ONLY when the user has no organization attached
+    (e.g. standalone unit test fixtures), never leaking across organizations.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return queryset.none()
+    if is_platform_superuser(user):
+        return queryset
+    org = get_user_organization(user)
+    if org is not None:
+        return queryset.filter(**{org_field: org})
+    return queryset.filter(**{f"{org_field}__isnull": True, user_field: user})
+
 def get_tenant_owner_profile(user):
     """
     Returns the MAUser profile for the given user.

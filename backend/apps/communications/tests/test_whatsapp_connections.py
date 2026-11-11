@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
+from apps.accounts.models import Organization, MAUser
 from apps.communications.models import WhatsAppConnection, CommunicationEvent, SenderIdentity
 from apps.communications.services.whatsapp import (
     send_whatsapp,
@@ -22,20 +23,42 @@ User = get_user_model()
 
 class WhatsAppIntegrationTests(TestCase):
     def setUp(self):
+        self.org_a = Organization.objects.create(
+            name="Org A",
+            slug="org-a-wa",
+            external_company_id="ORG-A-WA",
+        )
+        self.org_b = Organization.objects.create(
+            name="Org B",
+            slug="org-b-wa",
+            external_company_id="ORG-B-WA",
+        )
         self.user_a = User.objects.create_user(
             username="org_a_user",
             email="admin_a@example.com",
             password="password123",
+            organization=self.org_a,
         )
+        MAUser.objects.create(user=self.user_a, organization=self.org_a, role="ADMIN")
+        self.user_a2 = User.objects.create_user(
+            username="org_a_user2",
+            email="member_a@example.com",
+            password="password123",
+            organization=self.org_a,
+        )
+        MAUser.objects.create(user=self.user_a2, organization=self.org_a, role="USER")
         self.user_b = User.objects.create_user(
             username="org_b_user",
             email="admin_b@example.com",
             password="password123",
+            organization=self.org_b,
         )
+        MAUser.objects.create(user=self.user_b, organization=self.org_b, role="ADMIN")
 
-        # Create connection for Organization A
+        # Create connection for Organization A (connected by user_a)
         self.conn_a = WhatsAppConnection.objects.create(
-            organization=self.user_a,
+            organization=self.org_a,
+            connected_by=self.user_a,
             phone_number_id="100012345678901",
         )
         self.conn_a.set_access_token("EAA_RAW_META_TOKEN_ORG_A")
@@ -43,7 +66,8 @@ class WhatsAppIntegrationTests(TestCase):
 
         # Create connection for Organization B
         self.conn_b = WhatsAppConnection.objects.create(
-            organization=self.user_b,
+            organization=self.org_b,
+            connected_by=self.user_b,
             phone_number_id="200098765432109",
         )
         self.conn_b.set_access_token("EAA_RAW_META_TOKEN_ORG_B")
@@ -152,6 +176,25 @@ class WhatsAppIntegrationTests(TestCase):
         # Attempt direct detail retrieval of Org B's connection
         detail_response = self.client.get(f"/api/communications/whatsapp/connections/{self.conn_b.id}/")
         self.assertEqual(detail_response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_same_org_users_share_whatsapp_connection_and_send(self):
+        """User 2 in Org A sees User 1's WhatsAppConnection and uses it in campaigns."""
+        self.client.force_authenticate(user=self.user_a2)
+        response = self.client.get("/api/communications/whatsapp/connections/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        raw_list = response.data.get("results", response.data) if isinstance(response.data, dict) else response.data
+        ids = [str(item["id"]) for item in raw_list]
+        self.assertIn(str(self.conn_a.id), ids)
+        self.assertNotIn(str(self.conn_b.id), ids)
+
+        # User 2 resolves Org A's WhatsApp connection directly
+        resolved = get_whatsapp_connection(organization=self.user_a2)
+        self.assertEqual(resolved.id, self.conn_a.id)
+
+        # Unconfigured org C gets None (never leaks Org A/B)
+        org_c = Organization.objects.create(name="Org C", slug="org-c-wa", external_company_id="ORG-C-WA")
+        user_c = User.objects.create_user(email="c@example.com", password="password123", organization=org_c)
+        self.assertIsNone(get_whatsapp_connection(organization=user_c))
 
     # ==========================================================
     # PHASE 5: Webhook Security & HMAC Verification
@@ -310,16 +353,37 @@ class WhatsAppIntegrationTests(TestCase):
 
 class WhatsAppEmbeddedSignupTests(TestCase):
     def setUp(self):
+        self.org_a = Organization.objects.create(
+            name="Signup Org A",
+            slug="signup-org-a",
+            external_company_id="SIGNUP-ORG-A",
+        )
+        self.org_b = Organization.objects.create(
+            name="Signup Org B",
+            slug="signup-org-b",
+            external_company_id="SIGNUP-ORG-B",
+        )
         self.user = User.objects.create_user(
             username="test_org_admin",
             email="admin@example.com",
             password="securepassword123",
+            organization=self.org_a,
         )
+        MAUser.objects.create(user=self.user, organization=self.org_a, role="ADMIN")
+        self.colleague = User.objects.create_user(
+            username="test_org_member",
+            email="member@example.com",
+            password="securepassword123",
+            organization=self.org_a,
+        )
+        MAUser.objects.create(user=self.colleague, organization=self.org_a, role="USER")
         self.other_user = User.objects.create_user(
             username="other_org_admin",
             email="other@example.com",
             password="securepassword123",
+            organization=self.org_b,
         )
+        MAUser.objects.create(user=self.other_user, organization=self.org_b, role="ADMIN")
         self.client = APIClient()
 
     def test_public_config_endpoint_no_secrets(self):
@@ -390,16 +454,29 @@ class WhatsAppEmbeddedSignupTests(TestCase):
             self.assertEqual(response.data["phone_number_id"], "phone_id_999")
 
             # Check SenderIdentity record
-            identity = SenderIdentity.objects.get(user=self.user, waba_id="waba_id_888")
+            identity = SenderIdentity.objects.get(organization=self.org_a, waba_id="waba_id_888")
             self.assertEqual(identity.connection_type, "OAUTH")
             self.assertEqual(identity.phone_number_id, "phone_id_999")
             self.assertEqual(identity.status, "CONNECTED")
 
             # Check WhatsAppConnection record (Dual Persistence)
-            connection = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_id_999")
+            connection = WhatsAppConnection.objects.get(organization=self.org_a, phone_number_id="phone_id_999")
             self.assertTrue(connection.is_active)
             self.assertEqual(connection.get_access_token(), "EAA_TEST_ACCESS_TOKEN_12345")
             self.assertNotEqual(connection.encrypted_access_token, "EAA_TEST_ACCESS_TOKEN_12345")
+
+            # Verify User 2 in Org A sees the exact same connected WhatsApp identity
+            self.client.force_authenticate(user=self.colleague)
+            list_res = self.client.get("/api/communications/sender-identities/")
+            self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+            self.assertEqual(len(list_res.data), 1)
+            self.assertEqual(list_res.data[0]["phone_number_id"], "phone_id_999")
+
+            # Verify Org B sees nothing
+            self.client.force_authenticate(user=self.other_user)
+            other_res = self.client.get("/api/communications/sender-identities/")
+            self.assertEqual(other_res.status_code, status.HTTP_200_OK)
+            self.assertEqual(other_res.data, [])
 
     @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")
     @patch("apps.communications.services.meta_api.MetaAPIService.get_waba_phone_numbers")
@@ -443,7 +520,7 @@ class WhatsAppEmbeddedSignupTests(TestCase):
             self.assertEqual(response.data["phone_number_id"], "phone_auto_888")
 
             # Verified persisted WhatsAppConnection
-            connection = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_auto_888")
+            connection = WhatsAppConnection.objects.get(organization=self.org_a, phone_number_id="phone_auto_888")
             self.assertEqual(connection.get_access_token(), "EAA_AUTONOMOUS_TOKEN_54321")
 
     def test_embedded_signup_unauthenticated_forbidden(self):
@@ -504,11 +581,11 @@ class WhatsAppEmbeddedSignupTests(TestCase):
             mock_register_phone.assert_not_called()
 
             # Check SenderIdentity
-            identity = SenderIdentity.objects.get(user=self.user, phone_number_id="phone_coex_222")
+            identity = SenderIdentity.objects.get(organization=self.org_a, phone_number_id="phone_coex_222")
             self.assertTrue(identity.encrypted_credentials.get("is_coexistence"))
 
             # Check WhatsAppConnection
-            conn = WhatsAppConnection.objects.get(organization=self.user, phone_number_id="phone_coex_222")
+            conn = WhatsAppConnection.objects.get(organization=self.org_a, phone_number_id="phone_coex_222")
             self.assertTrue(conn.is_active)
 
     @patch("apps.communications.services.meta_api.MetaAPIService.exchange_code_for_token")

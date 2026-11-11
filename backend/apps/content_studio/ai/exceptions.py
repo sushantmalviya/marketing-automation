@@ -17,3 +17,13 @@ class AIProviderError(AIError):
 class AICreditExhaustedError(AIError):
     """Raised when the user has insufficient billing credits for the operation."""
     pass
+
+
+class UnsupportedImageOptionError(AIError):
+    """Raised when an AI model does not support the requested quality or aspect ratio."""
+    pass
+
+
+class DuplicateImageRequestError(AIError):
+    """Raised when an identical idempotent image generation request is already running."""
+    pass

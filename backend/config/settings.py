@@ -45,9 +45,44 @@ if _env_hosts:
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_IMAGE_MODEL = os.getenv("HF_IMAGE_MODEL", "stabilityai/stable-diffusion-xl-base-1.0")
 HF_TEXT_MODEL = os.getenv("HF_TEXT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
-DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "gemini")
- 
+DEFAULT_TEXT_PROVIDER = os.getenv("DEFAULT_TEXT_PROVIDER", "openai")
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-nano-banana-2.1")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-6-luna")
+OPENAI_TEXT_REASONING_EFFORT = os.getenv("OPENAI_TEXT_REASONING_EFFORT", "none")
+OPENAI_IMAGE_MODEL_STANDARD = os.getenv("OPENAI_IMAGE_MODEL_STANDARD", "gpt-image-2.5-flare")
+OPENAI_IMAGE_MODEL_HIGH = os.getenv("OPENAI_IMAGE_MODEL_HIGH", "gpt-image-2.5-flare")
+OPENAI_IMAGE_MODEL_ULTRA = os.getenv("OPENAI_IMAGE_MODEL_ULTRA", "gpt-image-2.5-sunburst")
+
+# Configurable AI image generation credit matrix by UI model key and quality tier.
+AI_IMAGE_CREDIT_PRICING = {
+    "google_nano_banana": {
+        "STANDARD": 5,
+        "HIGH": 10,
+        "ULTRA": 20,
+    },
+    "openai_gpt_image_2_5": {
+        "STANDARD": 8,
+        "HIGH": 15,
+        "ULTRA": 25,
+    },
+}
+_pricing_override = os.getenv("AI_IMAGE_CREDIT_PRICING_JSON")
+if _pricing_override:
+    try:
+        import json as _json
+        _parsed_pricing = _json.loads(_pricing_override)
+        if isinstance(_parsed_pricing, dict):
+            AI_IMAGE_CREDIT_PRICING.update(_parsed_pricing)
+    except Exception:
+        pass
+
+AI_IMAGE_REFERENCE_SURCHARGE = int(os.getenv("AI_IMAGE_REFERENCE_SURCHARGE", "2"))
+AI_CAPTION_CREDITS_PER_PLATFORM = int(os.getenv("AI_CAPTION_CREDITS_PER_PLATFORM", "5"))
 
 META_APP_ID = os.getenv("META_APP_ID")
 META_APP_SECRET = os.getenv("META_APP_SECRET")
@@ -151,15 +186,42 @@ DATABASES = {
 }
 
 if DATABASE_URL and DATABASE_URL.startswith(("postgres://", "postgresql://")):
-    DATABASES["default"].setdefault("OPTIONS", {}).update(
-        {
-            "connect_timeout": 10,
-            "keepalives": 1,
-            "keepalives_idle": 30,
-            "keepalives_interval": 10,
-            "keepalives_count": 3,
-        }
-    )
+    _db_options = {
+        "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+    }
+    # Prefer IPv4 hostaddr for remote Postgres hosts so Windows/dual-stack networks
+    # without working IPv6 routing don't stall ~30s timing out IPv6 AAAA records.
+    _db_host = DATABASES["default"].get("HOST")
+    _db_port = DATABASES["default"].get("PORT") or 5432
+    _prefer_ipv4 = os.getenv("DB_PREFER_IPV4", "True").lower() in ("true", "1", "t")
+    if (
+        _prefer_ipv4
+        and _db_host
+        and _db_host not in ("localhost", "127.0.0.1", "::1")
+        and "hostaddr" not in DATABASES["default"].get("OPTIONS", {})
+    ):
+        try:
+            import ipaddress as _ipaddress
+            import socket as _socket
+
+            try:
+                _ipaddress.ip_address(_db_host)
+            except ValueError:
+                _ipv4_infos = _socket.getaddrinfo(
+                    _db_host,
+                    int(_db_port),
+                    _socket.AF_INET,
+                    _socket.SOCK_STREAM,
+                )
+                if _ipv4_infos:
+                    _db_options["hostaddr"] = _ipv4_infos[0][4][0]
+        except Exception:
+            pass
+    DATABASES["default"].setdefault("OPTIONS", {}).update(_db_options)
 
  
 # --------------------------------------------------

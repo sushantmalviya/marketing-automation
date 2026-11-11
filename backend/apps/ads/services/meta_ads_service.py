@@ -911,14 +911,28 @@ class MetaAdsService:
             return {"error": str(e)}
 
     @classmethod
-    def fetch_lead_with_credentials_fallback(cls, leadgen_id: str, page_id: Optional[str] = None):
+    def _resolve_credential_owner_user(cls, cred):
+        if cred.user_id:
+            return cred.user
+        if cred.organization_id:
+            from django.contrib.auth import get_user_model
+            return get_user_model().objects.filter(organization_id=cred.organization_id, is_active=True).first()
+        return None
+
+    @classmethod
+    def fetch_lead_with_credentials_fallback(cls, leadgen_id: str, page_id: Optional[str] = None, organization_ids=None):
         """
-        Attempts to fetch lead details using all available active credentials and page access tokens.
+        Attempts to fetch lead details using active credentials and page access tokens.
         Returns tuple of (lead_data_dict, user_owner).
         """
         from apps.ads.models import MetaUserCredential
 
-        active_creds = list(MetaUserCredential.objects.filter(status='ACTIVE').select_related('user'))
+        cred_qs = MetaUserCredential.objects.filter(status='ACTIVE').select_related('user', 'organization')
+        if organization_ids:
+            scoped_creds = list(cred_qs.filter(organization_id__in=organization_ids))
+            active_creds = scoped_creds or list(cred_qs)
+        else:
+            active_creds = list(cred_qs)
         if not active_creds:
             logger.error("No active MetaUserCredential found in system.")
             return None, None
@@ -932,7 +946,7 @@ class MetaAdsService:
                         lead_data = cls.get_lead_details(page_token, leadgen_id)
                         if "error" not in lead_data and lead_data.get("field_data") is not None:
                             logger.info(f"Successfully fetched lead {leadgen_id} using page token for page {page_id}")
-                            return lead_data, cred.user
+                            return lead_data, cls._resolve_credential_owner_user(cred)
                 except Exception as e:
                     logger.debug(f"Page token attempt failed for user {cred.user}: {e}")
 
@@ -941,8 +955,8 @@ class MetaAdsService:
             try:
                 lead_data = cls.get_lead_details(cred.access_token, leadgen_id)
                 if "error" not in lead_data and lead_data.get("field_data") is not None:
-                    logger.info(f"Successfully fetched lead {leadgen_id} using user token of {cred.user.email}")
-                    return lead_data, cred.user
+                    logger.info(f"Successfully fetched lead {leadgen_id} using credential of org {cred.organization_id or cred.user_id}")
+                    return lead_data, cls._resolve_credential_owner_user(cred)
             except Exception as e:
                 logger.debug(f"User token attempt failed for user {cred.user}: {e}")
 
@@ -957,7 +971,7 @@ class MetaAdsService:
                             lead_data = cls.get_lead_details(ptoken, leadgen_id)
                             if "error" not in lead_data and lead_data.get("field_data") is not None:
                                 logger.info(f"Successfully fetched lead {leadgen_id} using page token of {page.get('name')}")
-                                return lead_data, cred.user
+                                return lead_data, cls._resolve_credential_owner_user(cred)
                 except Exception as e:
                     logger.debug(f"All-pages scan attempt failed for user {cred.user}: {e}")
 
@@ -1005,14 +1019,20 @@ class MetaAdsService:
                 else:
                     matching_triggers = MetaLeadTrigger.objects.none()
 
-                lead_data, owner_user = cls.fetch_lead_with_credentials_fallback(leadgen_id, page_id=page_id)
+                trigger_org_ids = [t.organization_id for t in matching_triggers if t.organization_id]
+                lead_data, owner_user = cls.fetch_lead_with_credentials_fallback(
+                    leadgen_id, page_id=page_id, organization_ids=trigger_org_ids or None
+                )
                 if not lead_data:
                     logger.error(f"Could not retrieve lead {leadgen_id} details from Meta API.")
                     continue
 
                 if not owner_user:
-                    first_cred = MetaUserCredential.objects.filter(status='ACTIVE').first() or MetaUserCredential.objects.first()
-                    owner_user = first_cred.user if first_cred else None
+                    first_cred = (
+                        MetaUserCredential.objects.filter(organization_id__in=trigger_org_ids, status='ACTIVE').first()
+                        if trigger_org_ids else None
+                    ) or MetaUserCredential.objects.filter(status='ACTIVE').first() or MetaUserCredential.objects.first()
+                    owner_user = cls._resolve_credential_owner_user(first_cred) if first_cred else None
 
                 field_data = lead_data.get("field_data", [])
                 email = None
@@ -1049,7 +1069,10 @@ class MetaAdsService:
                         form_name = trigger_obj.form_name
 
                 if not form_name and final_form_id and owner_user:
-                    user_cred = MetaUserCredential.objects.filter(user=owner_user, status='ACTIVE').first() or MetaUserCredential.objects.filter(status='ACTIVE').first()
+                    from apps.common.ownership import scope_queryset_by_org
+                    user_cred = scope_queryset_by_org(
+                        MetaUserCredential.objects.filter(status='ACTIVE'), owner_user
+                    ).first()
                     if user_cred:
                         f_info = cls.get_form_info(user_cred.access_token, final_form_id, page_id=page_id)
                         if f_info.get("name"):

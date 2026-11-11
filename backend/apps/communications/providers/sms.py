@@ -71,3 +71,34 @@ class MSG91Provider(BaseSMSProvider):
             raise RuntimeError(f"MSG91 request failed: {str(exc)}") from exc
 
 
+class TwilioSMSProvider(BaseSMSProvider):
+    def __init__(self, account_sid=None, auth_token=None, from_number=None):
+        self.account_sid = account_sid
+        self.auth_token = auth_token
+        self.from_number = from_number
+
+    def send(self, to, message, metadata=None):
+        import requests
+
+        if not self.account_sid or not self.auth_token or not self.from_number:
+            raise ValueError("Incomplete Twilio SMS credentials configured.")
+
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json"
+        response = requests.post(
+            url,
+            data={"To": to, "From": self.from_number, "Body": message},
+            auth=(self.account_sid, self.auth_token),
+            timeout=15,
+        )
+        if not response.ok:
+            raise RuntimeError(f"Twilio API Error ({response.status_code}): {response.text}")
+
+        data = response.json()
+
+        class TwilioResponse:
+            def __init__(self, sid):
+                self.sid = sid
+
+        return TwilioResponse(sid=data.get("sid", ""))
+
+

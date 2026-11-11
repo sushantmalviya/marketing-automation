@@ -1,24 +1,29 @@
-import logging
 import base64
+import logging
 import uuid
 
 import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from ..exceptions import AITimeoutError, AIRateLimitError, AIProviderError
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
+
+from ..exceptions import AIProviderError, AIRateLimitError, AITimeoutError
 
 logger = logging.getLogger(__name__)
 
+
 class GeminiProvider:
     """
-    Provider wrapper for Google Gemini SDK.
-    Handles formatting of calls, structured responses, and exception translation.
+    Provider wrapper for Google Gemini / Nano Banana API.
+    Handles text generation and native image generation via google-genai SDK.
     """
-    
+
     def __init__(self):
         self.api_key = getattr(settings, "GEMINI_API_KEY", None)
-        
+
         if not self.api_key:
             logger.warning("GEMINI_API_KEY not set. Gemini API calls will fail.")
 
@@ -81,68 +86,112 @@ class GeminiProvider:
         except requests.RequestException as exc:
             raise AIProviderError("Failed to connect to Gemini text generation.") from exc
 
-    def generate_image(self, prompt, size="1024x1024"):
-        """Generate and persist a prompt-based image through Gemini's REST API."""
+    def generate_image_bytes(
+        self,
+        prompt: str,
+        *,
+        model_id: str | None = None,
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        reference_images: list[tuple[bytes, str, str]] | None = None,
+        timeout: int = 180,
+    ) -> tuple[bytes, str]:
+        """
+        Generate an image using Google Nano Banana via the official google-genai SDK.
+        Returns (image_bytes, mime_type).
+        """
         if not self.api_key:
             raise AIProviderError("GEMINI_API_KEY is not configured.")
 
-        model = getattr(settings, "GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent"
+        resolved_model = model_id or getattr(settings, "GEMINI_IMAGE_MODEL", "gemini-nano-banana-2.1")
+
+        # Build contents: prompt + any reference images (brand logo / visual references)
+        if reference_images:
+            contents: genai_types.ContentListUnionDict = [
+                genai_types.Part.from_text(text=prompt),
+                *[
+                    genai_types.Part.from_bytes(data=img_bytes, mime_type=mime_type)
+                    for img_bytes, mime_type, _label in reference_images
+                ],
+            ]
+        else:
+            contents = prompt
+
+        # Nano Banana rejects LLM sampling params (temperature, topP, topK, seed, logprobs),
+        # so only pass response_modalities and image_config.
+        config = genai_types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+            image_config=genai_types.ImageConfig(
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+            ),
         )
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["IMAGE"],
-            },
-        }
 
         try:
-            response = requests.post(
-                url,
-                headers={
-                    "x-goog-api-key": self.api_key,
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=180,
+            client = genai.Client(
+                api_key=self.api_key,
+                http_options=genai_types.HttpOptions(timeout=int(timeout * 1000)),
             )
-            if response.status_code == 429:
-                raise AIRateLimitError("Gemini image generation rate limit exceeded.")
-            if response.status_code >= 400:
-                error_message = response.json().get("error", {}).get(
-                    "message", "Unknown provider error"
-                )
-                raise AIProviderError(
-                    "Gemini image generation failed "
-                    f"({response.status_code}): {error_message}"
-                )
+            response = client.models.generate_content(
+                model=resolved_model,
+                contents=contents,
+                config=config,
+            )
 
-            candidates = response.json().get("candidates", [])
-            parts = (
-                candidates[0].get("content", {}).get("parts", [])
-                if candidates
-                else []
-            )
+            candidates = getattr(response, "candidates", None) or []
+            parts: list[genai_types.Part] = []
+            if candidates and getattr(candidates[0], "content", None):
+                candidate_parts = getattr(candidates[0].content, "parts", None)
+                if candidate_parts:
+                    parts = list(candidate_parts)
+            else:
+                response_parts = getattr(response, "parts", None)
+                if response_parts:
+                    parts = list(response_parts)
+
             for part in parts:
-                inline_data = part.get("inlineData") or part.get("inline_data")
-                if not inline_data or not inline_data.get("data"):
+                inline_data = getattr(part, "inline_data", None)
+                if not inline_data:
                     continue
+                raw_data = getattr(inline_data, "data", None)
+                if not raw_data:
+                    continue
+                mime_type = getattr(inline_data, "mime_type", None) or "image/png"
+                if isinstance(raw_data, str):
+                    image_bytes = base64.b64decode(raw_data)
+                else:
+                    image_bytes = bytes(raw_data)
+                return image_bytes, mime_type
 
-                mime_type = inline_data.get("mimeType") or inline_data.get(
-                    "mime_type", "image/png"
-                )
-                extension = "jpg" if "jpeg" in mime_type else "png"
-                image_bytes = base64.b64decode(inline_data["data"])
-                saved_path = default_storage.save(
-                    f"generated_images/{uuid.uuid4()}.{extension}",
-                    ContentFile(image_bytes),
-                )
-                return default_storage.url(saved_path)
+            raise AIProviderError("Google Nano Banana returned no generated image.")
+        except (AIRateLimitError, AITimeoutError, AIProviderError):
+            raise
+        except genai_errors.APIError as exc:
+            code = getattr(exc, "code", None)
+            message = getattr(exc, "message", None) or str(exc)
+            if code == 429:
+                raise AIRateLimitError("Google Nano Banana rate limit exceeded.") from exc
+            if code in (408, 504):
+                raise AITimeoutError("Google Nano Banana image generation timed out.") from exc
+            raise AIProviderError(f"Google Nano Banana generation failed ({code}): {message}") from exc
+        except TimeoutError as exc:
+            raise AITimeoutError("Google Nano Banana image generation timed out.") from exc
+        except Exception as exc:
+            if "timeout" in str(exc).lower() or "timed out" in str(exc).lower():
+                raise AITimeoutError("Google Nano Banana image generation timed out.") from exc
+            raise AIProviderError(f"Failed to generate image with Google Nano Banana: {exc}") from exc
 
-            raise AIProviderError("Gemini returned no generated image.")
-        except requests.Timeout as exc:
-            raise AITimeoutError("Gemini image generation timed out.") from exc
-        except requests.RequestException as exc:
-            raise AIProviderError("Failed to connect to Gemini image generation.") from exc
+    def generate_image(self, prompt, size="1024x1024", aspect_ratio="1:1", image_size="1K", model_id=None):
+        """Backward-compatible wrapper returning a persisted storage URL."""
+        image_bytes, mime_type = self.generate_image_bytes(
+            prompt,
+            model_id=model_id,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+        )
+        extension = "jpg" if "jpeg" in mime_type else "png"
+        saved_path = default_storage.save(
+            f"generated_images/{uuid.uuid4()}.{extension}",
+            ContentFile(image_bytes),
+        )
+        return default_storage.url(saved_path)

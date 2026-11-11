@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "fragrant-marxism-guacamole.ngrok-free.dev"],
   devIndicators: false,
+  experimental: {
+    proxyTimeout: 120000,
+  },
   turbopack: {
     root: __dirname,
   },

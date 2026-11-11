@@ -1,20 +1,22 @@
 "use client";
 
+import NextImage from "next/image";
 import { useState, useRef, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Bell, Globe2, Lock, Palette, Save, UserRound, Sparkles,
+  Bell, Globe2, Lock, Save, UserRound, Sparkles,
   User as UserIcon, Mail, Phone, Calendar, Building2,
-  ShieldCheck, UserCircle2, Briefcase, UserPlus, Pencil,
+  ShieldCheck, Pencil,
   Eye, EyeOff, ChevronDown, ChevronUp,
   Instagram, Facebook, Linkedin, Twitter, Info, Loader2,
-  Trash2, X, MessageSquare, MessageSquareMore, ExternalLink, ChevronRight, CheckCircle2
+  Trash2, X, MessageSquare, MessageSquareMore, ExternalLink, ChevronRight, CheckCircle2,
+  Image as ImageIcon, Plus, Upload, AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import type { AuthUser } from "@/types/auth";
-import { parseApiError, apiClient } from "@/services/api-client";
+import { parseApiError, apiClient, resolveApiUrl } from "@/services/api-client";
 import { superAdminService } from "@/services/super-admin.service";
 import { authService } from "@/services/auth.service";
 import { DarkModeToggle } from "@/components/ui/dark-mode-toggle";
@@ -23,7 +25,65 @@ import { ConnectEmailModal } from "@/components/admin/account/connect-email-moda
 import { ConnectWhatsAppModal } from "@/components/admin/account/connect-whatsapp-modal";
 import { ConnectSMSModal } from "@/components/admin/account/connect-sms-modal";
 
-function ProfileField({ icon: Icon, label, value, isEditingMode, isEditable, onChange }: any) {
+type ExtendedAuthUser = AuthUser & {
+  phone_no?: string | null;
+  phone?: string | null;
+  mobile_number?: string | null;
+  mobile?: string | null;
+  organizationName?: string | null;
+  rentStartDate?: string | null;
+  rentEndDate?: string | null;
+};
+
+type PickerAsset = {
+  id: string;
+  name: string;
+  file_url: string;
+  asset_type?: string;
+};
+
+type SocialConnection = {
+  id: string;
+  platform: string;
+  account_name?: string;
+};
+
+type SenderIdentity = {
+  id: string;
+  provider: string;
+  email: string;
+  display_name?: string | null;
+  status: string;
+  connection_type?: string | null;
+  domain?: string | null;
+  quality_rating?: string | null;
+  waba_id?: string | null;
+  phone_number_id?: string | null;
+};
+
+type SenderDomain = {
+  id: string;
+  domain: string;
+  dns_record_type?: string;
+  dns_record_name?: string;
+  status: string;
+};
+
+function ProfileField({
+  icon: Icon,
+  label,
+  value,
+  isEditingMode,
+  isEditable,
+  onChange,
+}: {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  value: string;
+  isEditingMode: boolean;
+  isEditable: boolean;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+}) {
   return (
     <div className="flex items-center gap-4 py-4 border-b border-slate-100 last:border-0 dark:border-white/5">
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50/80 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
@@ -101,6 +161,16 @@ export function SuperAdminAccount() {
   const queryClient = useQueryClient();
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      if (requestedTab && ["profile", "security", "notifications", "brand-identity", "connect-socials", "connect-sender-ids"].includes(requestedTab)) {
+        setActiveTab(requestedTab);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -137,27 +207,41 @@ export function SuperAdminAccount() {
 
   const initialMobile = useMemo(() => {
     if (!currentUser) return "";
+    const extended = currentUser as ExtendedAuthUser;
     return (
-      currentUser.mobile_no ||
-      (currentUser as any).phone_no ||
-      (currentUser as any).phone ||
-      (currentUser as any).mobile_number ||
-      (currentUser as any).mobile ||
+      extended.mobile_no ||
+      extended.phone_no ||
+      extended.phone ||
+      extended.mobile_number ||
+      extended.mobile ||
       ""
     );
+  }, [currentUser]);
+
+  const subscriptionStartDate = useMemo(() => {
+    const extended = currentUser as ExtendedAuthUser | null;
+    const raw =
+      extended?.rent_start_date ??
+      extended?.organization?.subscription?.rent_start_date ??
+      extended?.subscription?.rent_start_date ??
+      extended?.rentStartDate;
+    return formatSubscriptionDate(raw);
+  }, [currentUser]);
+
+  const subscriptionExpireDate = useMemo(() => {
+    const extended = currentUser as ExtendedAuthUser | null;
+    const raw =
+      extended?.rent_end_date ??
+      extended?.organization?.subscription?.rent_end_date ??
+      extended?.subscription?.rent_end_date ??
+      extended?.rentEndDate;
+    return formatSubscriptionDate(raw);
   }, [currentUser]);
 
   const [form, setForm] = useState({
     fullName: initialFullName,
     mobile_no: initialMobile,
   });
-
-  useEffect(() => {
-    setForm({
-      fullName: initialFullName,
-      mobile_no: initialMobile,
-    });
-  }, [initialFullName, initialMobile]);
 
   const hasChanges = useMemo(() => {
     return (
@@ -227,8 +311,6 @@ export function SuperAdminAccount() {
     );
   }
 
-  const isAdminOrAbove = Boolean(currentUser.role && ((currentUser.role as string) === "ADMIN" || (currentUser.role as string) === "SUPER_ADMIN"));
-
   const tabs = [
     { id: "profile", label: "Profile", icon: UserRound },
     { id: "security", label: "Security", icon: Lock },
@@ -238,36 +320,20 @@ export function SuperAdminAccount() {
     { id: "connect-sender-ids", label: "Connect Sender IDs", icon: Mail },
   ];
 
-  const subscriptionStartDate = useMemo(() => {
-    const raw =
-      currentUser.rent_start_date ??
-      currentUser.organization?.subscription?.rent_start_date ??
-      currentUser.subscription?.rent_start_date ??
-      (currentUser as any).rentStartDate;
-    return formatSubscriptionDate(raw);
-  }, [currentUser]);
-
-  const subscriptionExpireDate = useMemo(() => {
-    const raw =
-      currentUser.rent_end_date ??
-      currentUser.organization?.subscription?.rent_end_date ??
-      currentUser.subscription?.rent_end_date ??
-      (currentUser as any).rentEndDate;
-    return formatSubscriptionDate(raw);
-  }, [currentUser]);
+  const extendedUser = currentUser as ExtendedAuthUser;
 
   const organizationName =
-    currentUser.organization_name ||
-    (currentUser as any).organizationName ||
-    (currentUser as any).organization?.name ||
+    extendedUser.organization_name ||
+    extendedUser.organizationName ||
+    extendedUser.organization?.name ||
     "";
 
   const mobileNumber =
-    currentUser.mobile_no ||
-    (currentUser as any).phone_no ||
-    (currentUser as any).phone ||
-    (currentUser as any).mobile_number ||
-    (currentUser as any).mobile ||
+    extendedUser.mobile_no ||
+    extendedUser.phone_no ||
+    extendedUser.phone ||
+    extendedUser.mobile_number ||
+    extendedUser.mobile ||
     "";
 
   return (
@@ -316,7 +382,7 @@ export function SuperAdminAccount() {
                   value={isEditingMode ? form.fullName : (initialFullName || "—")}
                   isEditingMode={isEditingMode}
                   isEditable
-                  onChange={(e: any) => setForm({ ...form, fullName: e.target.value })}
+                  onChange={(e) => setForm({ ...form, fullName: e.target.value })}
                 />
                 <ProfileField
                   icon={Mail}
@@ -331,7 +397,7 @@ export function SuperAdminAccount() {
                   value={isEditingMode ? form.mobile_no : (mobileNumber || "—")}
                   isEditingMode={isEditingMode}
                   isEditable
-                  onChange={(e: any) => setForm({ ...form, mobile_no: e.target.value })}
+                  onChange={(e) => setForm({ ...form, mobile_no: e.target.value })}
                 />
                 <ProfileField
                   icon={ShieldCheck}
@@ -367,7 +433,10 @@ export function SuperAdminAccount() {
                 {!isEditingMode ? (
                   <button
                     type="button"
-                    onClick={() => setIsEditingMode(true)}
+                    onClick={() => {
+                      setForm({ fullName: initialFullName, mobile_no: initialMobile });
+                      setIsEditingMode(true);
+                    }}
                     className="primary-button bg-blue-600 px-6 hover:bg-blue-700"
                   >
                     <Pencil size={18} className="mr-2 inline" />
@@ -541,6 +610,12 @@ export function SuperAdminAccount() {
 
 // ─── Brand Identity Tab ───────────────────────────────────────────────────────
 
+type BrandReferenceImage = {
+  url: string;
+  asset_id?: string | null;
+  name?: string;
+};
+
 type BrandIdentity = {
   brand_description: string;
   target_audience: string;
@@ -549,6 +624,13 @@ type BrandIdentity = {
   unique_value: string;
   guidelines: string;
   call_to_action: string;
+  logo_url: string;
+  logo_asset: string | null;
+  include_logo_in_images: boolean;
+  reference_images: BrandReferenceImage[];
+  include_reference_images: boolean;
+  brand_colors: string[];
+  visual_style: string;
 };
 
 const TONE_OPTIONS = [
@@ -565,9 +647,30 @@ const EMPTY_BI: BrandIdentity = {
   unique_value: "",
   guidelines: "",
   call_to_action: "",
+  logo_url: "",
+  logo_asset: null,
+  include_logo_in_images: false,
+  reference_images: [],
+  include_reference_images: false,
+  brand_colors: [],
+  visual_style: "",
 };
 
-function QuestionBlock({ label, hint, value, isEditingMode, placeholder, onChange }: any) {
+function QuestionBlock({
+  label,
+  hint,
+  value,
+  isEditingMode,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  isEditingMode: boolean;
+  placeholder: string;
+  onChange: React.ChangeEventHandler<HTMLTextAreaElement>;
+}) {
   return (
     <div className="bi-question">
       <label className="bi-label">{label}</label>
@@ -594,20 +697,50 @@ function BrandIdentityTab() {
   const [form, setForm] = useState<BrandIdentity>(EMPTY_BI);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const [isEditingMode, setIsEditingMode] = useState(false);
+  const [colorDraft, setColorDraft] = useState("#2563EB");
+  const [uploadingTarget, setUploadingTarget] = useState<"logo" | "reference" | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<"logo" | "reference" | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const refInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch existing brand identity on mount
   useQuery({
     queryKey: ["brand-identity"],
     queryFn: async () => {
       const res = await apiClient.get<BrandIdentity>("/api/auth/brand-identity/");
-      setForm(res.data);
-      setSelectedTones(res.data.tone ? res.data.tone.split(", ").filter(Boolean) : []);
+      const merged: BrandIdentity = {
+        ...EMPTY_BI,
+        ...res.data,
+        logo_url: res.data.logo_url || "",
+        logo_asset: res.data.logo_asset || null,
+        include_logo_in_images: Boolean(res.data.include_logo_in_images),
+        reference_images: Array.isArray(res.data.reference_images) ? res.data.reference_images : [],
+        include_reference_images: Boolean(res.data.include_reference_images),
+        brand_colors: Array.isArray(res.data.brand_colors) ? res.data.brand_colors : [],
+        visual_style: res.data.visual_style || "",
+      };
+      setForm(merged);
+      setSelectedTones(merged.tone ? merged.tone.split(", ").filter(Boolean) : []);
 
-      const hasData = Object.values(res.data).some(v => typeof v === "string" && v.trim().length > 0);
+      const hasData =
+        Object.values(merged).some(v => typeof v === "string" && v.trim().length > 0) ||
+        merged.brand_colors.length > 0 ||
+        merged.reference_images.length > 0;
       setIsEditingMode(!hasData);
 
-      return res.data;
+      return merged;
     },
+  });
+
+  const assetPickerQuery = useQuery({
+    queryKey: ["brand-identity-asset-picker"],
+    queryFn: async (): Promise<PickerAsset[]> => {
+      const res = await apiClient.get<{ results?: PickerAsset[] } | PickerAsset[]>("/api/assets/", {
+        params: { type: "IMAGE", size: 50 },
+      });
+      return Array.isArray(res.data) ? res.data : (res.data.results ?? []);
+    },
+    enabled: pickerTarget !== null,
   });
 
   const save = useMutation({
@@ -617,17 +750,86 @@ function BrandIdentityTab() {
       toast.success("Brand identity saved! AI will now use this to generate content.");
       setIsEditingMode(false);
       void qc.invalidateQueries({ queryKey: ["brand-identity"] });
+      void qc.invalidateQueries({ queryKey: ["ai-image-estimate"] });
     },
     onError: (e) => toast.error(parseApiError(e)),
   });
+
+  const handleUploadBrandImage = async (file: File, target: "logo" | "reference") => {
+    setUploadingTarget(target);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("name", target === "logo" ? `Brand Logo - ${file.name}` : `Brand Ref - ${file.name}`);
+      fd.append("asset_type", "IMAGE");
+      const res = await apiClient.post<{ id: string; name: string; file_url: string }>("/api/assets/", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      if (target === "logo") {
+        setForm(f => ({
+          ...f,
+          logo_url: res.data.file_url,
+          logo_asset: res.data.id,
+          include_logo_in_images: true,
+        }));
+        toast.success("Brand logo uploaded & ready to inject.");
+      } else {
+        setForm(f => ({
+          ...f,
+          reference_images: [
+            ...f.reference_images,
+            { url: res.data.file_url, asset_id: res.data.id, name: res.data.name },
+          ].slice(0, 6),
+          include_reference_images: true,
+        }));
+        toast.success("Reference image uploaded & injected.");
+      }
+      void qc.invalidateQueries({ queryKey: ["brand-identity-asset-picker"] });
+    } catch (e) {
+      toast.error(parseApiError(e));
+    } finally {
+      setUploadingTarget(null);
+    }
+  };
+
+  const handlePickExistingAsset = (asset: { id: string; name: string; file_url: string }) => {
+    if (pickerTarget === "logo") {
+      setForm(f => ({
+        ...f,
+        logo_url: asset.file_url,
+        logo_asset: asset.id,
+        include_logo_in_images: true,
+      }));
+    } else if (pickerTarget === "reference") {
+      setForm(f => {
+        if (f.reference_images.some(item => item.url === asset.file_url)) return f;
+        return {
+          ...f,
+          reference_images: [
+            ...f.reference_images,
+            { url: asset.file_url, asset_id: asset.id, name: asset.name },
+          ].slice(0, 6),
+          include_reference_images: true,
+        };
+      });
+    }
+    setPickerTarget(null);
+  };
+
+  const addColor = () => {
+    const clean = colorDraft.trim();
+    if (!clean) return;
+    setForm(f => (f.brand_colors.includes(clean) ? f : { ...f, brand_colors: [...f.brand_colors, clean].slice(0, 12) }));
+  };
 
   const toggleTone = (t: string) =>
     setSelectedTones(prev =>
       prev.includes(t) ? prev.filter(x => x !== t) : prev.length < 5 ? [...prev, t] : prev
     );
 
-  const field = (key: keyof BrandIdentity) => (e: React.ChangeEvent<HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [key]: e.target.value }));
+  const field = (key: "brand_description" | "target_audience" | "content_pillars" | "unique_value" | "guidelines" | "call_to_action" | "visual_style") =>
+    (e: React.ChangeEvent<HTMLTextAreaElement>) =>
+      setForm(f => ({ ...f, [key]: e.target.value }));
 
   return (
     <motion.div
@@ -742,7 +944,292 @@ function BrandIdentityTab() {
             placeholder="e.g. Visit our website to start your free trial."
             onChange={field("call_to_action")}
           />
+
+          {/* Q8 – Visual Style */}
+          <QuestionBlock
+            label="8. What is your brand's visual style?"
+            hint="Describe preferred photography style, lighting, aesthetic, or composition for AI-generated images."
+            value={form.visual_style}
+            isEditingMode={isEditingMode}
+            placeholder="e.g. Clean minimalist product photography, warm natural sunlight, crisp modern editorial aesthetic..."
+            onChange={field("visual_style")}
+          />
+
+          {/* Q9 – Brand Colors */}
+          <div className="bi-question">
+            <label className="bi-label">9. Brand Colors</label>
+            <p className="bi-hint">Add your primary and accent hex colors so AI images stay on-palette.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {form.brand_colors.map(color => (
+                <span
+                  key={color}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                >
+                  <span className="h-3.5 w-3.5 rounded-full border border-slate-300" style={{ backgroundColor: color }} />
+                  {color}
+                  {isEditingMode && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, brand_colors: f.brand_colors.filter(c => c !== color) }))}
+                      className="text-slate-400 hover:text-red-500"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </span>
+              ))}
+              {!isEditingMode && form.brand_colors.length === 0 && (
+                <span className="text-sm font-medium text-slate-400 italic">Not provided</span>
+              )}
+            </div>
+            {isEditingMode && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  type="color"
+                  value={/^#[0-9A-Fa-f]{6}$/.test(colorDraft) ? colorDraft : "#2563EB"}
+                  onChange={(e) => setColorDraft(e.target.value)}
+                  className="h-9 w-10 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+                />
+                <input
+                  type="text"
+                  value={colorDraft}
+                  onChange={(e) => setColorDraft(e.target.value)}
+                  placeholder="#2563EB"
+                  className="h-9 w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={addColor}
+                  className="secondary-button flex items-center gap-1 px-3 py-1.5 text-xs"
+                >
+                  <Plus size={14} /> Add Color
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Q10 – Brand Logo & Visual Reference Injection */}
+          <div className="bi-question space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 dark:border-white/10 dark:bg-white/5">
+            <div>
+              <label className="bi-label">10. Brand Logo & Reference Images Injection</label>
+              <p className="bi-hint">
+                Inject your brand logo or brand visual reference images so AI image generators incorporate them automatically.
+              </p>
+              <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>
+                  Note: Injecting a brand logo or reference images into AI image generation requires extra tokens and will consume additional AI credits per generated image.
+                </span>
+              </div>
+            </div>
+
+            {/* Brand Logo */}
+            <div className="space-y-3 border-t border-slate-200/80 pt-4 dark:border-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold text-slate-800 dark:text-white">Brand Logo</span>
+                {isEditingMode && (
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void handleUploadBrandImage(f, "logo");
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingTarget === "logo"}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                    >
+                      <Upload size={13} />
+                      {uploadingTarget === "logo" ? "Uploading…" : "Inject Brand Logo"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPickerTarget("logo")}
+                      className="secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                    >
+                      <ImageIcon size={13} /> Choose from Asset Library
+                    </button>
+                    {form.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, logo_url: "", logo_asset: null, include_logo_in_images: false }))}
+                        className="text-xs font-semibold text-red-500 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {form.logo_url ? (
+                <div className="flex flex-wrap items-center gap-4">
+                  <NextImage
+                    unoptimized
+                    src={resolveApiUrl(form.logo_url) || form.logo_url}
+                    alt="Brand Logo"
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 rounded-xl border border-slate-200 bg-white object-contain p-1.5"
+                  />
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      disabled={!isEditingMode}
+                      checked={form.include_logo_in_images}
+                      onChange={(e) => setForm(f => ({ ...f, include_logo_in_images: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-purple-600"
+                    />
+                    Inject logo as visual reference in AI Image Generator (uses extra credits)
+                  </label>
+                </div>
+              ) : (
+                <p className="text-xs italic text-slate-400">No brand logo injected.</p>
+              )}
+            </div>
+
+            {/* Additional Reference Images */}
+            <div className="space-y-3 border-t border-slate-200/80 pt-4 dark:border-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold text-slate-800 dark:text-white">
+                  Reference Images ({form.reference_images.length}/6)
+                </span>
+                {isEditingMode && (
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={refInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void handleUploadBrandImage(f, "reference");
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingTarget === "reference" || form.reference_images.length >= 6}
+                      onClick={() => refInputRef.current?.click()}
+                      className="secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"
+                    >
+                      <Upload size={13} />
+                      {uploadingTarget === "reference" ? "Uploading…" : "Inject Reference Image"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={form.reference_images.length >= 6}
+                      onClick={() => setPickerTarget("reference")}
+                      className="secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"
+                    >
+                      <ImageIcon size={13} /> Pick from Asset Library
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {form.reference_images.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                    {form.reference_images.map((refImg, idx) => (
+                      <div key={`${refImg.url}-${idx}`} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <NextImage
+                          unoptimized
+                          src={resolveApiUrl(refImg.url) || refImg.url}
+                          alt={refImg.name || `Reference ${idx + 1}`}
+                          width={160}
+                          height={80}
+                          className="h-20 w-full object-cover"
+                        />
+                        {isEditingMode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm(f => {
+                                const next = f.reference_images.filter((_, i) => i !== idx);
+                                return {
+                                  ...f,
+                                  reference_images: next,
+                                  include_reference_images: next.length > 0 ? f.include_reference_images : false,
+                                };
+                              })
+                            }
+                            className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white hover:bg-red-600"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      disabled={!isEditingMode}
+                      checked={form.include_reference_images}
+                      onChange={(e) => setForm(f => ({ ...f, include_reference_images: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-purple-600"
+                    />
+                    Inject reference images during AI image generation (uses extra credits)
+                  </label>
+                </>
+              ) : (
+                <p className="text-xs italic text-slate-400">No brand reference images injected.</p>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Asset Library Picker Modal for Logo / Reference Images */}
+        {pickerTarget && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-[#0c1222]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-white/10">
+                <h3 className="font-bold text-slate-900 dark:text-white">
+                  {pickerTarget === "logo" ? "Select Brand Logo from Asset Library" : "Select Reference Image from Asset Library"}
+                </h3>
+                <button type="button" onClick={() => setPickerTarget(null)} className="icon-button">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="max-h-96 overflow-y-auto p-6">
+                {assetPickerQuery.isLoading ? (
+                  <p className="text-sm text-slate-500">Loading image assets…</p>
+                ) : !(assetPickerQuery.data ?? []).length ? (
+                  <p className="text-sm text-slate-500">No image assets found in your Asset Library.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {(assetPickerQuery.data ?? []).map((asset) => (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        onClick={() => handlePickExistingAsset(asset)}
+                        className="group overflow-hidden rounded-xl border border-slate-200 text-left transition hover:border-purple-500"
+                      >
+                        <NextImage
+                          unoptimized
+                          src={resolveApiUrl(asset.file_url) || asset.file_url}
+                          alt={asset.name}
+                          width={240}
+                          height={112}
+                          className="h-28 w-full object-cover"
+                        />
+                        <p className="truncate p-2 text-xs font-semibold text-slate-700 dark:text-slate-200">{asset.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-10 flex items-center gap-4 border-t border-slate-100 pt-8 dark:border-white/10">
           {isEditingMode ? (
@@ -791,11 +1278,11 @@ function ConnectSocialsTab() {
   const [loading, setLoading] = useState<string | null>(null);
   const client = useQueryClient();
 
-  const { data: connections, isLoading: loadingConnections } = useQuery({
+  const { data: connections } = useQuery({
     queryKey: ["social-connections"],
-    queryFn: async () => {
-      const res = await apiClient.get<any[]>("/api/integrations/social/connections/");
-      return Array.isArray(res.data) ? res.data : ((res.data as any).results ?? []);
+    queryFn: async (): Promise<SocialConnection[]> => {
+      const res = await apiClient.get<SocialConnection[] | { results?: SocialConnection[] }>("/api/integrations/social/connections/");
+      return Array.isArray(res.data) ? res.data : (res.data.results ?? []);
     }
   });
 
@@ -819,9 +1306,9 @@ function ConnectSocialsTab() {
         headers: { Accept: "application/json" }
       });
       if (res.data.authorization_url) {
-        window.location.href = res.data.authorization_url;
+        window.location.assign(res.data.authorization_url);
       }
-    } catch (e) {
+    } catch {
       toast.error("Failed to initiate connection");
       setLoading(null);
     }
@@ -838,7 +1325,7 @@ function ConnectSocialsTab() {
     { id: "linkedin", name: "LinkedIn", icon: Linkedin, color: "text-blue-700", bg: "bg-blue-50 dark:bg-blue-500/10", scope: "Requires organization page management access." },
     { id: "x", name: "X (Twitter)", icon: Twitter, color: "text-slate-900 dark:text-white", bg: "bg-slate-100 dark:bg-white/5", scope: "Requires tweet scheduling & publishing access." },
   ].map(p => {
-    const conn = (connections || []).find((c: any) => c.platform.toLowerCase() === p.id.toLowerCase());
+    const conn = (connections || []).find((c) => c.platform.toLowerCase() === p.id.toLowerCase());
     return {
       ...p,
       connected: !!conn,
@@ -851,7 +1338,9 @@ function ConnectSocialsTab() {
     <motion.div initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="p-6 sm:p-10">
       <div className="mb-6">
         <h2 className="text-xl font-bold">Connect Socials</h2>
-        <p className="mt-1 text-sm text-slate-500">Connect your social media accounts to enable direct publishing and analytics.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Connect your organization&apos;s social media accounts to enable direct publishing and analytics across your workspace.
+        </p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -916,18 +1405,18 @@ function ConnectSenderIDsPanel() {
   const [deletingDomain, setDeletingDomain] = useState<{ id: string; domain: string } | null>(null);
   const qc = useQueryClient();
 
-  const { data: senderIdentities = [] } = useQuery({
+  const { data: senderIdentities = [], isLoading: loadingIdentities } = useQuery({
     queryKey: ["sender-identities"],
-    queryFn: async () => {
-      const res = await apiClient.get<any[]>("/api/communications/sender-identities/");
+    queryFn: async (): Promise<SenderIdentity[]> => {
+      const res = await apiClient.get<SenderIdentity[]>("/api/communications/sender-identities/");
       return Array.isArray(res.data) ? res.data : [];
     },
   });
 
   const { data: senderDomains = [] } = useQuery({
     queryKey: ["sender-domains"],
-    queryFn: async () => {
-      const res = await apiClient.get<any[]>("/api/communications/sender-domains/");
+    queryFn: async (): Promise<SenderDomain[]> => {
+      const res = await apiClient.get<SenderDomain[]>("/api/communications/sender-domains/");
       return Array.isArray(res.data) ? res.data : [];
     },
   });
@@ -973,15 +1462,15 @@ function ConnectSenderIDsPanel() {
     }
   };
 
-  const emailIdentities = senderIdentities.filter((item: any) =>
+  const emailIdentities = senderIdentities.filter((item) =>
     ["GMAIL", "MICROSOFT", "YAHOO", "CUSTOM_SMTP"].includes(item.provider)
   );
 
-  const whatsappIdentities = senderIdentities.filter((item: any) =>
+  const whatsappIdentities = senderIdentities.filter((item) =>
     ["WHATSAPP_CLOUD"].includes(item.provider)
   );
 
-  const smsIdentities = senderIdentities.filter((item: any) =>
+  const smsIdentities = senderIdentities.filter((item) =>
     ["TWILIO_SMS", "CUSTOM_SMS"].includes(item.provider)
   );
 
@@ -991,7 +1480,7 @@ function ConnectSenderIDsPanel() {
       <div className="mb-8">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Connect Sender IDs</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Integrate your communication channels to send emails, WhatsApp messages, and SMS from your own accounts.
+          Integrate your organization&apos;s communication channels to send emails, WhatsApp messages, and SMS. Connected accounts are shared across your organization.
         </p>
       </div>
 
@@ -1026,7 +1515,7 @@ function ConnectSenderIDsPanel() {
             <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Verified Domains</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {senderDomains.map((d: any) => (
+                {senderDomains.map((d) => (
                   <div
                     key={d.id}
                     className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-slate-800 dark:bg-slate-800/40"
@@ -1069,7 +1558,7 @@ function ConnectSenderIDsPanel() {
           {emailIdentities.length > 0 && (
             <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected Sender Emails</h4>
-              {emailIdentities.map((item: any) => (
+              {emailIdentities.map((item) => (
                 <div
                   key={item.id}
                   className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
@@ -1139,19 +1628,31 @@ function ConnectSenderIDsPanel() {
             </div>
 
             <div className="flex flex-col items-end gap-1.5 shrink-0">
-              <button
-                onClick={() => setActiveModal("WHATSAPP")}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
-              >
-                Connect WhatsApp <ChevronRight size={14} />
-              </button>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); setActiveModal("WHATSAPP"); }}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Learn more <ExternalLink size={10} />
-              </a>
+              {loadingIdentities ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  <Loader2 size={14} className="animate-spin" /> Checking...
+                </span>
+              ) : whatsappIdentities.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                  <CheckCircle2 size={14} /> Connected
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setActiveModal("WHATSAPP")}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
+                  >
+                    Connect WhatsApp <ChevronRight size={14} />
+                  </button>
+                  <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); setActiveModal("WHATSAPP"); }}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Learn more <ExternalLink size={10} />
+                  </a>
+                </>
+              )}
             </div>
           </div>
 
@@ -1159,7 +1660,7 @@ function ConnectSenderIDsPanel() {
           {whatsappIdentities.length > 0 && (
             <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected WhatsApp Accounts</h4>
-              {whatsappIdentities.map((item: any) => (
+              {whatsappIdentities.map((item) => (
                 <div
                   key={item.id}
                   className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
@@ -1243,19 +1744,31 @@ function ConnectSenderIDsPanel() {
             </div>
 
             <div className="flex flex-col items-end gap-1.5 shrink-0">
-              <button
-                onClick={() => setActiveModal("SMS")}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
-              >
-                Connect SMS <ChevronRight size={14} />
-              </button>
-              <a
-                href="#"
-                onClick={(e) => { e.preventDefault(); setActiveModal("SMS"); }}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Learn more <ExternalLink size={10} />
-              </a>
+              {loadingIdentities ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                  <Loader2 size={14} className="animate-spin" /> Checking...
+                </span>
+              ) : smsIdentities.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3.5 py-1.5 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                  <CheckCircle2 size={14} /> Connected
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setActiveModal("SMS")}
+                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-blue-700 transition"
+                  >
+                    Connect SMS <ChevronRight size={14} />
+                  </button>
+                  <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); setActiveModal("SMS"); }}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Learn more <ExternalLink size={10} />
+                  </a>
+                </>
+              )}
             </div>
           </div>
 
@@ -1263,7 +1776,7 @@ function ConnectSenderIDsPanel() {
           {smsIdentities.length > 0 && (
             <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Connected SMS Sender IDs</h4>
-              {smsIdentities.map((item: any) => (
+              {smsIdentities.map((item) => (
                 <div
                   key={item.id}
                   className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/40"
@@ -1289,6 +1802,12 @@ function ConnectSenderIDsPanel() {
 
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => setActiveModal("SMS")}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      Reconnect
+                    </button>
+                    <button
                       disabled={deletingId === item.id || deleteMutation.isPending}
                       onClick={() => {
                         setDeletingId(item.id);
@@ -1310,8 +1829,14 @@ function ConnectSenderIDsPanel() {
       {/* Connection Modals */}
       <ConnectEmailModal
         isOpen={activeModal === "EMAIL"}
-        onClose={() => setActiveModal(null)}
-        onSuccess={() => void qc.invalidateQueries({ queryKey: ["sender-identities"] })}
+        onClose={() => {
+          setActiveModal(null);
+          void qc.invalidateQueries({ queryKey: ["sender-domains"] });
+        }}
+        onSuccess={() => {
+          void qc.invalidateQueries({ queryKey: ["sender-identities"] });
+          void qc.invalidateQueries({ queryKey: ["sender-domains"] });
+        }}
       />
 
       <ConnectWhatsAppModal

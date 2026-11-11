@@ -22,6 +22,7 @@ class WhatsAppConnectionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "organization",
+            "connected_by",
             "phone_number_id",
             "waba_id",
             "environment",
@@ -33,6 +34,7 @@ class WhatsAppConnectionSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "organization",
+            "connected_by",
             "created_at",
             "updated_at",
         ]

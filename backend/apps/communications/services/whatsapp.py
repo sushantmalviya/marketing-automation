@@ -1,5 +1,7 @@
 import logging
 from django.conf import settings
+from apps.accounts.models import Organization
+from apps.common.ownership import get_user_organization
 from apps.communications.models import CommunicationEvent, WhatsAppConnection, SenderIdentity
 from apps.communications.providers.whatsapp import MetaWhatsAppProvider
 from apps.integrations.utils.crypto import decrypt_token
@@ -50,7 +52,19 @@ def get_whatsapp_connection(organization=None, connection=None, environment=None
     """
     Resolves the WhatsAppConnection for an organization or user context.
     Enforces multi-tenant isolation by restricting lookups to the tenant's users.
-    Supports environment filtering ('development' vs 'production').
+    Supports environment filtering ('development' vs 'production')."""
+def _resolve_org_and_user(target):
+    if target is None:
+        return None, None
+    if isinstance(target, Organization):
+        return target, None
+    return get_user_organization(target), target
+
+
+def get_whatsapp_connection(organization=None, connection=None):
+    """
+    Resolves the WhatsAppConnection strictly for the given organization/user,
+    or returns the explicit connection. Never falls back across tenants.
     """
     if connection:
         return connection
@@ -88,27 +102,52 @@ def get_whatsapp_connection(organization=None, connection=None, environment=None
     if environment:
         qs = qs.filter(environment=environment)
     return qs.order_by("-created_at").first()
+    if organization is None:
+        return None
+
+    org, fallback_user = _resolve_org_and_user(organization)
+    if org is not None:
+        return WhatsAppConnection.objects.filter(
+            organization=org,
+            is_active=True,
+        ).order_by("-updated_at", "-created_at").first()
+
+    if fallback_user is not None:
+        return WhatsAppConnection.objects.filter(
+            organization__isnull=True,
+            connected_by=fallback_user,
+            is_active=True,
+        ).order_by("-updated_at", "-created_at").first()
+
+    return None
 
 
 def get_whatsapp_identity(user=None, identity_id=None):
     """
-    Find active SenderIdentity for WHATSAPP_CLOUD with multi-tenant scoping.
+    Find active SenderIdentity for WHATSAPP_CLOUD with strict organization scoping.
     """
     if identity_id:
         return SenderIdentity.objects.filter(id=identity_id, provider="WHATSAPP_CLOUD").first()
-    if user:
-        from apps.common.ownership import get_managed_user_ids
-        target_ids = [user.id]
-        try:
-            target_ids.extend(get_managed_user_ids(user))
-        except Exception:
-            pass
+    if not user:
+        return None
+
+    org, fallback_user = _resolve_org_and_user(user)
+    if org is not None:
         return SenderIdentity.objects.filter(
-            user_id__in=target_ids,
+            organization=org,
             provider="WHATSAPP_CLOUD",
-            status="CONNECTED"
+            status="CONNECTED",
         ).order_by("-updated_at").first()
-    return SenderIdentity.objects.filter(provider="WHATSAPP_CLOUD", status="CONNECTED").order_by("-updated_at").first()
+
+    if fallback_user is not None:
+        return SenderIdentity.objects.filter(
+            organization__isnull=True,
+            user=fallback_user,
+            provider="WHATSAPP_CLOUD",
+            status="CONNECTED",
+        ).order_by("-updated_at").first()
+
+    return None
 
 
 def get_whatsapp_credentials(identity):
@@ -193,15 +232,32 @@ def send_whatsapp(to, message, config=None, execution=None, campaign=None, organ
         if identity:
             try:
                 creds = get_whatsapp_credentials(identity)
-                org_target = organization or identity.user
-                whatsapp_conn, _ = WhatsAppConnection.objects.get_or_create(
-                    organization=org_target,
-                    phone_number_id=creds["phone_number_id"],
-                    defaults={
-                        "encrypted_access_token": identity.encrypted_credentials.get("access_token", ""),
-                        "is_active": True,
-                    }
-                )
+                target_org, target_user = _resolve_org_and_user(organization)
+                conn_org = identity.organization or target_org
+                conn_user = identity.user or target_user
+                if conn_org is not None:
+                    whatsapp_conn, _ = WhatsAppConnection.objects.get_or_create(
+                        organization=conn_org,
+                        phone_number_id=creds["phone_number_id"],
+                        defaults={
+                            "connected_by": conn_user,
+                            "encrypted_access_token": identity.encrypted_credentials.get("access_token", ""),
+                            "is_active": True,
+                        },
+                    )
+                elif conn_user is not None:
+                    whatsapp_conn = WhatsAppConnection.objects.filter(
+                        organization__isnull=True,
+                        connected_by=conn_user,
+                        phone_number_id=creds["phone_number_id"],
+                    ).first()
+                    if not whatsapp_conn:
+                        whatsapp_conn = WhatsAppConnection.objects.create(
+                            connected_by=conn_user,
+                            phone_number_id=creds["phone_number_id"],
+                            encrypted_access_token=identity.encrypted_credentials.get("access_token", ""),
+                            is_active=True,
+                        )
             except Exception as e:
                 logger.warning(f"Could not auto-link WhatsAppConnection from SenderIdentity: {e}")
 
@@ -243,6 +299,7 @@ def resolve_whatsapp_credentials_and_waba(template=None, organization=None, conn
         org = template.created_by
 
     whatsapp_conn = get_whatsapp_connection(organization=org, connection=connection)
+    identity = get_whatsapp_identity(user=org, identity_id=identity_id)
     access_token = None
     waba_id = None
 
@@ -255,14 +312,15 @@ def resolve_whatsapp_credentials_and_waba(template=None, organization=None, conn
             identity = SenderIdentity.objects.filter(user=org, provider="WHATSAPP_CLOUD").first()
             if identity and identity.waba_id:
                 waba_id = identity.waba_id
+        waba_id = template.provider_data.get("waba_id") if isinstance(template.provider_data, dict) else None
+        if not waba_id and identity:
+            waba_id = identity.waba_id or (identity.encrypted_credentials or {}).get("waba_id")
         if not waba_id:
             waba_id = getattr(settings, "META_WABA_ID", None)
-    else:
-        identity = get_whatsapp_identity(user=org, identity_id=identity_id)
-        if identity:
-            creds = get_whatsapp_credentials(identity)
-            access_token = creds.get("access_token")
-            waba_id = creds.get("waba_id")
+    elif identity:
+        creds = get_whatsapp_credentials(identity)
+        access_token = creds.get("access_token")
+        waba_id = creds.get("waba_id")
 
     if not access_token:
         raise ValueError("No access token available for WhatsApp connection.")

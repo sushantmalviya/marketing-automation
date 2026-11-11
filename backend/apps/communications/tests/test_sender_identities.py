@@ -136,3 +136,176 @@ class SenderIdentityTests(APITestCase):
         self.assertEqual(response.data["domain"], "customdomain.com")
 
 
+class OrganizationSharedCommunicationsTests(APITestCase):
+    def setUp(self):
+        from apps.accounts.models import Organization, MAUser
+
+        self.org_a = Organization.objects.create(
+            name="Org A Comms",
+            slug="org-a-comms",
+            external_company_id="ORG-A-COMMS",
+        )
+        self.org_b = Organization.objects.create(
+            name="Org B Comms",
+            slug="org-b-comms",
+            external_company_id="ORG-B-COMMS",
+        )
+        self.user_a1 = User.objects.create_user(
+            email="u1@orga.com",
+            password="Password123!",
+            organization=self.org_a,
+        )
+        MAUser.objects.create(user=self.user_a1, organization=self.org_a, role="ADMIN")
+        self.user_a2 = User.objects.create_user(
+            email="u2@orga.com",
+            password="Password123!",
+            organization=self.org_a,
+        )
+        MAUser.objects.create(user=self.user_a2, organization=self.org_a, role="USER")
+        self.user_b = User.objects.create_user(
+            email="ub@orgb.com",
+            password="Password123!",
+            organization=self.org_b,
+        )
+        MAUser.objects.create(user=self.user_b, organization=self.org_b, role="ADMIN")
+
+    def test_domain_and_email_shared_across_org_users_and_survives_user_delete(self):
+        # User 1 adds and verifies domain
+        self.client.force_authenticate(user=self.user_a1)
+        dom_res = self.client.post("/api/communications/sender-domains/", {"domain": "orga.com"}, format="json")
+        self.assertEqual(dom_res.status_code, status.HTTP_201_CREATED)
+        dom_id = dom_res.data["id"]
+
+        with patch("apps.communications.views_sender.AWSSESService.get_domain_verification_status", return_value={"status": "VERIFIED"}):
+            ver_res = self.client.post(f"/api/communications/sender-domains/{dom_id}/verify/")
+            self.assertEqual(ver_res.status_code, status.HTTP_200_OK)
+
+        # User 1 connects SES sender email
+        ses_res = self.client.post(
+            "/api/communications/sender-identities/connect-ses/",
+            {"email": "hello@orga.com", "display_name": "Org A Hello"},
+            format="json",
+        )
+        self.assertEqual(ses_res.status_code, status.HTTP_201_CREATED)
+
+        # User 2 in Org A sees the verified domain & email, can add another email on same verified domain
+        self.client.force_authenticate(user=self.user_a2)
+        doms_u2 = self.client.get("/api/communications/sender-domains/")
+        self.assertEqual(len(doms_u2.data), 1)
+        self.assertEqual(doms_u2.data[0]["domain"], "orga.com")
+
+        # User 2 posting same domain gets existing org record (not "already verified by another account")
+        dom_dup = self.client.post("/api/communications/sender-domains/", {"domain": "orga.com"}, format="json")
+        self.assertEqual(dom_dup.status_code, status.HTTP_200_OK)
+        self.assertEqual(dom_dup.data["id"], dom_id)
+
+        idents_u2 = self.client.get("/api/communications/sender-identities/")
+        self.assertEqual(len(idents_u2.data), 1)
+        self.assertEqual(idents_u2.data[0]["email"], "hello@orga.com")
+
+        ses_u2 = self.client.post(
+            "/api/communications/sender-identities/connect-ses/",
+            {"email": "support@orga.com", "display_name": "Org A Support"},
+            format="json",
+        )
+        self.assertEqual(ses_u2.status_code, status.HTTP_201_CREATED)
+
+        # User 3 in Org B sees nothing and cannot hijack orga.com
+        self.client.force_authenticate(user=self.user_b)
+        self.assertEqual(self.client.get("/api/communications/sender-domains/").data, [])
+        self.assertEqual(self.client.get("/api/communications/sender-identities/").data, [])
+        hijack = self.client.post("/api/communications/sender-domains/", {"domain": "orga.com"}, format="json")
+        self.assertEqual(hijack.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Deleting User 1 does NOT delete Org A's domains or sender identities
+        self.user_a1.delete()
+        self.assertTrue(DomainAuthentication.objects.filter(id=dom_id, organization=self.org_a).exists())
+        self.assertEqual(SenderIdentity.objects.filter(organization=self.org_a).count(), 2)
+
+        # User 2 can disconnect an org sender identity
+        self.client.force_authenticate(user=self.user_a2)
+        del_res = self.client.delete(f"/api/communications/sender-identities/{ses_res.data['id']}/")
+        self.assertEqual(del_res.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_single_sms_and_whatsapp_per_org_shared_and_isolated(self):
+        from apps.communications.models import WhatsAppConnection
+        from apps.communications.services.sms import get_sms_provider
+        from apps.communications.services.whatsapp import get_whatsapp_connection
+
+        # User 1 connects SMS #1
+        self.client.force_authenticate(user=self.user_a1)
+        res1 = self.client.post(
+            "/api/communications/sender-identities/connect-sms/",
+            {
+                "phone_number": "+15551110001",
+                "display_name": "Org A SMS 1",
+                "provider": "TWILIO_SMS",
+                "account_sid": "AC111",
+                "auth_token": "tok111",
+            },
+            format="json",
+        )
+        self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
+
+        # User 2 sees SMS #1 and can use get_sms_provider
+        self.client.force_authenticate(user=self.user_a2)
+        list_u2 = self.client.get("/api/communications/sender-identities/")
+        self.assertEqual(len(list_u2.data), 1)
+        self.assertEqual(list_u2.data[0]["email"], "+15551110001")
+        sms_prov = get_sms_provider(user=self.user_a2)
+        self.assertEqual(sms_prov.from_number, "+15551110001")
+
+        # User 2 reconnects with SMS #2 -> replaces SMS #1 (only 1 SMS number at a time per org)
+        res2 = self.client.post(
+            "/api/communications/sender-identities/connect-sms/",
+            {
+                "phone_number": "+15552220002",
+                "display_name": "Org A SMS 2",
+                "provider": "CUSTOM_SMS",
+                "auth_token": "tok222",
+            },
+            format="json",
+        )
+        self.assertEqual(res2.status_code, status.HTTP_201_CREATED)
+        sms_rows = SenderIdentity.objects.filter(organization=self.org_a, provider__in=["TWILIO_SMS", "CUSTOM_SMS"])
+        self.assertEqual(sms_rows.count(), 1)
+        self.assertEqual(sms_rows.first().email, "+15552220002")
+
+        # User 1 connects WhatsApp #1 manually, User 2 connects WhatsApp #2 -> only #2 stays active
+        self.client.force_authenticate(user=self.user_a1)
+        wa1 = self.client.post(
+            "/api/communications/whatsapp/connections/",
+            {"phone_number_id": "wa_phone_1", "access_token": "wa_tok_1", "is_active": True},
+            format="json",
+        )
+        self.assertEqual(wa1.status_code, status.HTTP_201_CREATED)
+
+        self.client.force_authenticate(user=self.user_a2)
+        wa_u2_list = self.client.get("/api/communications/sender-identities/")
+        self.assertTrue(any(i["phone_number_id"] == "wa_phone_1" for i in wa_u2_list.data))
+
+        wa2 = self.client.post(
+            "/api/communications/whatsapp/connections/",
+            {"phone_number_id": "wa_phone_2", "access_token": "wa_tok_2", "is_active": True},
+            format="json",
+        )
+        self.assertEqual(wa2.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(WhatsAppConnection.objects.filter(organization=self.org_a, is_active=True).count(), 1)
+        self.assertEqual(
+            SenderIdentity.objects.filter(organization=self.org_a, provider="WHATSAPP_CLOUD").count(),
+            1,
+        )
+        self.assertEqual(get_whatsapp_connection(organization=self.user_a1).phone_number_id, "wa_phone_2")
+
+        # Disconnecting WhatsApp SenderIdentity also deactivates WhatsAppConnection
+        wa_ident_id = SenderIdentity.objects.get(organization=self.org_a, provider="WHATSAPP_CLOUD").id
+        del_wa = self.client.delete(f"/api/communications/sender-identities/{wa_ident_id}/")
+        self.assertEqual(del_wa.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIsNone(get_whatsapp_connection(organization=self.user_a1))
+
+        # Org B has no cross-tenant fallback for SMS or WhatsApp
+        with self.assertRaises(ValueError):
+            get_sms_provider(user=self.user_b)
+        self.assertIsNone(get_whatsapp_connection(organization=self.user_b))
+
+
