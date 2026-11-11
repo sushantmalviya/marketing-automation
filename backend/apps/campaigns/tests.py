@@ -396,29 +396,45 @@ class TemplateSanitizerTests(APITestCase):
 class WhatsAppTemplateSubmissionTests(APITestCase):
     def setUp(self):
         from apps.communications.models import WhatsAppConnection, SenderIdentity
-        from apps.accounts.models import MAUser
+        from apps.accounts.models import MAUser, Organization
 
+        self.org_a = Organization.objects.create(
+            name="Tenant A",
+            slug="tenant-a",
+            external_company_id="TENANT-A-001",
+            status="ACTIVE",
+        )
         self.user_a = User.objects.create_user(
             username="tenant_a",
             email="tenant_a@example.com",
             password="Password123!",
+            organization=self.org_a,
         )
-        self.ma_user_a = MAUser.objects.create(user=self.user_a, role="USER")
+        self.ma_user_a = MAUser.objects.create(user=self.user_a, organization=self.org_a, role="USER")
 
+        self.org_b = Organization.objects.create(
+            name="Tenant B",
+            slug="tenant-b",
+            external_company_id="TENANT-B-002",
+            status="ACTIVE",
+        )
         self.user_b = User.objects.create_user(
             username="tenant_b",
             email="tenant_b@example.com",
             password="Password123!",
+            organization=self.org_b,
         )
-        self.ma_user_b = MAUser.objects.create(user=self.user_b, role="USER")
+        self.ma_user_b = MAUser.objects.create(user=self.user_b, organization=self.org_b, role="USER")
 
         self.channel_wa, _ = Channel.objects.get_or_create(code="WHATSAPP", defaults={"name": "WhatsApp"})
         self.channel_email, _ = Channel.objects.get_or_create(code="EMAIL", defaults={"name": "Email"})
 
         # Connections & WABA identities
         self.conn_a = WhatsAppConnection.objects.create(
-            organization=self.user_a,
+            organization=self.org_a,
+            connected_by=self.user_a,
             phone_number_id="1401374839717756",
+            waba_id="1538835448015786",
             is_active=True,
         )
         self.conn_a.set_access_token("EAA_TENANT_A_TOKEN")
@@ -433,8 +449,10 @@ class WhatsAppTemplateSubmissionTests(APITestCase):
         )
 
         self.conn_b = WhatsAppConnection.objects.create(
-            organization=self.user_b,
+            organization=self.org_b,
+            connected_by=self.user_b,
             phone_number_id="2401374839717756",
+            waba_id="2538835448015786",
             is_active=True,
         )
         self.conn_b.set_access_token("EAA_TENANT_B_TOKEN")

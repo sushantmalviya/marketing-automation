@@ -77,12 +77,47 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
             clean_body = TemplateRenderer.to_plain_text(message, channel="WHATSAPP")
             payload["text"] = {"preview_url": False, "body": clean_body}
         elif message_type == "template":
-            payload["template"] = metadata.get("template", {})
+            raw_template = metadata.get("template", {})
+            template_name = raw_template.get("name")
+            if not template_name:
+                raise ValueError("Meta template name is required when sending a template message.")
+
+            lang = raw_template.get("language", "en_US")
+            lang_code = lang.get("code") if isinstance(lang, dict) else (lang or "en_US")
+
+            payload["template"] = {
+                "name": template_name,
+                "language": {"code": lang_code},
+            }
+            if "components" in raw_template and raw_template["components"]:
+                payload["template"]["components"] = raw_template["components"]
         else:
             payload[message_type] = metadata.get(message_type, {})
 
+        import json
+        masked_recipient = f"{clean_to[:3]}****{clean_to[-4:]}" if len(clean_to) >= 7 else "****"
+        safe_payload = {
+            "messaging_product": payload.get("messaging_product"),
+            "recipient_type": payload.get("recipient_type"),
+            "to": masked_recipient,
+            "type": message_type,
+        }
+        if message_type == "template":
+            safe_payload["template"] = {
+                "name": payload.get("template", {}).get("name"),
+                "language": payload.get("template", {}).get("language"),
+                "component_count": len(payload.get("template", {}).get("components", [])),
+            }
+
+        logger.info(
+            "Meta WhatsApp Dispatch | Recipient=%s | Type=%s | Template=%s | Payload=%s",
+            masked_recipient,
+            message_type,
+            payload.get("template", {}).get("name", "N/A") if message_type == "template" else "N/A",
+            json.dumps(safe_payload),
+        )
+
         try:
-            logger.info(f"Sending WhatsApp message to {clean_to}")
             response = session.post(url, json=payload, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
@@ -90,6 +125,14 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
             message_id = ""
             if "messages" in data and len(data["messages"]) > 0:
                 message_id = data["messages"][0].get("id", "")
+
+            logger.info(
+                "Meta WhatsApp Dispatch Success | Recipient=%s | Type=%s | HTTP=%s | MsgID=%s",
+                masked_recipient,
+                message_type,
+                response.status_code,
+                message_id,
+            )
                 
             class WhatsAppResponse:
                 def __init__(self, msg_id, raw_response=None):
@@ -105,7 +148,7 @@ class MetaWhatsAppProvider(BaseWhatsAppProvider):
                     err_msg = f"{exc}: {err_json}"
                 except Exception:
                     err_msg = f"{exc}: {exc.response.text}"
-            logger.error(f"WhatsApp request failed: {err_msg}")
+            logger.error("Meta WhatsApp Dispatch Failed | Recipient=%s | Error=%s", masked_recipient, err_msg)
             raise RuntimeError(f"Meta WhatsApp request failed: {err_msg}") from exc
 
 

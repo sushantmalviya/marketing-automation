@@ -1353,6 +1353,7 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
         if (!ct?.body?.trim()) continue;
         let templateId: number;
         const isSmsCh = ch.name.toUpperCase().includes("SMS");
+        const isWhatsAppCh = ch.name.toUpperCase().includes("WHATS");
         let subjectVal = ct.subject?.trim() || "";
         let bodyVal = ct.body;
 
@@ -1366,6 +1367,15 @@ function CampaignWizard({ assignments, initialDraft, editingCampaignId, onCancel
           };
           subjectVal = serializeSmsMetadata(fullSms);
           bodyVal = compileSmsMessage(fullSms);
+        } else if (isWhatsAppCh) {
+          const parsedWA = parseWhatsAppTemplate(ct.subject, ct.body);
+          const fullWA: WhatsAppTemplateData = {
+            ...parsedWA,
+            name: ct.template_name.trim() || `${form.name} - ${ch.name}`,
+            body: parsedWA.body || ct.body.trim(),
+          };
+          subjectVal = serializeWhatsAppMetadata(fullWA);
+          bodyVal = fullWA.body;
         }
 
         if (ct.template_id && !isNaN(Number(ct.template_id)) && Number(ct.template_id) > 0) {

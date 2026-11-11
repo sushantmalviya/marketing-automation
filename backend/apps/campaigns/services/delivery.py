@@ -110,6 +110,21 @@ class DeliveryService:
                 "Every selected channel must have an assigned template."
             )
 
+        # Validate WhatsApp template approval status
+        for ct in campaign.campaign_templates.select_related("channel", "template"):
+            ch_code = (ct.channel.code or ct.channel.name or "").upper()
+            if ch_code == "WHATSAPP":
+                provider_data = ct.template.provider_data or {}
+                meta_status = str(provider_data.get("meta_status", "")).upper()
+                meta_name = provider_data.get("meta_template_name", "")
+
+                if not meta_name or meta_status != "APPROVED":
+                    status_display = meta_status or "NOT SUBMITTED"
+                    raise ValidationError(
+                        f"WhatsApp template '{ct.template.name}' is not approved by Meta (current status: {status_display}). "
+                        "Only approved WhatsApp templates can be dispatched."
+                    )
+
     @staticmethod
     def _validate_no_existing_deliveries(
         campaign: Campaign,
@@ -239,8 +254,120 @@ class DeliveryService:
                 campaign_template=campaign_template,
             )
 
-    @staticmethod
+    @classmethod
+    def _build_whatsapp_template_config(cls, *, template, customer_data):
+        """
+        Builds the structured Meta WhatsApp template configuration dictionary.
+        Resolves dynamic positional variables and media header links against customer data.
+        """
+        import json
+        import re
+
+        provider_data = template.provider_data or {}
+        meta_name = provider_data.get("meta_template_name") or template.name
+
+        metadata = {}
+        if template.subject and template.subject.strip().startswith("{"):
+            try:
+                metadata = json.loads(template.subject.strip())
+            except Exception:
+                metadata = {}
+
+        language_code = metadata.get("language") or "en_US"
+        components = []
+
+        # 1. Header Component
+        header_data = metadata.get("header")
+        if header_data and isinstance(header_data, dict):
+            h_type = (header_data.get("type") or "NONE").upper()
+            if h_type == "TEXT":
+                raw_text = header_data.get("text", "")
+                resolved_text = TemplateRenderer.render(raw_text, customer_data)
+                if resolved_text.strip():
+                    components.append({
+                        "type": "header",
+                        "parameters": [
+                            {"type": "text", "text": resolved_text.strip()}
+                        ]
+                    })
+            elif h_type in ("IMAGE", "VIDEO", "DOCUMENT"):
+                media_url = header_data.get("mediaUrl") or header_data.get("url")
+                if media_url:
+                    param_type = h_type.lower()
+                    components.append({
+                        "type": "header",
+                        "parameters": [
+                            {
+                                "type": param_type,
+                                param_type: {"link": media_url.strip()}
+                            }
+                        ]
+                    })
+
+        # 2. Body Component - Positional Variable Resolution
+        raw_body = metadata.get("body") or template.body or ""
+        placeholders = re.findall(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", raw_body)
+        body_params = []
+        for var_name in placeholders:
+            resolved_val = None
+            if customer_data:
+                resolved_val = customer_data.get(var_name)
+                if resolved_val is None:
+                    for k, v in customer_data.items():
+                        norm_k = k.lower().replace(" ", "_").strip()
+                        if norm_k == var_name.lower().replace(" ", "_").strip():
+                            resolved_val = v
+                            break
+
+            if resolved_val is None:
+                resolved_val = ""
+            body_params.append({
+                "type": "text",
+                "text": str(resolved_val),
+            })
+
+        if body_params:
+            components.append({
+                "type": "body",
+                "parameters": body_params,
+            })
+
+        # 3. Button Component - Dynamic URL / Parameter Resolution
+        buttons_data = metadata.get("buttons")
+        if buttons_data and isinstance(buttons_data, list):
+            for idx, btn in enumerate(buttons_data):
+                b_type = (btn.get("type") or "URL").upper()
+                if b_type in ("URL", "BOOK_DEMO"):
+                    btn_url = btn.get("url", "")
+                    url_placeholders = re.findall(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", btn_url)
+                    if url_placeholders:
+                        url_param_val = customer_data.get(url_placeholders[0], "") if customer_data else ""
+                        components.append({
+                            "type": "button",
+                            "sub_type": "url",
+                            "index": str(idx),
+                            "parameters": [
+                                {
+                                    "type": "text",
+                                    "text": str(url_param_val),
+                                }
+                            ]
+                        })
+
+        template_config = {
+            "name": meta_name,
+            "language": {
+                "code": language_code,
+            },
+        }
+        if components:
+            template_config["components"] = components
+
+        return template_config
+
+    @classmethod
     def _send_delivery(
+        cls,
         *,
         campaign: Campaign,
         customer,
@@ -255,8 +382,20 @@ class DeliveryService:
         # -------------------------
 
         channel_code = campaign_template.channel.code.upper() if campaign_template.channel else "GENERIC"
+        template = campaign_template.template
+        template_config = None
+
+        if channel_code == "WHATSAPP":
+            meta_status = (template.provider_data or {}).get("meta_status", "").upper()
+            meta_name = (template.provider_data or {}).get("meta_template_name")
+            if meta_status == "APPROVED" and meta_name:
+                template_config = cls._build_whatsapp_template_config(
+                    template=template,
+                    customer_data=customer.data or {},
+                )
+
         message = TemplateRenderer.render_for_channel(
-            campaign_template.template.body,
+            template.body,
             customer.data,
             channel=channel_code,
         )
@@ -279,6 +418,7 @@ class DeliveryService:
 
         result = Dispatcher.send(
             delivery=delivery,
+            template_config=template_config,
         )
 
         # -------------------------

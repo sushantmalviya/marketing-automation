@@ -185,6 +185,14 @@ class TemplateSubmitAPIView(APIView):
                 "error_code": "SUBMISSION_FAILED",
                 "correlation_id": correlation_id,
             }, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("Unexpected error submitting template to Meta")
+            return Response({
+                "detail": f"Failed to submit template: {str(e)}",
+                "error_code": "UNEXPECTED_ERROR",
+                "correlation_id": correlation_id,
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {
@@ -220,6 +228,10 @@ class TemplateSyncStatusAPIView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except RuntimeError as e:
             return Response({"detail": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception("Unexpected error synchronizing WhatsApp template status")
+            return Response({"detail": f"Failed to synchronize template status: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {

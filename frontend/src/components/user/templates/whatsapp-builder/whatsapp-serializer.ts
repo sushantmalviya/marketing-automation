@@ -67,21 +67,30 @@ export function serializeWhatsAppMetadata(data: WhatsAppTemplateData): string {
   const metadata = {
     version: 1,
     channel: "WHATSAPP",
+    name: data.name || "",
     category: data.category || "MARKETING",
     language: data.language || "en_US",
     header: data.header || { type: "NONE" },
-    body: data.body || "",
-    footer: data.footer || "",
+    body: (data.body || "").trim(),
+    footer: (data.footer || "").trim(),
     buttons: data.buttons || [],
   };
   return JSON.stringify(metadata);
 }
 
 /**
- * Compiles a structured WhatsApp template into a human-readable and delivery-compatible WhatsApp message string.
- * This is stored in `template.body` for campaigns, automations, and Meta Graph API submission.
+ * Returns the clean message body text for storage in `template.body`.
+ * Does NOT embed media URLs, divider lines, or button links into the body.
  */
 export function compileWhatsAppMessage(data: WhatsAppTemplateData): string {
+  return (data.body || "").trim();
+}
+
+/**
+ * Generates a human-readable plain-text preview of a WhatsApp template for frontend display.
+ * Never used as the actual Meta API payload.
+ */
+export function generateWhatsAppPreview(data: WhatsAppTemplateData): string {
   const parts: string[] = [];
 
   // 1. Header

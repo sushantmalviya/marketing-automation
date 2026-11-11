@@ -378,8 +378,12 @@ class WhatsAppWebhookView(APIView):
                                     event.save()
 
                                     # Also update matching CampaignDelivery status if exists
-                                    if event.campaign_id and event.recipient:
-                                        from apps.campaigns.models import CampaignDelivery
+                                    from apps.campaigns.models import CampaignDelivery
+                                    delivery_updated = CampaignDelivery.objects.filter(
+                                        provider_message_id=message_id
+                                    ).update(status=new_status)
+
+                                    if delivery_updated == 0 and event.campaign_id and event.recipient:
                                         CampaignDelivery.objects.filter(
                                             campaign_id=event.campaign_id,
                                             customer__data__phone=event.recipient,

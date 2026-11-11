@@ -11,7 +11,7 @@ class Dispatcher:
     """
 
     @classmethod
-    def send(cls, *, delivery):
+    def send(cls, *, delivery, template_config=None):
         channel_code = delivery.channel.code.upper()
 
         recipient = None
@@ -69,9 +69,19 @@ class Dispatcher:
                 if not recipient:
                     raise ValueError("Customer phone not found.")
                 
+                config = {}
+                if template_config:
+                    config = {
+                        "metadata": {
+                            "type": "template",
+                            "template": template_config,
+                        }
+                    }
+
                 result = send_whatsapp(
                     to=recipient,
                     message=delivery.rendered_message,
+                    config=config,
                     campaign=delivery.campaign,
                     organization=getattr(delivery.campaign, "created_by", None),
                 )

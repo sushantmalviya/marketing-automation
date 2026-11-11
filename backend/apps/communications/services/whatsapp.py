@@ -47,12 +47,6 @@ class MetaNetworkError(WhatsAppServiceError):
         self.is_timeout = is_timeout
         self.is_ambiguous = is_ambiguous
 
-
-def get_whatsapp_connection(organization=None, connection=None, environment=None):
-    """
-    Resolves the WhatsAppConnection for an organization or user context.
-    Enforces multi-tenant isolation by restricting lookups to the tenant's users.
-    Supports environment filtering ('development' vs 'production')."""
 def _resolve_org_and_user(target):
     if target is None:
         return None, None
@@ -60,8 +54,8 @@ def _resolve_org_and_user(target):
         return target, None
     return get_user_organization(target), target
 
-
-def get_whatsapp_connection(organization=None, connection=None):
+# CORRECT
+def get_whatsapp_connection(organization=None, connection=None, environment=None):
     """
     Resolves the WhatsAppConnection strictly for the given organization/user,
     or returns the explicit connection. Never falls back across tenants.
@@ -69,32 +63,33 @@ def get_whatsapp_connection(organization=None, connection=None):
     if connection:
         return connection
 
-    if organization:
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        from apps.accounts.models import Organization
+    if organization is not None:
+        org, fallback_user = _resolve_org_and_user(organization)
 
-        managed_ids = []
-        if isinstance(organization, Organization):
-            managed_ids = list(User.objects.filter(organization=organization).values_list("id", flat=True))
-        elif hasattr(organization, "organization_id") and organization.organization_id:
-            managed_ids = list(User.objects.filter(organization_id=organization.organization_id).values_list("id", flat=True))
-            if organization.id not in managed_ids:
-                managed_ids.append(organization.id)
-        elif hasattr(organization, "id"):
-            managed_ids = [organization.id]
+        if org is not None:
+            qs = WhatsAppConnection.objects.filter(
+                organization=org,
+                is_active=True,
+            )
+            if environment:
+                qs = qs.filter(environment=environment)
+            conn = qs.order_by("-updated_at", "-created_at").first()
+            if conn:
+                return conn
 
-        qs = WhatsAppConnection.objects.filter(
-            organization_id__in=managed_ids,
-            is_active=True,
-        )
-        if environment:
-            qs = qs.filter(environment=environment)
+        if fallback_user is not None:
+            # Check for connection owned by this user
+            from django.db.models import Q
+            qs = WhatsAppConnection.objects.filter(
+                Q(connected_by=fallback_user) | Q(organization=getattr(fallback_user, "organization", None)),
+                is_active=True,
+            )
+            if environment:
+                qs = qs.filter(environment=environment)
+            conn = qs.order_by("-updated_at", "-created_at").first()
+            if conn:
+                return conn
 
-        conn = qs.order_by("-updated_at", "-created_at").first()
-        if conn:
-            return conn
-        # Strict tenant isolation: do not leak another tenant's connection
         return None
 
     # Unscoped fallback (only when no tenant/organization context was specified)
@@ -102,24 +97,6 @@ def get_whatsapp_connection(organization=None, connection=None):
     if environment:
         qs = qs.filter(environment=environment)
     return qs.order_by("-created_at").first()
-    if organization is None:
-        return None
-
-    org, fallback_user = _resolve_org_and_user(organization)
-    if org is not None:
-        return WhatsAppConnection.objects.filter(
-            organization=org,
-            is_active=True,
-        ).order_by("-updated_at", "-created_at").first()
-
-    if fallback_user is not None:
-        return WhatsAppConnection.objects.filter(
-            organization__isnull=True,
-            connected_by=fallback_user,
-            is_active=True,
-        ).order_by("-updated_at", "-created_at").first()
-
-    return None
 
 
 def get_whatsapp_identity(user=None, identity_id=None):
@@ -304,15 +281,16 @@ def resolve_whatsapp_credentials_and_waba(template=None, organization=None, conn
     waba_id = None
 
     if whatsapp_conn:
-        access_token = whatsapp_conn.get_access_token()
-        if template and isinstance(template.provider_data, dict):
-            waba_id = template.provider_data.get("waba_id")
-        if not waba_id:
-            # Query SenderIdentity for this tenant/organization
-            identity = SenderIdentity.objects.filter(user=org, provider="WHATSAPP_CLOUD").first()
-            if identity and identity.waba_id:
-                waba_id = identity.waba_id
-        waba_id = template.provider_data.get("waba_id") if isinstance(template.provider_data, dict) else None
+        try:
+            access_token = whatsapp_conn.get_access_token()
+        except Exception as e:
+            logger.error(f"Failed to decrypt WhatsApp access token: {e}")
+            raise ValueError("Failed to decrypt WhatsApp access token. Please reconnect your WhatsApp account.")
+
+        if template and isinstance(template.provider_data, dict) and template.provider_data.get("waba_id"):
+            waba_id = template.provider_data["waba_id"]
+        if not waba_id and whatsapp_conn.waba_id:
+            waba_id = whatsapp_conn.waba_id
         if not waba_id and identity:
             waba_id = identity.waba_id or (identity.encrypted_credentials or {}).get("waba_id")
         if not waba_id:
@@ -870,13 +848,15 @@ def sync_whatsapp_template_status(template, organization=None, connection=None, 
     data = response.json()
     new_status = data.get("status")
     if new_status:
+        if not isinstance(template.provider_data, dict):
+            template.provider_data = {}
         template.provider_data["meta_status"] = new_status
         if "rejected_reason" in data:
             template.provider_data["meta_rejection_reason"] = data["rejected_reason"]
         elif "reason" in data:
             template.provider_data["meta_rejection_reason"] = data["reason"]
 
-        template.save()
+        template.save(update_fields=["provider_data", "updated_at"])
 
     return template
 

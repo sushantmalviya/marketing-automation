@@ -69,7 +69,8 @@ class AutomatedMockedTests(TestCase):
 
         # 3. Connection for Org A (Development)
         self.conn_a = WhatsAppConnection.objects.create(
-            organization=self.user_a,
+            organization=self.org_a,
+            connected_by=self.user_a,
             phone_number_id="1212090155330828",
             waba_id="1050882897946612",
             environment="development",
@@ -80,7 +81,8 @@ class AutomatedMockedTests(TestCase):
 
         # 4. Connection for Org B
         self.conn_b = WhatsAppConnection.objects.create(
-            organization=self.user_b,
+            organization=self.org_b,
+            connected_by=self.user_b,
             phone_number_id="999888777666",
             waba_id="999888777666_WABA",
             environment="development",
