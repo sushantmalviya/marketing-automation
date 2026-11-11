@@ -13,6 +13,10 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, parseApiError } from "@/services/api-client";
@@ -54,6 +58,15 @@ interface TemplateData {
   subject?: string;
   body: string;
   status?: string;
+  provider_data?: {
+    waba_id?: string;
+    meta_template_id?: string;
+    meta_template_name?: string;
+    meta_status?: string;
+    meta_rejection_reason?: string;
+    submitted_at?: string;
+    [key: string]: any;
+  };
 }
 
 interface TemplateBuilderViewProps {
@@ -83,6 +96,8 @@ export function TemplateBuilderView({
   const [subject, setSubject] = useState(initialData?.subject || "");
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [providerData, setProviderData] = useState<TemplateData["provider_data"]>(initialData?.provider_data || {});
+  const [syncingMeta, setSyncingMeta] = useState(false);
 
   // Email blocks state
   const [blocks, setBlocks] = useState<EmailBlock[]>(() => {
@@ -302,6 +317,8 @@ export function TemplateBuilderView({
       );
 
       const metaStatus = res.data?.meta_status || res.data?.provider_data?.meta_status || "PENDING";
+      const updatedProviderData = res.data?.provider_data || { meta_status: metaStatus };
+      setProviderData(updatedProviderData);
       toast.success(`Template submitted to Meta! Status: ${metaStatus}`);
       setIsDirty(false);
       onSuccess();
@@ -315,6 +332,31 @@ export function TemplateBuilderView({
       }
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleSyncMetaStatus = async () => {
+    const targetId = initialData?.id;
+    if (!targetId) {
+      toast.error("Save the template before checking Meta status");
+      return;
+    }
+    setSyncingMeta(true);
+    try {
+      const res = await apiClient.post<{ message: string; meta_status?: string; provider_data?: any }>(
+        `/api/templates/${targetId}/sync-provider-status/`
+      );
+      const newStatus = res.data?.meta_status || res.data?.provider_data?.meta_status || "UPDATED";
+      if (res.data?.provider_data) {
+        setProviderData(res.data.provider_data);
+      } else {
+        setProviderData((prev) => ({ ...prev, meta_status: newStatus }));
+      }
+      toast.success(res.data?.message || `Meta Status: ${newStatus}`);
+    } catch (err: any) {
+      toast.error(parseApiError(err));
+    } finally {
+      setSyncingMeta(false);
     }
   };
 
@@ -344,6 +386,45 @@ export function TemplateBuilderView({
               <Sparkles size={13} />
               <span>{isEmail ? "Email Builder" : isWhatsApp ? "WhatsApp Builder" : isSMS ? "SMS Builder" : "Template Editor"}</span>
             </span>
+
+            {/* Meta Approval Status Badge & Sync in Header */}
+            {isWhatsApp && isEditing && (
+              <div className="flex items-center gap-2">
+                {providerData?.meta_status === "APPROVED" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs" title="Approved by Meta for live campaigns">
+                    <CheckCircle size={13} className="text-emerald-600" />
+                    <span>Meta Approved</span>
+                  </span>
+                ) : providerData?.meta_status === "PENDING" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shadow-xs" title="Pending Meta Review">
+                    <Clock size={13} className="text-amber-600 animate-pulse" />
+                    <span>Pending Meta Review</span>
+                  </span>
+                ) : providerData?.meta_status === "REJECTED" ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-red-100 text-red-800 border border-red-200 shadow-xs" title={providerData?.meta_rejection_reason || "Rejected by Meta"}>
+                    <AlertTriangle size={13} className="text-red-600" />
+                    <span>Meta Rejected</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                    <span>Unsubmitted</span>
+                  </span>
+                )}
+
+                {providerData?.meta_template_id && (
+                  <button
+                    type="button"
+                    onClick={handleSyncMetaStatus}
+                    disabled={syncingMeta}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-xs disabled:opacity-50"
+                    title="Refresh latest approval status directly from Meta"
+                  >
+                    <RefreshCw size={12} className={syncingMeta ? "animate-spin text-blue-600" : "text-slate-500"} />
+                    <span>{syncingMeta ? "Checking..." : "Sync Status"}</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -497,11 +578,57 @@ export function TemplateBuilderView({
             </div>
           </div>
         ) : isWhatsApp ? (
-          <WhatsAppTemplateBuilder
-            data={whatsappData}
-            onChange={handleWhatsAppChange}
-            isEditing={isEditing}
-          />
+          <div className="space-y-4">
+            {/* Meta Approval Notification Banners */}
+            {isEditing && providerData?.meta_status === "APPROVED" && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-center justify-between text-emerald-900 text-xs shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle size={18} className="text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>Meta Approved:</strong> This template is verified and approved by Meta (ID: <code className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-800">{providerData.meta_template_id}</code>). It is ready for WhatsApp campaigns.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {isEditing && providerData?.meta_status === "PENDING" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-center justify-between text-amber-900 text-xs shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <Clock size={18} className="text-amber-600 animate-pulse shrink-0" />
+                  <span>
+                    <strong>Under Review by Meta:</strong> Submission registered with Meta (Template ID: <code className="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-800">{providerData.meta_template_id}</code>). Meta approval typically completes within a few minutes.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncMetaStatus}
+                  disabled={syncingMeta}
+                  className="flex items-center gap-1 font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 px-3 py-1.5 rounded-lg transition shrink-0 ml-3"
+                >
+                  <RefreshCw size={13} className={syncingMeta ? "animate-spin" : ""} />
+                  <span>{syncingMeta ? "Checking..." : "Check Status"}</span>
+                </button>
+              </div>
+            )}
+
+            {isEditing && providerData?.meta_status === "REJECTED" && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3 text-red-900 text-xs shadow-xs">
+                <AlertTriangle size={18} className="text-red-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-red-800">Template was Rejected by Meta</p>
+                  <p className="mt-1 text-red-700">
+                    {providerData.meta_rejection_reason || "Meta rejected this template. Please review variable formats and WhatsApp commerce/messaging policies before resubmitting."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <WhatsAppTemplateBuilder
+              data={whatsappData}
+              onChange={handleWhatsAppChange}
+              isEditing={isEditing}
+            />
+          </div>
         ) : isSMS ? (
           <SmsTemplateBuilder
             data={smsData}
